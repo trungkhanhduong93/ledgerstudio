@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Python cache & venv
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# Build and Dist output
+build/
+dist/
+
+# Logs and temporary text outputs
+*.log
+build_log.txt
+out.txt
+search_out.txt
+
+# Backup files
+*.bak
+*.bak_*
+
+# IDE & System files
+.idea/
+.vscode/
+Thumbs.db
+.DS_Store
+
+# Customer data (real company reports) — never push to the public repo
+BaoCaoMau/
+BESReportViewer.pdf

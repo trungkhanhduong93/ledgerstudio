@@ -1,0 +1,15 @@
+import pyodbc
+conn = pyodbc.connect('Driver={SQL Server};Server=.;Database=iPOS_ACC;Trusted_Connection=yes;')
+cur = conn.cursor()
+
+def q(sql):
+    cur.execute(sql)
+    return cur.fetchone()[0]
+
+a = q("SELECT SUM(CASE WHEN DEBIT_CREDIT='DEB' THEN AMOUNT ELSE -AMOUNT END) FROM dbo.BALANCE_VIEW WHERE TRAN_DATE='20260101' AND ACCOUNT_ID LIKE '11%'")
+b1 = q("SELECT SUM(CASE WHEN DEBIT_CREDIT='DEB' THEN AMOUNT ELSE -AMOUNT END) FROM dbo.LEDGER_VIEW WHERE TRAN_DATE<='20260331' AND ACCOUNT_ID LIKE '11%'")
+b2 = q("SELECT SUM(CASE WHEN DEBIT_CREDIT='DEB' THEN AMOUNT ELSE -AMOUNT END) FROM dbo.LEDGER_VIEW WHERE TRAN_DATE<='20260331' AND TRAN_DATE>='20260101' AND ACCOUNT_ID LIKE '11%'")
+
+print("A (BALANCE_VIEW) =", a)
+print("B (LEDGER_VIEW <= 03/31) =", b1)
+print("B (LEDGER_VIEW 01/01 - 03/31) =", b2)

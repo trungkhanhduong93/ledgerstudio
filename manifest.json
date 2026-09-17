@@ -1,0 +1,20 @@
+{
+  "name": "iPOS Ledger Studio",
+  "short_name": "Ledger Studio",
+  "description": "Báo cáo sổ sách - Sổ cái, Nhập kho, Kho",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#0f172a",
+  "theme_color": "#4f46e5",
+  "lang": "vi-VN",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
