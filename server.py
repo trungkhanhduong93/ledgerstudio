@@ -77,8 +77,55 @@ def _read_app_version():
 APP_VERSION = _read_app_version()
 
 app = Flask(__name__)
-app.secret_key = 'IACC_SECRET_SUPREME_2026'
-CORS(app, supports_credentials=True)
+
+
+def _load_or_create_secret_key():
+    """Khóa ký cookie phiên: KHÔNG ghi cứng (trước đây là 'IACC_SECRET_SUPREME_2026' — nằm luôn trong
+    repo Public ⇒ ai cũng giả được cookie đăng nhập). Lần đầu chạy sinh ngẫu nhiên 32 byte, lưu 1 file
+    cạnh dữ liệu xuất trên máy (không lên git). Mỗi máy một khóa riêng, không ai đoán được.
+    Đổi khóa ⇒ cookie cũ hết hiệu lực ⇒ người dùng đăng nhập lại 1 lần (chấp nhận được)."""
+    try:
+        # Tính thư mục lưu ngay tại đây, KHÔNG gọi _export_dir() vì hàm đó định nghĩa sau trong file
+        # (khóa được nạp ngay lúc import, trước khi tới _export_dir).
+        home = os.path.expanduser("~")
+        base = os.path.join(home, "Downloads", "iPOS_Ledger_Studio") if platform.system() == "Windows" \
+            else os.path.join(home, "iPOS_Ledger_Studio")
+        os.makedirs(base, exist_ok=True)
+        key_path = os.path.join(base, '.session_key')
+        if os.path.exists(key_path):
+            with open(key_path, 'rb') as f:
+                data = f.read().strip()
+            if len(data) >= 32:
+                return data
+        key = os.urandom(32)
+        with open(key_path, 'wb') as f:
+            f.write(key)
+        return key
+    except Exception:
+        # Không ghi được file (thư mục chỉ đọc…) → khóa ngẫu nhiên trong RAM: vẫn an toàn,
+        # chỉ là mỗi lần khởi động lại app thì phải đăng nhập lại.
+        return os.urandom(32)
+
+
+app.secret_key = _load_or_create_secret_key()
+# Chỉ cho chính trang app (localhost:5050) gọi API. Trước đây CORS phản chiếu MỌI origin kèm credentials
+# ⇒ web lạ user mở có thể gọi app và đọc kết quả. Giới hạn về đúng localhost.
+CORS(app, supports_credentials=True,
+     origins=[r"http://localhost:5050", r"http://127.0.0.1:5050"])
+
+
+def _is_local_request():
+    """True nếu request đến từ chính trang app (localhost), hoặc không có Origin/Referer (gọi trực tiếp,
+    không phải từ trang web khác). Dùng chặn web lạ ép các hành động nhạy cảm (cập nhật, cài driver)
+    mà KHÔNG bắt đăng nhập — để nút 'Cập nhật ngay' ở màn hình đăng nhập vẫn bấm được."""
+    from urllib.parse import urlparse
+    for hdr in ('Origin', 'Referer'):
+        val = request.headers.get(hdr)
+        if val:
+            host = (urlparse(val).hostname or '').lower()
+            if host not in ('localhost', '127.0.0.1'):
+                return False
+    return True
 
 # ===== GZIP COMPRESSION =====
 # JSON nén rất tốt (5–10× nhỏ hơn) → giảm bandwidth + parse time cho payload 500k dòng
@@ -289,6 +336,8 @@ def check_driver():
 @app.route("/api/install_driver", methods=["POST"])
 def install_driver():
     """Cài đặt ODBC driver."""
+    if not _is_local_request():
+        return jsonify({"success": False, "message": "Chỉ thao tác từ chính ứng dụng."}), 403
     success, message = install_odbc_driver()
     return jsonify({"success": success, "message": message})
 
@@ -5955,6 +6004,8 @@ def update_progress_api():
 @app.route('/api/apply_update', methods=['POST'])
 def apply_update_api():
     """Tải bản mới trong nền rồi thay EXE tại chỗ; app poll /api/update_progress."""
+    if not _is_local_request():
+        return jsonify({"status": "error", "message": "Chỉ thao tác từ chính ứng dụng."}), 403
     if not getattr(sys, 'frozen', False):
         return jsonify({"status": "error", "message": "Tự cập nhật chỉ chạy khi mở app từ file EXE."}), 400
     with _update_lock:
@@ -6220,7 +6271,7 @@ if __name__ == "__main__":
         while time.time() < end:
             s_test = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             try:
-                s_test.bind(("0.0.0.0", port))
+                s_test.bind(("127.0.0.1", port))
                 return True
             except OSError:
                 time.sleep(0.3)
@@ -6248,7 +6299,10 @@ if __name__ == "__main__":
         pass
 
     # use_reloader=False để khi đóng gói EXE không spawn process con
+    # host=127.0.0.1: CHỈ nghe tại máy đang chạy, không mở cổng ra mạng LAN. Mỗi người chạy EXE trên
+    # máy mình và app tự nói chuyện với chính máy đó, nên đổi từ 0.0.0.0 sang 127.0.0.1 không ảnh hưởng
+    # ai — chỉ chặn máy khác gọi vào cổng 5050 của app này.
     try:
-        app.run(host="0.0.0.0", port=APP_PORT, debug=False, use_reloader=False)
+        app.run(host="127.0.0.1", port=APP_PORT, debug=False, use_reloader=False)
     finally:
         _shutdown_everything("Flask exited")
