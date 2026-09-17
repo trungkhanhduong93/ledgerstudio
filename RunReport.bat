@@ -1,5 +1,5 @@
 @echo off
-title iPOS Accounting Report Server
+title iPOS Ledger Studio Server
 echo Dang kiem tra va tat cac ban server dang chay ngam...
 taskkill /F /IM python.exe /T >nul 2>&1
 taskkill /F /IM LedgerReport_ChuLong.exe /T >nul 2>&1
