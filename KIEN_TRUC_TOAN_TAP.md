@@ -287,6 +287,10 @@ Một công cụ/script "thêm NOLOCK" chạy lên `server.py` đã **làm hỏn
 
 ## 13. Changelog & bàn giao chi tiết
 
+### 2026-09-17 — v1.8.4: đổi tên hiển thị thành "iPOS Ledger Studio" *(chỉ LedgerStudio)*
+
+`index.html` 10 chỗ (`<title>`, meta, `APP_NAME`, chân 6 tờ báo cáo). Release `v1.8.4`; đã test tự cập nhật thật từ EXE release v1.8.3 lên v1.8.4 (17 giây, chỉ còn 1 file EXE). Chi tiết: `NHAT_KY_CONG_VIEC.md` mục 10.4.
+
 ### 2026-09-17 — Tự cập nhật qua GitHub Releases — v1.8.3 *(chỉ LedgerStudio)*
 
 `/api/check_update` → `/api/apply_update` → `/api/update_progress` (server.py trước `__main__`, `_download_and_swap`) + banner/modal trong index.html. Tải `iPOS_Ledger_Studio.exe` vào `<exe>.new`, kiểm dung lượng + SHA-256, đổi tên exe đang chạy → `<exe>.old`, đặt bản mới, đóng cửa sổ Chrome, chạy bản mới với env đã gỡ `_PYI_*`, thoát; bản mới dọn `<exe>.old`. `__main__` giữ `_app_window_proc`, không tự tắt khi `_update_in_progress`, `_wait_port_free(5050)`. Release đầu `v1.8.3`; đã test cập nhật thật 1.8.2 → 1.8.3 từ GitHub. Quy trình phát hành: CLAUDE.md mục 5 Bước 5; bẫy: Bẫy 13. Chi tiết: `NHAT_KY_CONG_VIEC.md` mục 10.

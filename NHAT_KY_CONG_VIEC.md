@@ -360,4 +360,10 @@ rồi kéo cả numpy, matplotlib vào EXE. Không liên quan code app. `build_e
 - Máy đang chạy ≤ v1.8.2 chưa có updater → phải tải tay v1.8.3 **một lần**.
 - API GitHub không đăng nhập giới hạn 60 lần/giờ mỗi IP. Văn phòng đông máy chung 1 IP mở app liên tục có thể bị chặn tạm → banner không hiện (im lặng).
 - EXE để trong thư mục không có quyền ghi (Program Files) → đổi tên thất bại, modal báo lỗi, app cũ vẫn chạy.
-- Màn hình đăng nhập + tiêu đề trang vẫn ghi "iPOS Accounting Report" (có từ trước, chưa đổi).
+- Tên hiển thị "iPOS Accounting Report" (có từ lúc tách khỏi Report) đã đổi thành "iPOS Ledger Studio" ở v1.8.4 — xem 10.4.
+
+### 10.4 v1.8.4 — đổi tên hiển thị + lần tự cập nhật thật đầu tiên giữa 2 bản phát hành
+
+- `index.html`: 10 chỗ "iPOS Accounting Report" → "iPOS Ledger Studio" (`<title>`, 2 meta, `APP_NAME` màn hình đăng nhập, chân 6 tờ báo cáo). `RunReport.bat`: tiêu đề cửa sổ.
+- Release `v1.8.4` → commit `37ee151`, asset EXE 15.848.080 byte.
+- **Test cập nhật thật:** chạy đúng file EXE của release v1.8.3 (SHA-256 = asset GitHub) → banner "Đã có phiên bản v1.8.4" → bấm → v1.8.4 lên sau 17 giây, thư mục chỉ còn 1 file EXE, SHA-256 = asset v1.8.4, đúng 1 cửa sổ app, màn hình đăng nhập mới ghi "iPOS Ledger Studio V1.8.4", không còn banner.
