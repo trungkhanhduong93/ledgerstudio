@@ -367,3 +367,31 @@ rồi kéo cả numpy, matplotlib vào EXE. Không liên quan code app. `build_e
 - `index.html`: 10 chỗ "iPOS Accounting Report" → "iPOS Ledger Studio" (`<title>`, 2 meta, `APP_NAME` màn hình đăng nhập, chân 6 tờ báo cáo). `RunReport.bat`: tiêu đề cửa sổ.
 - Release `v1.8.4` → commit `37ee151`, asset EXE 15.848.080 byte.
 - **Test cập nhật thật:** chạy đúng file EXE của release v1.8.3 (SHA-256 = asset GitHub) → banner "Đã có phiên bản v1.8.4" → bấm → v1.8.4 lên sau 17 giây, thư mục chỉ còn 1 file EXE, SHA-256 = asset v1.8.4, đúng 1 cửa sổ app, màn hình đăng nhập mới ghi "iPOS Ledger Studio V1.8.4", không còn banner.
+
+---
+
+## 11. Vá 4 lỗ bảo mật cấu hình — v1.8.5 *(17/09/2026)*
+
+Rà bảo mật EXE (test tấn công thật): **không có** SQL injection (query tham số hoá, ORDER BY whitelist),
+**không** path traversal (`/../..` → 404), `open_file`/`open_folder` chặn ra ngoài thư mục xuất bằng `realpath`,
+endpoint dữ liệu đòi phiên. 4 lỗ đều do **để cấu hình mặc định**, đã vá:
+
+| Lỗ | Trước | Sau (v1.8.5) |
+|---|---|---|
+| Khóa ký cookie | `app.secret_key = 'IACC_SECRET_SUPREME_2026'` ghi cứng, lộ trên repo Public → giả được cookie | `_load_or_create_secret_key()` sinh ngẫu nhiên 32 byte, lưu `Downloads\iPOS_Ledger_Studio\.session_key` (mỗi máy 1 khóa, không lên git). Đổi khóa ⇒ đăng nhập lại 1 lần |
+| CORS | `supports_credentials=True` phản chiếu MỌI origin → web lạ đọc được kết quả | `origins=[localhost:5050, 127.0.0.1:5050]` |
+| Bind | `0.0.0.0` → cả LAN gọi cổng 5050 được | `127.0.0.1` (cả `app.run` lẫn `_wait_port_free`). Mỗi người chạy EXE máy mình, app tự nói chuyện với máy đó nên không ảnh hưởng ai |
+| Hành động nhạy cảm không xác thực | `/api/apply_update`, `/api/install_driver` gọi từ đâu cũng được | `_is_local_request()` chặn origin ngoài localhost. KHÔNG bắt đăng nhập (để nút "Cập nhật ngay" ở màn hình đăng nhập vẫn chạy) |
+
+- **Bối cảnh giảm nhẹ:** SQL Server chỉ vào được qua VPN công ty, nên mật khẩu lộ một mình không đủ khai thác.
+- **Cố ý KHÔNG làm:** bỏ mật khẩu khỏi session cookie (Flask ký chứ không mã hoá, password base64 đọc ngược được). Sửa triệt để phải đổi sâu cách giữ phiên + server restart là mất session. Với VPN + khóa đã đổi, rủi ro còn lại chấp nhận được. Nếu sau này cần: giữ `db_config` server-side theo `sid`, cookie chỉ mang `sid`.
+- **Chưa làm:** ký số EXE (SmartScreen vẫn cảnh báo "nhà phát hành không rõ"); SHA-256 khi tự cập nhật chỉ chống file hỏng, không chống tài khoản GitHub bị chiếm → bật 2FA cho tài khoản.
+
+### 11.1 Verify
+
+| Mức | Kiểm | Kết quả |
+|---|---|---|
+| M2 | 15 ca bảo mật in-process: khóa ngẫu nhiên/bền, CORS chặn evil + cho localhost, `_is_local_request` 4 ca, apply_update/install_driver evil → 403, endpoint dữ liệu vẫn 401, check_update vẫn 200 | 15/15 |
+| M2 | `t_update` 29/29, `t_server`/`t_list` ALL PASS (không phá gì) | Qua |
+| M3 | EXE 1.8.5: chỉ `LISTEN 127.0.0.1:5050`; gọi qua IP LAN `192.168.1.16:5050` → không kết nối; evil origin → không ACAO / apply_update 403; localhost origin được phép; `.session_key` đã tạo | Qua |
+| M3 | Cập nhật thật EXE release v1.8.4 → v1.8.5: 17 giây, 1 file EXE, SHA khớp asset, bản mới bind 127.0.0.1, màn hình đăng nhập lên bình thường | Qua |

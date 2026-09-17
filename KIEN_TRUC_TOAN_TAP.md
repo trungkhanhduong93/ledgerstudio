@@ -287,6 +287,10 @@ Một công cụ/script "thêm NOLOCK" chạy lên `server.py` đã **làm hỏn
 
 ## 13. Changelog & bàn giao chi tiết
 
+### 2026-09-17 — v1.8.5: vá 4 lỗ bảo mật cấu hình *(chỉ LedgerStudio)*
+
+`secret_key` ngẫu nhiên lưu `.session_key` (bỏ chuỗi ghi cứng đã lộ trên repo Public); CORS chỉ `localhost:5050`/`127.0.0.1:5050`; bind `127.0.0.1` thay `0.0.0.0` (không mở cổng ra LAN); `apply_update`/`install_driver` chặn origin ngoài localhost qua `_is_local_request()`. SQL/path/open_file rà lại đều an toàn sẵn. Người dùng chỉ đăng nhập lại 1 lần. Đã test tấn công thật + cập nhật thật v1.8.4→v1.8.5. Chi tiết: `NHAT_KY_CONG_VIEC.md` mục 11.
+
 ### 2026-09-17 — v1.8.4: đổi tên hiển thị thành "iPOS Ledger Studio" *(chỉ LedgerStudio)*
 
 `index.html` 10 chỗ (`<title>`, meta, `APP_NAME`, chân 6 tờ báo cáo). Release `v1.8.4`; đã test tự cập nhật thật từ EXE release v1.8.3 lên v1.8.4 (17 giây, chỉ còn 1 file EXE). Chi tiết: `NHAT_KY_CONG_VIEC.md` mục 10.4.
