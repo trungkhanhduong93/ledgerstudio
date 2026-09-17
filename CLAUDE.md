@@ -7,7 +7,7 @@
 > Chỉ commit/push khi Trum bảo. Trước mọi push chạy `git remote get-url origin` — phải ra `.../ledgerstudio.git`.
 > Remote cũ từng trỏ nhầm repo **LedgerReport** (gỡ 16/08/2026): push nhầm là đè code Studio lên `main` của Report.
 > Repo công khai → **cấm commit mật khẩu / IP server DB / file dữ liệu khách** (`BaoCaoMau/` đã `.gitignore`).
-> Build vẫn chạy **`BuildEXE-LedgerStudio.bat`**, EXE nằm trong `dist` (không lên git, không có GitHub Releases).
+> Build vẫn chạy **`BuildEXE-LedgerStudio.bat`**, EXE nằm trong `dist` (không lên git). Phát hành qua **GitHub Releases** — app từ v1.8.3 tự cập nhật (mục 5, Bước 5).
 > **Cập nhật gần nhất:** 17/09/2026
 
 ---
@@ -35,7 +35,7 @@
 5. **Git có kiểm soát:** chỉ commit/push khi Trum bảo, chỉ lên `origin` = `trungkhanhduong93/ledgerstudio` (Public — quét mật khẩu/IP trước khi push). Sửa xong vẫn chạy `BuildEXE-LedgerStudio.bat`, EXE ra thẳng `dist/iPOS_Ledger_Studio.exe`.
 6. **Cập nhật tài liệu LIVE:** Chỉ cập nhật file `.md` bản LIVE (`GEMINI.md` / `CLAUDE.md` / `KIEN_TRUC_TOAN_TAP.md`).
 7. **Báo cáo trung thực:** Trình bày rõ ràng: `🎯 Mục tiêu` ➔ `✅ Đã sửa` ➔ `🧪 Verify` ➔ `📦 Git` ➔ `🔍 Điểm mù` ➔ `📝 Docs`.
-8. **Phát hành:** đưa thẳng file `dist/iPOS_Ledger_Studio.exe` cho người dùng. Không có GitHub Releases cho Studio.
+8. **Phát hành:** GitHub Releases của repo `ledgerstudio` — tag `vX.Y.Z` trùng `version.txt` nhúng trong EXE, asset tên đúng `iPOS_Ledger_Studio.exe`. Máy chạy từ v1.8.3 trở lên tự thấy banner "Cập nhật ngay". Repo phải để **Public**.
 
 ---
 
@@ -109,6 +109,12 @@ Tất cả các báo cáo hiển thị dưới dạng tờ **A4/A4 Ngang (`.repo
   - Áp dụng `content-visibility: auto` và `Intl.NumberFormat` giúp render mượt mà 0% CPU lag.
   - Xuất Excel 2 mẫu Chi tiết / Tổng hợp, thuế suất lưu dạng % thật (10% = 0.1), 3 dòng tổng dưới bảng là ô số.
 
+### 3.4 Tự cập nhật (từ v1.8.3)
+- Mở app 1 giây → `GET /api/check_update` gọi `api.github.com/repos/trungkhanhduong93/ledgerstudio/releases/latest` (không đăng nhập, timeout 3s), so `tag_name` với `version.txt`. Lỗi mạng / chưa có release → im lặng.
+- Có bản mới → banner cam trên màn hình đăng nhập và màn hình chính (`AutoUpdateBanner`). Bấm "Cập nhật ngay" → `POST /api/apply_update` → poll `/api/update_progress` (`AutoUpdateModal`).
+- Server (`_download_and_swap`): tải asset `iPOS_Ledger_Studio.exe` vào `<exe>.new`, kiểm dung lượng + SHA-256 (trường `digest` GitHub trả kèm asset) → đổi tên exe đang chạy thành `<exe>.old` → đặt bản mới vào tên cũ → đóng cửa sổ Chrome app → chạy bản mới (env đã gỡ biến `_PYI_*`) → thoát. Bản mới dọn `<exe>.old` (thử lại tới 60s).
+- Chạy từ source (`python server.py`) chỉ kiểm tra được bản mới, bấm cập nhật trả 400.
+
 ---
 
 ## 4. 🐛 TỔNG HỢP BẪY BUG THỰC TẾ & CÁCH KHẮC PHỤC (PITFALLS)
@@ -178,6 +184,13 @@ Tất cả các báo cáo hiển thị dưới dạng tờ **A4/A4 Ngang (`.repo
 - **Nguyên nhân:** kiểm `isinstance(v, (int, float))` bỏ sót `Decimal` (cột money/decimal của SQL Server).
 - **Cách khắc phục:** coi `Decimal` là số (`_write_xlsx_to_disk`, `xlsx_report._to_float`). Cộng dồn tổng thì cộng bằng `Decimal` rồi mới đổi float khi ghi.
 
+### Bẫy 13: Tự cập nhật im lặng không chạy / thay nhầm file
+- **Repo Private** → API trả 404 cho EXE (không đăng nhập) → không máy nào thấy bản mới, KHÔNG báo lỗi. Repo phải Public.
+- **Asset sai tên** (chỉ có `.zip`, hoặc đổi tên EXE) → `has_update=False` im lặng. Updater chỉ nhận đúng `iPOS_Ledger_Studio.exe`, cố ý không lấy "file .exe đầu tiên".
+- **Tag lệch version nhúng trong EXE** (tag `v1.8.4` nhưng EXE build ra 1.8.3) → máy cập nhật xong vẫn thấy "có bản mới", bấm lại mãi. Tag lấy ĐÚNG từ `version.txt` sau khi build.
+- **Env PyInstaller**: spawn bản mới mà không gỡ `_PYI_*` → bootloader báo "parent process has different executable", bản mới không lên (bẫy LedgerReport 28/08/2026) → `_child_env_without_pyi`.
+- **Dọn file**: chỉ xoá `<tên exe>.old/.new`. Bản LedgerReport xoá mọi `*.old/*.new/*.tmp_dl` trong thư mục chứa EXE — EXE để ở Downloads là mất file của người dùng.
+
 ---
 
 ## 5. 🛠️ QUY TRÌNH DEV, TEST & BUILD EXE CHUẨN
@@ -208,9 +221,18 @@ taskkill /F /IM iPOS_Ledger_Studio.exe /T 2>nul
 python build_exe.py
 ```
 
-### Bước 4: Kiểm tra File Output & Release
-- Verify thời gian tạo (mtime) của file `dist/iPOS_Ledger_Studio.exe`.
-- Khi cần phát hành bản nâng cấp: build lại bằng `BuildEXE-LedgerStudio.bat` rồi gửi file EXE trực tiếp.
+### Bước 4: Kiểm tra File Output
+- Verify mtime + dung lượng (~15,8 MB) của `dist/iPOS_Ledger_Studio.exe`; chạy thử `/api/version` ra đúng `version.txt`.
+
+### Bước 5: Phát hành bản cập nhật (chỉ khi Trum bảo)
+```bash
+# 1. Đẩy mã nguồn đúng bản vừa build
+git remote get-url origin          # phải ra .../ledgerstudio.git
+git add -A && git commit -m "vX.Y.Z: ..." && git push origin main
+# 2. Release: tag = version.txt, asset tên ĐÚNG iPOS_Ledger_Studio.exe (+ .zip cho người tải tay)
+gh release create vX.Y.Z dist/iPOS_Ledger_Studio.exe dist/iPOS_Ledger_Studio.zip --repo trungkhanhduong93/ledgerstudio --target main --title "iPOS Ledger Studio vX.Y.Z" --notes-file notes.md
+```
+- Máy đang chạy bản ≥ v1.8.3 thấy banner ở lần mở app kế tiếp. Máy còn bản ≤ v1.8.2 (chưa có updater) phải tải tay 1 lần.
 
 ---
 

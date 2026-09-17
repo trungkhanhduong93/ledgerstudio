@@ -22,5 +22,7 @@ Nếu bạn là **Lập trình viên** hoặc **Agent AI (Claude Code, Gemini, A
 
 ## 📦 TẢI VỀ BẢN DỰ ÁN (.EXE)
 
-Studio không phát hành qua GitHub Releases. Build từ mã nguồn bằng `BuildEXE-LedgerStudio.bat`,
-file ra ở `dist/iPOS_Ledger_Studio.exe` (thư mục `dist/` không đưa lên git).
+Tải `iPOS_Ledger_Studio.exe` (hoặc bản `.zip`) ở trang **GitHub Releases**:
+👉 [https://github.com/trungkhanhduong93/ledgerstudio/releases/latest](https://github.com/trungkhanhduong93/ledgerstudio/releases/latest)
+
+Từ v1.8.3 app tự báo khi có bản mới và cập nhật ngay trong app. Tự build: chạy `BuildEXE-LedgerStudio.bat`, file ra ở `dist/`.

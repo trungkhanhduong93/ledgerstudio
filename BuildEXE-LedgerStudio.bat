@@ -8,9 +8,9 @@ REM
 REM  File nay CHI dung cho LedgerStudio. Ban cua LedgerReport ten khac:
 REM      BuildEXE-LedgerReport.bat   -> iPOS_Accounting_Report.exe
 REM
-REM  LEDGERSTUDIO KHONG CO GIT, KHONG PUSH DI DAU.
-REM  Build xong la xong — file EXE nam ngay trong dist\ cua thu muc nay.
-REM  (Remote git da duoc go 16/08/2026 vi no tro nham vao repo cua LedgerReport.)
+REM  Git: repo rieng github.com/trungkhanhduong93/ledgerstudio (Public) — chi push khi Trum bao.
+REM  Build xong file EXE nam trong dist\. Phat hanh: GitHub Releases, tag vX.Y.Z = version.txt,
+REM  asset ten DUNG iPOS_Ledger_Studio.exe (app tu cap nhat tu v1.8.3) — xem CLAUDE.md muc 5.
 REM =====================================================================
 
 cd /d "%~dp0"
@@ -75,4 +75,4 @@ echo Phien ban: %VER%
 echo File EXE : %CD%\dist\%APP_NAME%.exe
 for %%A in ("dist\%APP_NAME%.exe") do echo Dung luong: %%~zA bytes
 echo.
-echo LUU Y: LedgerStudio khong dung git — khong can commit/push gi ca.
+echo Phat hanh ban cap nhat: push ma nguon + gh release create v%VER% (xem CLAUDE.md muc 5, Buoc 5).

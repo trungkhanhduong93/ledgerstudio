@@ -325,5 +325,5 @@ rồi kéo cả numpy, matplotlib vào EXE. Không liên quan code app. `build_e
 - Push **1 commit gốc mới** chứa code v1.8.2. 7 commit cũ (12/08/2026, chung gốc với LedgerReport) giữ ở nhánh local
   `lich-su-truoc-17-09` để tra cứu — **không push** nhánh này, không `git push --all`.
 - `.gitignore` thêm `BaoCaoMau/` và `BESReportViewer.pdf`: báo cáo mẫu chứa dữ liệu thật của khách, chỉ để trên máy.
-- EXE (`dist/`) không lên git. Studio vẫn không có GitHub Releases, EXE gửi tay.
+- EXE (`dist/`) không lên git. Phát hành qua GitHub Releases từ v1.8.3 — xem mục 10.
 - Trước mỗi push: `git remote get-url origin` phải ra `.../ledgerstudio.git`, và quét mật khẩu/IP trong file sắp commit.

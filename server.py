@@ -5815,7 +5815,257 @@ def report_export_start():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+# ==============================================================================
+# TỰ CẬP NHẬT QUA GITHUB RELEASES (port từ LedgerReport 17/09/2026)
+# App mở → /api/check_update so tag release mới nhất với APP_VERSION → banner "Cập nhật ngay"
+# → /api/apply_update tải EXE vào <exe>.new (kiểm dung lượng + SHA-256) → đổi tên exe đang chạy thành
+# <exe>.old → đặt bản mới vào đúng tên cũ → đóng cửa sổ app → chạy bản mới → thoát.
+# Bản mới khởi động thì dọn <exe>.old (xem __main__).
+# ⚠️ Repo PHẢI để Public: EXE gọi API không đăng nhập, repo Private trả 404 → không máy nào thấy bản mới.
+# ⚠️ Asset phải tên đúng UPDATE_ASSET_NAME — updater không lấy "file .exe đầu tiên" để khỏi thay nhầm file khác.
+# ==============================================================================
+import urllib.request
+import json
+import re
+
+UPDATE_API_URL = "https://api.github.com/repos/trungkhanhduong93/ledgerstudio/releases/latest"
+UPDATE_ASSET_NAME = "iPOS_Ledger_Studio.exe"
+_UPDATE_UA = f"iPOS-Ledger-Studio/{APP_VERSION}"
+
+_update_lock = threading.Lock()
+_update_state = {
+    "status": "idle",       # idle | downloading | applying | ready | error
+    "progress": 0,          # 0 - 100
+    "downloaded_bytes": 0,
+    "total_bytes": 0,
+    "error_message": "",
+    "target_version": ""
+}
+# Handle Chrome --app do launch_app_window mở — updater phải đóng cửa sổ này trước khi chạy bản mới.
+_app_window_proc = None
+# Bật trong lúc thay EXE: launch_app_window thấy cửa sổ bị đóng sẽ KHÔNG tự tắt server.
+_update_in_progress = False
+
+
+def _set_update_state(**kw):
+    with _update_lock:
+        _update_state.update(kw)
+
+
+def _update_paths():
+    exe_path = os.path.abspath(sys.executable)
+    return exe_path, exe_path + ".new", exe_path + ".old"
+
+
+def _cleanup_old_executables(retry_seconds=0):
+    """Dọn <exe>.old / <exe>.new do lần cập nhật trước để lại.
+
+    CHỈ đụng đúng 2 file mang tên EXE đang chạy. Bản LedgerReport xoá MỌI *.old / *.new / *.tmp_dl
+    trong thư mục chứa EXE — người dùng để EXE ở Downloads/Desktop là mất luôn file .old/.new của họ.
+    Bản vừa cập nhật phải gọi với retry_seconds > 0: <exe>.old là image của tiến trình cũ vừa khởi chạy
+    mình, Windows còn khoá nó tới khi tiến trình đó thoát hẳn — xoá một lần là thất bại im lặng."""
+    if not getattr(sys, 'frozen', False):
+        return
+    exe_path, new_path, old_path = _update_paths()
+    deadline = time.time() + max(0, retry_seconds)
+    while True:
+        targets = [old_path]
+        # Đang tải thì <exe>.new là file đang ghi dở — xoá là giết luôn bản đang tải
+        if _update_state.get("status") not in ("downloading", "applying"):
+            targets.append(new_path)
+        con_lai = False
+        for p in targets:
+            if os.path.exists(p):
+                try:
+                    os.remove(p)
+                except OSError:
+                    con_lai = True
+        if not con_lai or time.time() >= deadline:
+            return
+        time.sleep(1.0)
+
+
+def _child_env_without_pyi():
+    """Env sạch để spawn EXE mới — PHẢI gỡ các biến bootloader PyInstaller onefile.
+
+    ⚠️ BẪY ĐÃ LÀM CHẾT TỰ CẬP NHẬT BÊN LEDGERREPORT (28/08/2026): Popen([exe]) kế thừa env có
+    `_PYI_APPLICATION_HOME_DIR` / `_PYI_ARCHIVE_FILE` / `_PYI_PARENT_PROCESS_LEVEL` (PyInstaller <=5: `_MEIPASS2`).
+    Bootloader của EXE mới tưởng mình là tiến trình con giai đoạn 2, so executable với cha (`...exe.old`) → khác
+    → hộp thoại "Security validation failure: parent process has different executable!", Python chưa chạy dòng nào.
+    Triệu chứng: tải xong chỉ thấy EXE cũ thành .old, bản mới không lên (tasklist còn ~10 MB, không LISTEN 5050)."""
+    env = os.environ.copy()
+    for k in ("_PYI_APPLICATION_HOME_DIR", "_PYI_ARCHIVE_FILE", "_PYI_PARENT_PROCESS_LEVEL",
+              "_PYI_SPLASH_IPC", "_MEIPASS2"):
+        env.pop(k, None)
+    return env
+
+
+def _parse_semver(v_str):
+    """'v1.8.3' -> (1, 8, 3). Chuỗi không có số ('dev' khi chạy từ source) -> (0, 0, 0)."""
+    nums = re.findall(r'\d+', str(v_str or ''))
+    return tuple(int(n) for n in nums[:3]) if nums else (0, 0, 0)
+
+
+def _fetch_latest_release(timeout):
+    req = urllib.request.Request(UPDATE_API_URL, headers={
+        "User-Agent": _UPDATE_UA, "Accept": "application/vnd.github+json"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode('utf-8'))
+
+
+def _pick_exe_asset(release):
+    for a in release.get('assets') or []:
+        if (a.get('name') or '').lower() == UPDATE_ASSET_NAME.lower():
+            return a
+    return None
+
+
+@app.route('/api/check_update', methods=['GET'])
+def check_update_api():
+    """Public — so release mới nhất trên GitHub với APP_VERSION. Lỗi mạng / chưa có release → has_update=False."""
+    frozen = getattr(sys, 'frozen', False)
+    try:
+        rel = _fetch_latest_release(timeout=3.0)
+        asset = _pick_exe_asset(rel) or {}
+        tag = rel.get('tag_name', '')
+        digest = asset.get('digest') or ''
+        return jsonify({
+            "status": "ok",
+            "has_update": bool(asset) and _parse_semver(tag) > _parse_semver(APP_VERSION),
+            "current_version": APP_VERSION,
+            "latest_version": tag,
+            "release_name": rel.get('name', ''),
+            "release_notes": rel.get('body', ''),
+            "published_at": rel.get('published_at', ''),
+            "file_size": asset.get('size', 0),
+            "sha256": digest[7:] if digest.startswith('sha256:') else '',
+            "is_frozen": frozen,
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "has_update": False, "message": str(e),
+                        "current_version": APP_VERSION, "is_frozen": frozen})
+
+
+@app.route('/api/update_progress', methods=['GET'])
+def update_progress_api():
+    with _update_lock:
+        return jsonify(dict(_update_state))
+
+
+@app.route('/api/apply_update', methods=['POST'])
+def apply_update_api():
+    """Tải bản mới trong nền rồi thay EXE tại chỗ; app poll /api/update_progress."""
+    if not getattr(sys, 'frozen', False):
+        return jsonify({"status": "error", "message": "Tự cập nhật chỉ chạy khi mở app từ file EXE."}), 400
+    with _update_lock:
+        if _update_state["status"] in ("downloading", "applying", "ready"):
+            return jsonify({"status": "busy", "message": "Đang có tiến trình cập nhật chạy."})
+        _update_state.update(status="downloading", progress=0, downloaded_bytes=0, total_bytes=0,
+                             error_message="", target_version="")
+    threading.Thread(target=_download_and_swap, daemon=True).start()
+    return jsonify({"status": "ok", "message": "Đang tải bản cập nhật trong nền."})
+
+
+def _download_and_swap():
+    global _update_in_progress
+    exe_path, new_path, old_path = _update_paths()
+    exe_dir = os.path.dirname(exe_path)
+    renamed = False
+    try:
+        rel = _fetch_latest_release(timeout=5.0)
+        tag = rel.get('tag_name', '')
+        asset = _pick_exe_asset(rel)
+        if not asset or not asset.get('browser_download_url'):
+            raise ValueError(f"Bản phát hành {tag or 'mới nhất'} trên GitHub không có file {UPDATE_ASSET_NAME}.")
+        if _parse_semver(tag) <= _parse_semver(APP_VERSION):
+            raise ValueError(f"Máy đang chạy v{APP_VERSION}, không cũ hơn bản trên GitHub ({tag}).")
+        expected_size = int(asset.get('size') or 0)
+        digest = asset.get('digest') or ''
+        expected_sha = digest[7:].lower() if digest.startswith('sha256:') else ''
+        _set_update_state(target_version=tag, total_bytes=expected_size)
+
+        # 1. Tải vào <exe>.new, băm SHA-256 ngay trong lúc tải
+        sha = hashlib.sha256()
+        downloaded = 0
+        req = urllib.request.Request(asset['browser_download_url'], headers={"User-Agent": _UPDATE_UA})
+        with urllib.request.urlopen(req, timeout=30.0) as resp, open(new_path, 'wb') as out:
+            total = int(resp.headers.get('Content-Length') or 0) or expected_size
+            while True:
+                chunk = resp.read(64 * 1024)
+                if not chunk:
+                    break
+                out.write(chunk)
+                sha.update(chunk)
+                downloaded += len(chunk)
+                _set_update_state(downloaded_bytes=downloaded, total_bytes=total,
+                                  progress=min(100, int(downloaded * 100 / total)) if total else 50)
+
+        # 2. Kiểm toàn vẹn TRƯỚC khi đụng vào exe đang chạy — thay bằng file hỏng là máy đó không mở được app nữa
+        if expected_size and downloaded != expected_size:
+            raise ValueError(f"Tải thiếu: {downloaded:,} / {expected_size:,} byte.")
+        if downloaded < 5 * 1024 * 1024:
+            raise ValueError(f"File tải về chỉ {downloaded:,} byte — không phải EXE hợp lệ.")
+        if expected_sha and sha.hexdigest() != expected_sha:
+            raise ValueError("Mã SHA-256 không khớp bản trên GitHub — file tải về bị hỏng.")
+        _set_update_state(status="applying", progress=100)
+
+        # 3. Windows cho ĐỔI TÊN exe đang chạy nhưng không cho ghi đè → đổi tên rồi đặt bản mới vào tên cũ
+        if os.path.exists(old_path):
+            try:
+                os.remove(old_path)
+            except OSError:
+                pass
+        os.rename(exe_path, old_path)
+        renamed = True
+        os.rename(new_path, exe_path)
+        _set_update_state(status="ready")
+
+        # 4. Đóng cửa sổ app cũ trước khi chạy bản mới. Chrome dùng chung --user-data-dir: instance cũ còn
+        #    sống thì cửa sổ của bản mới bị "bàn giao" rồi tự thoát → bản mới chạy ngầm, không có cửa sổ.
+        #    Bật cờ TRƯỚC để launch_app_window không tưởng user đóng cửa sổ rồi tự tắt server giữa chừng.
+        _update_in_progress = True
+        proc = _app_window_proc
+        if proc is not None and proc.poll() is None:
+            try:
+                proc.terminate()
+                proc.wait(timeout=5)
+            except Exception:
+                pass
+
+        # 5. Chạy bản mới tách khỏi process tree (env sạch biến bootloader), đóng pool SQL rồi thoát
+        time.sleep(0.8)
+        flags = (0x00000008 | 0x00000200) if platform.system() == "Windows" else 0   # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+        subprocess.Popen([exe_path], creationflags=flags, close_fds=True, cwd=exe_dir,
+                         env=_child_env_without_pyi())
+        with _pool_lock:
+            for c in list(_conn_pool.values()):
+                try:
+                    c.close()
+                except Exception:
+                    pass
+            _conn_pool.clear()
+        time.sleep(0.5)
+        os._exit(0)
+    except Exception as err:
+        logger.exception("Tu cap nhat that bai")
+        _update_in_progress = False
+        # Đã đổi tên exe cũ mà chưa đặt được bản mới vào → trả tên cũ lại, không để máy mất file app
+        if renamed and not os.path.exists(exe_path) and os.path.exists(old_path):
+            try:
+                os.rename(old_path, exe_path)
+            except OSError:
+                pass
+        if os.path.exists(new_path):
+            try:
+                os.remove(new_path)
+            except OSError:
+                pass
+        _set_update_state(status="error", error_message=str(err))
+
+
 if __name__ == "__main__":
+    # Dọn nền có retry: <exe>.old là image của bản cũ vừa khởi chạy mình, phải đợi nó thoát hẳn.
+    threading.Thread(target=_cleanup_old_executables, kwargs={"retry_seconds": 60}, daemon=True).start()
     import threading
 
     import webbrowser
@@ -5891,6 +6141,7 @@ if __name__ == "__main__":
 
     def launch_app_window():
         """Mở app dưới dạng cửa sổ standalone. Khi user đóng cửa sổ → tắt server."""
+        global _app_window_proc
         if not _wait_port_ready("127.0.0.1", APP_PORT):
             webbrowser.open(APP_URL)
             return  # Không track được → server chạy ngầm như cũ
@@ -5928,6 +6179,7 @@ if __name__ == "__main__":
             # close_fds + KHÔNG dùng shell → có handle process thật để wait()
             _t_spawn = time.time()
             proc = subprocess.Popen(args, close_fds=True)
+            _app_window_proc = proc   # updater cần handle này để đóng cửa sổ khi thay EXE
         except Exception:
             webbrowser.open(APP_URL)
             return
@@ -5937,6 +6189,12 @@ if __name__ == "__main__":
             proc.wait()
         except Exception:
             pass
+
+        # Đang thay EXE: cửa sổ do CHÍNH updater đóng, không phải user. Tắt server ở đây là giết tiến trình
+        # trước khi nó kịp chạy bản mới → cập nhật xong không có gì mở lên.
+        if _update_in_progress:
+            print("[launcher] Cua so dong do dang cap nhat -> khong shutdown, de updater lo")
+            return
 
         # ⚠️ BẪY ĐÃ TỪNG LÀM SERVER "CHẾT NGAY KHI VỪA LÊN" (phát hiện 12/08/2026):
         # Nếu ĐÃ có sẵn 1 Chrome đang dùng chung --user-data-dir này (cửa sổ app cũ chưa đóng
@@ -5953,6 +6211,27 @@ if __name__ == "__main__":
 
         # User đã đóng cửa sổ → shutdown toàn bộ
         _shutdown_everything("Cua so app da bi dong")
+
+    def _wait_port_free(port, timeout=6):
+        """Đợi cổng được nhả. Sau khi tự cập nhật, bản mới khởi chạy lúc bản cũ còn vài trăm ms nữa mới thoát —
+        bind ngay là OSError 10048 rồi rơi vào `finally` tự tắt: "cập nhật xong mở lên là tắt ngay".
+        Hết giờ vẫn chạy tiếp (Werkzeug bind kèm SO_REUSEADDR vẫn cướp được cổng), chỉ chậm, không chặn."""
+        end = time.time() + timeout
+        while time.time() < end:
+            s_test = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            try:
+                s_test.bind(("0.0.0.0", port))
+                return True
+            except OSError:
+                time.sleep(0.3)
+            finally:
+                try:
+                    s_test.close()
+                except Exception:
+                    pass
+        return False
+
+    _wait_port_free(APP_PORT)
 
     # Chạy launcher ở thread riêng (không daemon vì cần block để kill khi đóng)
     launcher = threading.Thread(target=launch_app_window, daemon=True)
