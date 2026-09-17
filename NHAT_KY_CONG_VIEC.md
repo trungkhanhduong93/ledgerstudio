@@ -327,3 +327,37 @@ rồi kéo cả numpy, matplotlib vào EXE. Không liên quan code app. `build_e
 - `.gitignore` thêm `BaoCaoMau/` và `BESReportViewer.pdf`: báo cáo mẫu chứa dữ liệu thật của khách, chỉ để trên máy.
 - EXE (`dist/`) không lên git. Phát hành qua GitHub Releases từ v1.8.3 — xem mục 10.
 - Trước mỗi push: `git remote get-url origin` phải ra `.../ledgerstudio.git`, và quét mật khẩu/IP trong file sắp commit.
+
+---
+
+## 10. Tự cập nhật qua GitHub Releases — v1.8.3 *(17/09/2026)*
+
+### 10.1 Làm gì
+
+- Port từ LedgerReport: `/api/check_update`, `/api/apply_update`, `/api/update_progress` (`server.py`, ngay trước `__main__`)
+  + `useAutoUpdate` / `AutoUpdateBanner` / `AutoUpdateModal` (`index.html`, hiện ở màn hình đăng nhập và màn hình chính).
+- Sửa 5 chỗ so với bản Report:
+  1. Kiểm dung lượng + SHA-256 (`digest` GitHub trả kèm asset) **trước** khi thay EXE. Report chỉ kiểm ≥ 5 MB.
+  2. Đổi tên lần 2 lỗi → trả EXE cũ về tên cũ. Report để máy mất luôn file app.
+  3. Chỉ dọn `<tên exe>.old/.new`. Report xoá **mọi** `*.old/*.new/*.tmp_dl` trong thư mục chứa EXE — EXE để ở Downloads là
+     mất file của người dùng. **Lỗi này vẫn còn bên LedgerReport** (Trum dặn không đụng Report).
+  4. Chỉ nhận asset đúng tên `iPOS_Ledger_Studio.exe`; Report lấy file `.exe` đầu tiên.
+  5. Không tải khi tag không mới hơn bản đang chạy.
+- Release đầu tiên `v1.8.3` → commit `fd4626a`, asset `iPOS_Ledger_Studio.exe` 15.850.547 byte + `iPOS_Ledger_Studio.zip`.
+
+### 10.2 Verify
+
+| Mức | Kiểm | Kết quả |
+|---|---|---|
+| M1 | `ast.parse` + `node check_babel.js` | Qua |
+| M2 | `test_client` + mô phỏng EXE đóng gói: check_update 7 ca, apply 3 ca, thay file 19 ca (SHA sai, tải thiếu, < 5 MB, tag không mới hơn, sai tên asset, không có digest, đổi tên lỗi, dọn file) | 29/29 |
+| M2 | Test xuất báo cáo + xuất danh sách của mục 8 | Vẫn ALL PASS |
+| M3 | EXE 1.8.3: `/api/version`; `/api/check_update` khi chưa có release (GitHub 404 → im lặng) | Qua |
+| M3 | **Cập nhật thật:** EXE thử v1.8.2 (cùng mã nguồn) chạy ở thư mục tạm → banner "Đã có phiên bản v1.8.3" → bấm bằng Chrome headless → tải 15,1 MB từ GitHub → thay file, đóng cửa sổ cũ, mở bản mới | v1.8.3 lên sau 21 giây (tính từ lúc bấm), PID mới, đúng 1 cửa sổ app, `.old` đã dọn, SHA-256 file = asset GitHub, bản mới `has_update=false` |
+
+### 10.3 Lưu ý
+
+- Máy đang chạy ≤ v1.8.2 chưa có updater → phải tải tay v1.8.3 **một lần**.
+- API GitHub không đăng nhập giới hạn 60 lần/giờ mỗi IP. Văn phòng đông máy chung 1 IP mở app liên tục có thể bị chặn tạm → banner không hiện (im lặng).
+- EXE để trong thư mục không có quyền ghi (Program Files) → đổi tên thất bại, modal báo lỗi, app cũ vẫn chạy.
+- Màn hình đăng nhập + tiêu đề trang vẫn ghi "iPOS Accounting Report" (có từ trước, chưa đổi).

@@ -113,6 +113,7 @@ Tất cả các báo cáo hiển thị dưới dạng tờ **A4/A4 Ngang (`.repo
 - Có bản mới → banner cam trên màn hình đăng nhập và màn hình chính (`AutoUpdateBanner`). Bấm "Cập nhật ngay" → `POST /api/apply_update` → poll `/api/update_progress` (`AutoUpdateModal`).
 - Server (`_download_and_swap`): tải asset `iPOS_Ledger_Studio.exe` vào `<exe>.new`, kiểm dung lượng + SHA-256 (trường `digest` GitHub trả kèm asset) → đổi tên exe đang chạy thành `<exe>.old` → đặt bản mới vào tên cũ → đóng cửa sổ Chrome app → chạy bản mới (env đã gỡ biến `_PYI_*`) → thoát. Bản mới dọn `<exe>.old` (thử lại tới 60s).
 - Chạy từ source (`python server.py`) chỉ kiểm tra được bản mới, bấm cập nhật trả 400.
+- **Yêu cầu của Trum (17/09/2026):** bấm "Cập nhật ngay" xong KHÔNG giữ bản cũ — tự xoá EXE cũ và tự mở ngay EXE bản mới, thư mục chỉ còn 1 file `iPOS_Ledger_Studio.exe`. Đừng thêm cơ chế giữ bản sao lưu. Windows còn khoá `<exe>.old` quá 60 giây thì lần mở app sau dọn tiếp.
 
 ---
 
