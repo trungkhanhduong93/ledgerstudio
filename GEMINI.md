@@ -7,7 +7,7 @@
 > Remote cũ từng trỏ nhầm repo **LedgerReport** (gỡ 16/08/2026): push nhầm là đè code Studio lên `main` của Report.
 > Repo công khai → **cấm commit mật khẩu / IP server DB / file dữ liệu khách** (`BaoCaoMau/` đã `.gitignore`).
 > Build vẫn chạy **`BuildEXE-LedgerStudio.bat`**, EXE nằm trong `dist` (không lên git). Phát hành qua **GitHub Releases** — app từ v1.8.3 tự cập nhật (mục 5, Bước 5).
-> **Cập nhật gần nhất:** 17/09/2026
+> **Cập nhật gần nhất:** 27/09/2026 (v1.8.6: EXE dùng giao diện dịch sẵn — Bẫy 14)
 
 ---
 
@@ -190,6 +190,12 @@ Tất cả các báo cáo hiển thị dưới dạng tờ **A4/A4 Ngang (`.repo
 - **Tag lệch version nhúng trong EXE** (tag `v1.8.4` nhưng EXE build ra 1.8.3) → máy cập nhật xong vẫn thấy "có bản mới", bấm lại mãi. Tag lấy ĐÚNG từ `version.txt` sau khi build.
 - **Env PyInstaller**: spawn bản mới mà không gỡ `_PYI_*` → bootloader báo "parent process has different executable", bản mới không lên (bẫy LedgerReport 28/08/2026) → `_child_env_without_pyi`.
 - **Dọn file**: chỉ xoá `<tên exe>.old/.new`. Bản LedgerReport xoá mọi `*.old/*.new/*.tmp_dl` trong thư mục chứa EXE — EXE để ở Downloads là mất file của người dùng.
+
+### Bẫy 14: Bản EXE là bản DỊCH SẴN — không phải index.html gốc (từ v1.8.6, 27/09/2026)
+- `build_exe.py` gọi `webbuild/build.js` → `build_web/` (JSX dịch sẵn `app.js`, Tailwind tĩnh `app.css`, React/xlsx/font trong `vendor/`). EXE nhúng `build_web/`, KHÔNG nhúng `index.html` gốc. Máy build cần Node.js 18+.
+- `index.html` gốc vẫn là bản nguồn để sửa; `python server.py` vẫn chạy nó qua CDN + Babel. Test bằng `python server.py` KHÔNG chứng minh được bản EXE — phải build lại.
+- Thêm/đổi thẻ CDN trong `<head>` → `build.js` DỪNG BUILD (`[LOI webbuild]`), cố ý. Đừng đổi preset Babel (`react, env` → ES5) để khỏi văng lỗi TDZ.
+- Chi tiết: `CLAUDE.md` Bẫy 14.
 
 ---
 

@@ -8,7 +8,7 @@
 > Remote cũ từng trỏ nhầm repo **LedgerReport** (gỡ 16/08/2026): push nhầm là đè code Studio lên `main` của Report.
 > Repo công khai → **cấm commit mật khẩu / IP server DB / file dữ liệu khách** (`BaoCaoMau/` đã `.gitignore`).
 > Build vẫn chạy **`BuildEXE-LedgerStudio.bat`**, EXE nằm trong `dist` (không lên git). Phát hành qua **GitHub Releases** — app từ v1.8.3 tự cập nhật (mục 5, Bước 5).
-> **Cập nhật gần nhất:** 17/09/2026
+> **Cập nhật gần nhất:** 27/09/2026 (v1.8.6: EXE dùng giao diện dịch sẵn — Bẫy 14)
 
 ---
 
@@ -44,6 +44,8 @@
 ### 2.1 Tổng quan Công nghệ (Tech Stack)
 - **Backend:** Python 3.12 + Flask + PyODBC (Kết nối SQL Server 2008-2025). Đóng gói trong [server.py](file:///d:/IACC%20HCM/iPOS%20ACC/ACC%20PMKT/LedgerStudio/server.py).
 - **Frontend:** Single-File HTML [index.html](file:///d:/IACC%20HCM/iPOS%20ACC/ACC%20PMKT/LedgerStudio/index.html) (~530KB). Sử dụng React + Babel Standalone (biên dịch JSX trực tiếp trong trình duyệt) + Vanilla CSS/Tailwind (CDN).
+  - **Từ v1.8.6 (27/09/2026) EXE KHÔNG nhúng index.html gốc.** `build_exe.py` gọi [webbuild/build.js](file:///d:/IACC%20HCM/iPOS%20ACC/ACC%20PMKT/LedgerStudio/webbuild/build.js) ghi ra `build_web/`: JSX dịch sẵn thành `app.js` (đúng Babel 7.29.7 + preset `react, env` như trình duyệt), Tailwind 3.4.17 build ra `app.css`, React/ReactDOM/xlsx/font Inter vào `build_web/vendor/`. EXE mở không cần internet; vẽ màn đăng nhập 7,6 s → 0,2 s (máy dev), 36 s → 0,5 s (CPU chậm ×4).
+  - `index.html` gốc vẫn là **bản nguồn duy nhất để sửa**; `python server.py` vẫn chạy nó qua CDN + Babel như cũ.
 - **Virtual Scroll:** Hook `useVirtualScroll` tự tạo cho các tab dữ liệu thô (xử lý mượt hàng trăm nghìn dòng).
 - **Đóng gói EXE:** PyInstaller one-file, no-console thông qua script [build_exe.py](file:///d:/IACC%20HCM/iPOS%20ACC/ACC%20PMKT/LedgerStudio/build_exe.py). Output: `dist/iPOS_Ledger_Studio.exe`.
 
@@ -192,6 +194,15 @@ Tất cả các báo cáo hiển thị dưới dạng tờ **A4/A4 Ngang (`.repo
 - **Env PyInstaller**: spawn bản mới mà không gỡ `_PYI_*` → bootloader báo "parent process has different executable", bản mới không lên (bẫy LedgerReport 28/08/2026) → `_child_env_without_pyi`.
 - **Dọn file**: chỉ xoá `<tên exe>.old/.new`. Bản LedgerReport xoá mọi `*.old/*.new/*.tmp_dl` trong thư mục chứa EXE — EXE để ở Downloads là mất file của người dùng.
 
+### Bẫy 14: Bản EXE là bản DỊCH SẴN — không phải index.html gốc (từ v1.8.6)
+- **Test `python server.py` chỉ chứng minh bản nguồn.** EXE chạy `build_web/` (JSX đã dịch, Tailwind CSS tĩnh). Sửa giao diện xong phải build lại mới có trong EXE.
+- **Thêm/đổi thẻ CDN trong `<head>` của index.html** (thư viện mới, đổi bản React/Babel/xlsx) → `webbuild/build.js` DỪNG BUILD kèm `[LOI webbuild]`. Cố ý: không để lọt ra EXE bản nửa CDN nửa dịch sẵn. Thêm thư viện thì sửa `webbuild/package.json` + `build.js` cho khớp.
+- **Không đổi preset Babel sang cú pháp mới** để app.js "nhẹ hơn": trình duyệt đang dịch `react + env` ra ES5 (`let/const` → `var`). Chỗ nào lỡ dùng biến trước khi khai báo đang chạy nhờ vậy; bỏ `env` là có thể văng lỗi TDZ.
+- **Test bản dịch sẵn không cần build EXE:** đứng trong `build_web/` rồi import server (`resource_path('.')` = thư mục hiện tại):
+  `cd build_web && python -c "import sys; sys.path.insert(0,'..'); import server; c=server.app.test_client(); print(c.get('/app.js').status_code)"`
+- **Máy build cần Node.js 18+** (có sẵn v24). Lần đầu `build_exe.py` tự `npm ci` trong `webbuild/` (cần mạng).
+- Chứng minh "màn hình không đổi" (27/09/2026): puppeteer mở cả 2 bản với API giả, so computed style ~13.000 phần tử × 70 thuộc tính trên 5 màn (đăng nhập, sổ cái 3.000 dòng, cuộn, dropdown, báo cáo) → **0 khác biệt**.
+
 ---
 
 ## 5. 🛠️ QUY TRÌNH DEV, TEST & BUILD EXE CHUẨN
@@ -218,12 +229,12 @@ print('PAGINATION:', d['pagination'])
 # Đóng tất cả tiến trình đang chạy
 taskkill /F /IM iPOS_Ledger_Studio.exe /T 2>nul
 
-# Chạy build script tự động tăng version
+# Chạy build script tự động tăng version (tự dịch sẵn giao diện vào build_web/ trước — cần Node, xem Bẫy 14)
 python build_exe.py
 ```
 
 ### Bước 4: Kiểm tra File Output
-- Verify mtime + dung lượng (~15,8 MB) của `dist/iPOS_Ledger_Studio.exe`; chạy thử `/api/version` ra đúng `version.txt`.
+- Verify mtime + dung lượng (~16,4 MB từ v1.8.6 — thêm React/xlsx/font đóng kèm) của `dist/iPOS_Ledger_Studio.exe`; chạy thử `/api/version` ra đúng `version.txt`.
 
 ### Bước 5: Phát hành bản cập nhật (chỉ khi Trum bảo)
 ```bash

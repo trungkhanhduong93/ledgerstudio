@@ -1,5 +1,6 @@
 import os
 import sys
+import shutil
 import subprocess
 
 # ---------------------------------------------------------------------------
@@ -28,9 +29,38 @@ else:
     print(f"           Nen chay qua BuildEXE-LedgerReport.bat / BuildEXE-LedgerStudio.bat")
     print("=" * 70)
 
+# ---------------------------------------------------------------------------
+# BẢN WEB DỊCH SẴN (từ 27/09/2026) — EXE KHÔNG còn nhúng index.html gốc.
+# webbuild/build.js dịch JSX sẵn (thay Babel chạy trong trình duyệt — đo máy dev: vẽ màn đăng nhập 7,6 s → 0,2 s),
+# build Tailwind ra CSS tĩnh, đóng React/xlsx/font vào build_web/ → mở app không cần internet.
+# Chạy TRƯỚC khi tăng version: build web lỗi thì dừng, không đốt số phiên bản.
+# `python server.py` vẫn dùng index.html gốc (CDN + Babel) như cũ.
+# ---------------------------------------------------------------------------
+WEB_DIR = 'build_web'
+
+def build_web():
+    node = shutil.which('node')
+    npm = shutil.which('npm')
+    if not node or not npm:
+        print('[LOI] Khong tim thay Node.js (node/npm) trong PATH — can de dich san giao dien. Cai Node 18+ roi build lai.')
+        sys.exit(1)
+    if not os.path.isdir(os.path.join('webbuild', 'node_modules')):
+        print('Cai cong cu build web (lan dau): npm ci trong webbuild/ ...')
+        if subprocess.run([npm, 'ci', '--no-audit', '--no-fund'], cwd='webbuild').returncode != 0:
+            print('[LOI] npm ci that bai. Kiem tra ket noi mang.')
+            sys.exit(1)
+    if subprocess.run([node, os.path.join('webbuild', 'build.js')]).returncode != 0:
+        print('[LOI] Dich san giao dien that bai — xem thong bao [LOI webbuild] o tren.')
+        sys.exit(1)
+
+build_web()
+
 ICON_NAME = 'icon.ico'
 ADD_DATA = [
-    'index.html;.',
+    f'{WEB_DIR}/index.html;.',
+    f'{WEB_DIR}/app.js;.',
+    f'{WEB_DIR}/app.css;.',
+    f'{WEB_DIR}/vendor;vendor',
     'install_driver.ps1;.'
 ]
 if os.path.exists('manifest.json'):

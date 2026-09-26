@@ -76,10 +76,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `ReportTab` nhận props từ `App` (filters, meta, reportType, loadReportData, reportData, trialBalanceData/Total, cashBookData, ...). **Mọi state ở App phải truyền xuống ReportTab qua props** — gọi "chui" tên biến của App trong JSX con sẽ vỡ Babel với `ReferenceError`.
 - Bảng báo cáo nằm trong `.report-paper` (khổ A4), cuộn trong `paperScrollRef`.
 - **CDN cần Internet.** Mất mạng/firewall chặn `unpkg.com`, `cdn.tailwindcss.com`, `fonts.googleapis.com` → màn hình trắng. Xem `FIX_OFFLINE_FILTERS.md` để inline.
+- **LedgerStudio từ v1.8.6 (27/09/2026):** hai ý trên chỉ còn đúng cho bản nguồn (`python server.py`). EXE Studio dùng bản dịch sẵn do `webbuild/build.js` ghi ra `build_web/` — JSX → `app.js` (Babel 7.29.7, preset `react, env` y như trình duyệt), Tailwind 3.4.17 → `app.css` (chèn cuối `<head>` đúng chỗ bản CDN tự chèn), React/ReactDOM/xlsx/font Inter → `build_web/vendor/` (server trả kèm `Cache-Control: immutable`). Không cần internet, vẽ màn đăng nhập 7,6 s → 0,2 s. LedgerReport vẫn là CDN + Babel.
 
 ### 2.3 Đóng gói EXE (PyInstaller one-file, no-console)
 - `BuildEXE.bat` có `pause` → **treo ở chế độ non-interactive**. Agent nên chạy PyInstaller trực tiếp (mục 8).
 - Nhúng kèm: `index.html`, `install_driver.ps1`, `manifest.json`, `icon.svg`. Máy đích cần **ODBC Driver 17 for SQL Server** (app gợi ý cài qua `install_driver.ps1`).
+- **Studio từ v1.8.6:** thay `index.html` bằng `build_web/index.html`, `app.js`, `app.css`, `vendor/` (build_exe.py tự chạy `webbuild/build.js` trước, lỗi thì dừng trước khi tăng version). Máy build cần Node.js 18+. EXE ~16,4 MB.
 
 ---
 
@@ -286,6 +288,10 @@ Một công cụ/script "thêm NOLOCK" chạy lên `server.py` đã **làm hỏn
 ---
 
 ## 13. Changelog & bàn giao chi tiết
+
+### 2026-09-27 — v1.8.6: EXE dùng giao diện dịch sẵn — Đợt 0 nâng cấp giao diện *(chỉ LedgerStudio)*
+
+`webbuild/` (package.json ghim Babel 7.29.7, Tailwind 3.4.17, React 18.3.1, xlsx 0.18.5; font Inter v20 lấy từ Google Fonts lưu sẵn trong `webbuild/fonts/`) + `build.js` ghi `build_web/`. `build_exe.py` gọi trước PyInstaller và nhúng `build_web/` thay `index.html`. `server.py`: `vendor/` trả `Cache-Control: immutable`, khai báo MIME `font/woff2`. Màn hình không đổi (so computed style 5 màn → 0 khác biệt). Vẽ màn đăng nhập 7,6 s → 0,2 s; cuộn bảng: thời gian JS giảm một nửa (hết MutationObserver của Tailwind CDN), layout bảng 34 cột vẫn là điểm nghẽn còn lại. Chi tiết: `NHAT_KY_CONG_VIEC.md` mục 12; bẫy: CLAUDE.md Bẫy 14.
 
 ### 2026-09-17 — v1.8.5: vá 4 lỗ bảo mật cấu hình *(chỉ LedgerStudio)*
 

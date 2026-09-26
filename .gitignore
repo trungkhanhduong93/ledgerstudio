@@ -12,6 +12,7 @@ env/
 # Build and Dist output
 build/
 dist/
+build_web/
 
 # Logs and temporary text outputs
 *.log

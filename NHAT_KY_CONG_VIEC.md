@@ -2,7 +2,7 @@
 
 > Toàn bộ những gì đã làm với **LedgerStudio**, và **vì sao**. Đọc file này trước khi sửa tiếp.
 > Kiến trúc và ma trận báo cáo: [CLAUDE.md](CLAUDE.md).
-> Phiên gần nhất: **17/09/2026** · EXE hiện hành: **iPOS_Ledger_Studio v1.8.2**
+> Phiên gần nhất: **27/09/2026** · EXE build mới nhất: **iPOS_Ledger_Studio v1.8.6** (chưa phát hành) · bản phát hành: v1.8.5
 
 ---
 
@@ -395,3 +395,45 @@ endpoint dữ liệu đòi phiên. 4 lỗ đều do **để cấu hình mặc đ
 | M2 | `t_update` 29/29, `t_server`/`t_list` ALL PASS (không phá gì) | Qua |
 | M3 | EXE 1.8.5: chỉ `LISTEN 127.0.0.1:5050`; gọi qua IP LAN `192.168.1.16:5050` → không kết nối; evil origin → không ACAO / apply_update 403; localhost origin được phép; `.session_key` đã tạo | Qua |
 | M3 | Cập nhật thật EXE release v1.8.4 → v1.8.5: 17 giây, 1 file EXE, SHA khớp asset, bản mới bind 127.0.0.1, màn hình đăng nhập lên bình thường | Qua |
+
+---
+
+## 12. Đợt 0 nâng cấp giao diện: EXE dùng bản dịch sẵn — v1.8.6 *(27/09/2026)*
+
+Bối cảnh: Trum chốt nâng giao diện theo hướng "Sổ cái tĩnh" (nền sáng, một màu nhấn xanh iPOS `#0068AC`, Inter 3 độ đậm,
+bảng kẻ mảnh), làm theo đợt, **hiệu năng trước**. Đợt 0 chỉ đổi cách đóng gói — màn hình và logic giữ nguyên.
+
+**Nguyên nhân chậm (đo, không đoán):**
+- Babel standalone dịch 544 KB JSX **mỗi lần mở app**, với preset mặc định `react + env` (ra ES5): 9,3 s trong Node.
+- Tailwind Play CDN (`cdn.tailwindcss.com` 3.4.17) gắn MutationObserver lên toàn trang: mỗi lần virtual scroll thay dòng,
+  nó `querySelectorAll("[class]")` quét class cả DOM rồi dịch lại CSS.
+- React/Babel/xlsx/font tải từ 5 host ngoài → mất mạng là trắng màn.
+
+**Đã làm:**
+- `webbuild/` — `package.json` ghim đúng bản trình duyệt đang dùng; `build.js` ghi `build_web/`: `app.js` (Babel cùng options
+  `buildBabelOptions()` của standalone), `app.css` (Tailwind, config đọc từ dòng `tailwind.config = …` trong index.html, chèn cuối
+  `<head>` = chỗ bản CDN `document.head.append`), `vendor/` (React 18.3.1, ReactDOM, xlsx 0.18.5 `defer`, font Inter v20 7 subset).
+  Thẻ CDN trong index.html lệch mẫu → dừng build. Dọn nội dung `build_web/` chứ không xoá thư mục (terminal đứng trong đó → EPERM).
+- `build_exe.py` — gọi build web TRƯỚC khi tăng version; nhúng `build_web/` thay `index.html`; thiếu Node → báo lỗi dừng.
+- `server.py` — `vendor/` trả `Cache-Control: public, max-age=31536000, immutable` (tên file có số phiên bản); `mimetypes` thêm `font/woff2`.
+- `.gitignore` thêm `build_web/`. `index.html` KHÔNG đổi một byte.
+
+**Cố ý KHÔNG làm:** đổi preset Babel sang cú pháp mới (nguy cơ lỗi TDZ ẩn); lazy-load xlsx theo nút bấm (phải sửa code gọi — dùng
+`defer` là đủ); bỏ blur/`transition-all` (đổi hình ảnh → để các đợt giao diện sau).
+
+### 12.1 Verify
+
+| Mức | Kiểm | Kết quả |
+|---|---|---|
+| M1 | `ast.parse` server.py + build_exe.py; `new Function(app.js)` | OK |
+| M2 | test_client đứng trong `build_web/`: `/`, `app.js`, `app.css`, vendor, font → 200; vendor `immutable`, còn lại `no-store`; font `font/woff2`; JS/CSS có gzip | Qua |
+| M3 | puppeteer, API giả, so computed style bản nguồn vs `build_web/` trên 5 màn (đăng nhập 42, sổ cái 3.000 dòng 3.043, cuộn giữa bảng 4.830, dropdown Loại CT mở 4.871, tab Báo cáo 636 phần tử × 70 thuộc tính + toạ độ) | **0 khác biệt** |
+| M3 | Build EXE thật v1.8.6 (16,4 MB, cũ 15,8 MB): file EXE trả về trùng SHA-1 với `build_web/`; không request ra ngoài; React 18.3.1, không còn Babel/Tailwind runtime, xlsx nạp, 9 font Inter loaded, `/api/version` = 1.8.6 | Qua |
+| Đo | Vẽ xong màn đăng nhập, cache ấm: 7,6–9,7 s → 0,14–0,28 s (máy dev); CPU chậm ×4: 36–38 s → 0,5–0,9 s | ~40× |
+| Đo | 80 bước cuộn bảng 3.000 dòng: thời gian JS 1.161 → 584 ms (×4: 4.641 → 2.630 ms); tổng khung hình chỉ nhanh ~13% vì layout bảng 34 cột (1,2 s / ×4: 5,1 s) không đổi | Điểm nghẽn kế tiếp: layout bảng |
+
+Chưa verify với DB thật (máy agent không có tài khoản SQL) — màn sau đăng nhập kiểm bằng API giả. Trum mở EXE v1.8.6, đăng nhập
+DB thật, xem vài tab + xuất 1 file Excel là đủ M4 cho đợt này (logic không đổi).
+
+**Đợt tiếp theo:** Đợt 1 — token màu/chữ + khung (thanh bên trái, thanh trạng thái, đầu trang). Nhớ sửa CSS `@media print` (đang ẩn
+theo vị trí `#root > div > div:first-child`, `.shrink-0`) cùng đợt, và chụp so bản in PDF.

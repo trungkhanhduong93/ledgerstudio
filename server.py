@@ -54,7 +54,12 @@ import threading
 import hashlib
 import subprocess
 import platform
+import mimetypes
 import xlsx_report as XR
+
+# Font Inter đóng kèm bản EXE (vendor/fonts/*.woff2): registry Windows nhiều máy không có kiểu này
+# → Flask trả application/octet-stream. Khai báo thẳng cho đúng.
+mimetypes.add_type('font/woff2', '.woff2')
 
 def resource_path(relative_path):
     try:
@@ -271,7 +276,12 @@ def index():
 @app.route("/<path:filename>")
 def serve_static(filename):
     resp = send_from_directory(resource_path("."), filename)
-    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    if filename.startswith("vendor/"):
+        # Thư viện đóng kèm bản EXE (React, xlsx, font — xem webbuild/build.js): tên file đã kèm số phiên bản
+        # (react-18.3.1…, font có mã băm) → cho giữ lâu, trình duyệt khỏi tải + dịch lại JS mỗi lần mở app.
+        resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    else:
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     return resp
 
 def get_connection():
