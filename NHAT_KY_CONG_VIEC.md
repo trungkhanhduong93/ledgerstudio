@@ -2,7 +2,7 @@
 
 > Toàn bộ những gì đã làm với **LedgerStudio**, và **vì sao**. Đọc file này trước khi sửa tiếp.
 > Kiến trúc và ma trận báo cáo: [CLAUDE.md](CLAUDE.md).
-> Phiên gần nhất: **27/09/2026** · EXE build mới nhất: **iPOS_Ledger_Studio v1.8.9** — tên hiển thị DataStudio (chưa phát hành) · bản phát hành: v1.8.5
+> Phiên gần nhất: **27/09/2026** · EXE build mới nhất: **iPOS_Ledger_Studio v1.9.3** — tên hiển thị DataStudio · bản phát hành: v1.9.3
 
 ---
 
@@ -704,7 +704,7 @@ máy ≤ 1.8.2 phải tải tay.
 
 Chưa làm: kiểm với DB thật sau cập nhật (đăng nhập thật, xem báo cáo thật).
 
-## 20. v1.9.3 (chưa phát hành): tốc độ tab sổ cái + bộ lọc nâng cao *(27/09/2026)*
+## 20. v1.9.3: tốc độ tab sổ cái + bộ lọc nâng cao *(27/09/2026)*
 
 **Trum báo:** truy vấn ~2 triệu dòng mất gần 15 giây. Trả lời theo mặc định Trum duyệt: màn = tab sổ cái; trước giờ vẫn chậm;
 làm đo + song song + OFFSET trong 1 bản; không tạo index.
@@ -741,3 +741,22 @@ kẹt ở tạo khoá chính: chờ cấp bộ nhớ `RESOURCE_SEMAPHORE` 19 ph�
 | M3 EXE | 1.9.3: `/api/version`, app.js trùng SHA-1 build_web, `/api/ledger` chưa đăng nhập vẫn 401 | đạt |
 
 **Chưa làm được:** đo tốc độ trên DB thật 2 triệu dòng — chờ Trum chạy 1.9.3 và gửi số ở thanh trạng thái (rê chuột để xem đủ).
+
+## 21. Phát hành v1.9.3 + test cập nhật thật từ v1.9.2 *(27/09/2026)*
+
+**QA trước push (skill pre-push-qa):** 🟡 VÀNG — không phát hiện lỗi; vàng vì chưa đo tốc độ trên DB thật. Rà: `get_connection`
+giữ chữ ký, `close_pool_for` đóng thêm kết nối phụ; tham số `OFFSET ? … FETCH NEXT ?` đúng thứ tự `[offset, page_size]`; luồng
+đếm không đọc `session` (count_sql/count_params chụp sẵn); `countKey` tính TRƯỚC khi gắn `order_by` → sắp xếp vẫn dùng lại tổng;
+hook mới trong App nằm trước `return` sớm; `page < 1` không xảy ra (PageJumper kẹp ≥ 1; `page_size = 0` bản cũ cũng lỗi chia 0).
+Quét secret: không IP, mật khẩu, token. EXE (18:07) build sau lần sửa source cuối (18:00). Chạy lại `t_ledger.py` trên SQL thật: 8/8.
+
+**Phát hành:** commit `091f7cf` push `main` → `gh release create v1.9.3`, asset `iPOS_Ledger_Studio.exe` 16.532.842 byte + `.zip`
+tạo lại từ EXE mới. API công khai `releases/latest` trả `v1.9.3`, digest exe = SHA-256 file đã build.
+
+**Test cập nhật thật:** tải EXE release v1.9.2 (digest khớp GitHub) vào thư mục tạm → chạy → `/api/check_update`: `has_update=true,
+latest=v1.9.3` → bấm "Cập nhật ngay" trên giao diện v1.9.2 (puppeteer) → tải 0 → 100% trong 8 s → server cũ thoát → `/api/version`
+= 1.9.3 sau 16 s kể từ lúc bấm → thư mục còn 1 file `iPOS_Ledger_Studio.exe`, SHA-256 = asset v1.9.3; trang chủ title DataStudio,
+`/api/ledger` chưa đăng nhập 401, `check_update` hết báo bản mới. Đã tắt EXE test + cửa sổ app của nó.
+
+**Commit lỗi (PowerShell 5.1):** `git commit -m @'…'@` có dấu `"` trong message → PowerShell tách thành nhiều đối số, git báo
+`pathspec … did not match`, KHÔNG commit. Viết message ra file rồi `git commit -F <file>`.
