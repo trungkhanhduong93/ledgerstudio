@@ -559,6 +559,12 @@ def get_metadata():
             WHERE object_id = OBJECT_ID('dbo.LEDGER') AND index_id IN (0, 1)
         """)
         global_total = int(cursor.fetchone()[0] or 0)
+        pr_detail_classes = []
+        try:
+            cursor.execute("SELECT CAST(PR_DETAIL_CLASS_ID AS NVARCHAR(100)), PR_DETAIL_CLASS_NAME FROM dbo.DM_PR_DETAIL_CLASS WITH (NOLOCK) WHERE ACTIVE=1 ORDER BY PR_DETAIL_CLASS_ID")
+            pr_detail_classes = [{"id": (r[0] or '').strip(), "name": r[1] or ''} for r in cursor.fetchall() if r[0]]
+        except Exception:
+            pass
 
         result = {
             "status": "ok",
@@ -566,6 +572,7 @@ def get_metadata():
             "company": company,
             "global_total": global_total,
             "accounts": accounts, "orgs": orgs, "pr_details": pr_details,
+            "pr_detail_classes": pr_detail_classes,
             "tran_ids": tran_ids, "jobs": jobs, "items": items,
             "products": products, "expenses": expenses, "warehouses": warehouses,
             "units": units, "banks": banks
@@ -2410,6 +2417,244 @@ def get_warehouse_balance_stream_csv():
         headers = [label for _, label in WAREHOUSE_BALANCE_CSV_COLS]
         fname   = f"TonKhoThucTe_{args.get('from_date','').replace('/','')}-{args.get('to_date','').replace('/','')}.{args.get('format', 'csv')}"
         job_id  = _start_export_job(fname, headers, sql, params, transform, total_estimate)
+        return jsonify({"status": "ok", "job_id": job_id, "filename": fname})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# =============== DM_PR_DETAIL (Danh mục đối tượng pháp nhân / công nợ) ===============
+PR_DETAIL_BASE_COLUMNS = [
+    "PR_DETAIL_ID", "PR_DETAIL_NAME", "PR_DETAIL_TYPE_ID",
+    "PR_DETAIL_CLASS_ID", "TAX_FILE_NUMBER", "PHONE", "EMAIL", "ADDRESS",
+    "PR_ACCOUNT_ID", "BANK_NAME", "BANK_ACCOUNT", "BANK_BRANCH",
+    "BANK_ACCOUNT_HOLDER", "ACTIVE", "USER_ID", "FAX",
+    "PRICE_LEVEL_ID", "PROVINCE_ID", "PAYMENT_TERM_ID", "BANK_CARD_NO"
+]
+
+PR_DETAIL_SORT_WHITELIST = {col: f"P.{col}" for col in PR_DETAIL_BASE_COLUMNS}
+PR_DETAIL_SORT_WHITELIST["PR_DETAIL_CLASS_NAME"] = "C.PR_DETAIL_CLASS_NAME"
+
+PR_DETAIL_CSV_COLS = [
+    ("PR_DETAIL_ID", "Mã đối tượng"),
+    ("PR_DETAIL_NAME", "Tên đối tượng"),
+    ("PR_DETAIL_CLASS_ID", "Mã nhóm"),
+    ("PR_DETAIL_CLASS_NAME", "Tên nhóm đối tượng"),
+    ("PR_DETAIL_TYPE_ID", "Loại đối tượng"),
+    ("TAX_FILE_NUMBER", "Mã số thuế"),
+    ("PHONE", "Điện thoại"),
+    ("EMAIL", "Email"),
+    ("ADDRESS", "Địa chỉ"),
+    ("PR_ACCOUNT_ID", "Tài khoản ngầm định"),
+    ("BANK_NAME", "Tên ngân hàng"),
+    ("BANK_ACCOUNT", "Số tài khoản NH"),
+    ("BANK_BRANCH", "Chi nhánh NH"),
+    ("BANK_ACCOUNT_HOLDER", "Chủ tài khoản NH"),
+    ("ACTIVE", "Trạng thái"),
+    ("USER_ID", "Người tạo"),
+    ("FAX", "Fax"),
+    ("PROVINCE_ID", "Tỉnh thành"),
+]
+
+
+def _pr_detail_join_and_select(cursor):
+    """Kiểm tra có bảng DM_PR_DETAIL_CLASS để JOIN lấy tên nhóm hay không."""
+    has_class_tbl = False
+    try:
+        cursor.execute("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'DM_PR_DETAIL_CLASS'")
+        has_class_tbl = cursor.fetchone() is not None
+    except Exception:
+        pass
+
+    col_list = ", ".join(f"P.{c}" for c in PR_DETAIL_BASE_COLUMNS)
+    if has_class_tbl:
+        join_sql = "FROM dbo.DM_PR_DETAIL P WITH (NOLOCK) LEFT JOIN dbo.DM_PR_DETAIL_CLASS C WITH (NOLOCK) ON P.PR_DETAIL_CLASS_ID = C.PR_DETAIL_CLASS_ID"
+        select_list = f"{col_list}, C.PR_DETAIL_CLASS_NAME AS PR_DETAIL_CLASS_NAME"
+    else:
+        join_sql = "FROM dbo.DM_PR_DETAIL P WITH (NOLOCK)"
+        select_list = f"{col_list}, NULL AS PR_DETAIL_CLASS_NAME"
+    return join_sql, select_list
+
+
+def _build_pr_detail_where(request_args):
+    clauses = ["1=1"]
+    params = []
+
+    act = request_args.get("active", "").strip()
+    if act in ("1", "0"):
+        clauses.append("P.ACTIVE = ?")
+        params.append(int(act))
+
+    raw_classes = request_args.get("class_ids", "")
+    classes = [c.strip() for c in raw_classes.split(",") if c.strip()]
+    if classes:
+        clauses.append(f"P.PR_DETAIL_CLASS_ID IN ({','.join(['?']*len(classes))})")
+        params.extend(classes)
+
+    raw_types = request_args.get("type_ids", "")
+    types = [t.strip() for t in raw_types.split(",") if t.strip()]
+    if types:
+        clauses.append(f"P.PR_DETAIL_TYPE_ID IN ({','.join(['?']*len(types))})")
+        params.extend(types)
+
+    q = request_args.get("search", "").strip() or request_args.get("q", "").strip()
+    if q:
+        clauses.append("(P.PR_DETAIL_ID LIKE ? OR P.PR_DETAIL_NAME LIKE ? OR P.TAX_FILE_NUMBER LIKE ? OR P.PHONE LIKE ? OR P.ADDRESS LIKE ? OR P.BANK_ACCOUNT LIKE ?)")
+        params.extend([f"%{q}%"] * 6)
+
+    for field, arg in [
+        ("P.PR_DETAIL_ID",        "s_id"),
+        ("P.PR_DETAIL_CLASS_ID",  "s_class_id"),
+        ("P.PR_DETAIL_TYPE_ID",   "s_type_id"),
+        ("P.TAX_FILE_NUMBER",     "s_tax"),
+        ("P.PHONE",               "s_phone"),
+        ("P.PR_ACCOUNT_ID",       "s_acc_id"),
+        ("P.BANK_ACCOUNT",        "s_bank_account"),
+        ("P.USER_ID",             "s_user_id"),
+    ]:
+        val = request_args.get(arg, "").strip()
+        if val:
+            clauses.append(f"{field} LIKE ?")
+            params.append(f"{val}%")
+
+    for field, arg in [
+        ("P.PR_DETAIL_NAME",       "s_name"),
+        ("C.PR_DETAIL_CLASS_NAME", "s_class_name"),
+        ("P.EMAIL",                "s_email"),
+        ("P.ADDRESS",              "s_address"),
+        ("P.BANK_NAME",            "s_bank_name"),
+        ("P.BANK_BRANCH",          "s_bank_branch"),
+        ("P.BANK_ACCOUNT_HOLDER",  "s_holder"),
+    ]:
+        val = request_args.get(arg, "").strip()
+        if val:
+            clauses.append(f"{field} LIKE ?")
+            params.append(f"%{val}%")
+
+    return " AND ".join(clauses), params
+
+
+@app.route("/api/pr_detail")
+@with_db_lock
+def get_pr_detail():
+    try:
+        page       = int(request.args.get("page", 1))
+        page_size  = int(request.args.get("page_size", 100))
+        export_all = request.args.get("export_all") == "1"
+        known_total = request.args.get("known_total")
+        skip_count  = page > 1 and known_total is not None and not export_all
+
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        join_sql, select_list = _pr_detail_join_and_select(cursor)
+        where_sql, params = _build_pr_detail_where(request.args)
+        order_by_sql = _resolve_order_by(
+            request.args, PR_DETAIL_SORT_WHITELIST,
+            "P.PR_DETAIL_ID ASC"
+        )
+
+        if export_all:
+            sql = f"SELECT {select_list} {join_sql} WHERE {where_sql} ORDER BY {order_by_sql}"
+            cursor.execute(sql, params)
+            columns = [c[0] for c in cursor.description]
+            raw_rows = cursor.fetchall()
+            total_rows = len(raw_rows)
+            active_cnt = sum(1 for r in raw_rows if "ACTIVE" in columns and r[columns.index("ACTIVE")] == 1)
+            summary = {"total_rows": total_rows, "active_count": active_cnt, "inactive_count": total_rows - active_cnt}
+        else:
+            if skip_count:
+                total_rows = int(known_total)
+                summary = {"total_rows": total_rows}
+            else:
+                cursor.execute(f"SELECT COUNT(*), SUM(CASE WHEN P.ACTIVE=1 THEN 1 ELSE 0 END) {join_sql} WHERE {where_sql}", params)
+                row = cursor.fetchone()
+                total_rows = row[0] or 0
+                active_cnt = row[1] or 0
+                summary = {"total_rows": total_rows, "active_count": int(active_cnt), "inactive_count": int(total_rows - active_cnt)}
+
+            offset = (page - 1) * page_size
+            sql = f"""
+                SELECT * FROM (
+                    SELECT {select_list},
+                           ROW_NUMBER() OVER (ORDER BY {order_by_sql}) AS RowNum
+                    {join_sql}
+                    WHERE {where_sql}
+                ) AS RowConstrainedResult
+                WHERE RowNum > ? AND RowNum <= ?
+            """
+            cursor.execute(sql, params + [offset, offset + page_size])
+            columns = [c[0] for c in cursor.description]
+            raw_rows = cursor.fetchall()
+
+        rows = []
+        for raw in raw_rows:
+            r = dict(zip(columns, raw))
+            for k in ("PR_DETAIL_ID", "PR_DETAIL_NAME", "PR_DETAIL_CLASS_ID", "PR_DETAIL_CLASS_NAME",
+                      "PR_DETAIL_TYPE_ID", "TAX_FILE_NUMBER", "PHONE", "EMAIL", "ADDRESS",
+                      "PR_ACCOUNT_ID", "BANK_NAME", "BANK_ACCOUNT", "BANK_BRANCH", "BANK_ACCOUNT_HOLDER", "USER_ID"):
+                if k in r and r[k] is not None:
+                    r[k] = str(r[k]).strip()
+            rows.append(r)
+
+        return jsonify({
+            "status": "ok",
+            "data": rows,
+            "pagination": {
+                "total_rows": total_rows,
+                "total_pages": max(1, (total_rows + page_size - 1) // page_size),
+                "page": page if not export_all else 1
+            },
+            "summary": summary
+        })
+    except Exception as e:
+        msg = str(e)
+        if "đăng nhập" not in msg:
+            invalidate_pool()
+        return jsonify({"status": "error", "message": msg}), 401 if "đăng nhập" in msg else 500
+
+
+@app.route("/api/pr_detail/count")
+@with_db_lock
+def get_pr_detail_count():
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        join_sql, _ = _pr_detail_join_and_select(cursor)
+        where_sql, params = _build_pr_detail_where(request.args)
+        cursor.execute(f"SELECT COUNT(*) {join_sql} WHERE {where_sql}", params)
+        total = cursor.fetchone()[0] or 0
+        return jsonify({"status": "ok", "total": int(total)})
+    except Exception as e:
+        msg = str(e)
+        if "đăng nhập" not in msg:
+            invalidate_pool()
+        return jsonify({"status": "error", "message": msg}), 401 if "đăng nhập" in msg else 500
+
+
+@app.route("/api/pr_detail/stream_csv", methods=["POST", "GET"])
+def get_pr_detail_stream_csv():
+    try:
+        args = request.args
+        total_estimate = int(args.get("total", 0) or 0)
+        conn = get_connection()
+        cursor = conn.cursor()
+        join_sql, select_list = _pr_detail_join_and_select(cursor)
+        where_sql, params = _build_pr_detail_where(args)
+        order_by_sql = _resolve_order_by(
+            args, PR_DETAIL_SORT_WHITELIST,
+            "P.PR_DETAIL_ID ASC"
+        )
+        sql = f"SELECT {select_list} {join_sql} WHERE {where_sql} ORDER BY {order_by_sql}"
+
+        def transform(raw, sql_cols):
+            d = dict(zip(sql_cols, raw))
+            if "ACTIVE" in d:
+                d["ACTIVE"] = "Đang dùng" if d["ACTIVE"] == 1 else "Ngừng"
+            return [d.get(key) for key, _ in PR_DETAIL_CSV_COLS]
+
+        headers = [label for _, label in PR_DETAIL_CSV_COLS]
+        fname = f"DanhMucDoiTuong.{args.get('format', 'xlsx')}"
+        job_id = _start_export_job(fname, headers, sql, params, transform, total_estimate)
         return jsonify({"status": "ok", "job_id": job_id, "filename": fname})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
