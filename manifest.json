@@ -1,13 +1,13 @@
 {
-  "name": "iPOS Ledger Studio",
-  "short_name": "Ledger Studio",
+  "name": "DataStudio",
+  "short_name": "DataStudio",
   "description": "Báo cáo sổ sách - Sổ cái, Nhập kho, Kho",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "landscape",
   "background_color": "#0f172a",
-  "theme_color": "#4f46e5",
+  "theme_color": "#0068AC",
   "lang": "vi-VN",
   "icons": [
     {

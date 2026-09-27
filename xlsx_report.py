@@ -218,8 +218,8 @@ class XlsxReportWriter:
             'title': (info.get('title') or '').strip(),
             'subject': (info.get('period_text') or '').strip(),
             'company': (info.get('company_name') or '').strip(),
-            'author': 'iPOS Ledger Studio',
-            'comments': 'Xuất từ iPOS Ledger Studio',
+            'author': 'DataStudio',
+            'comments': 'Xuất từ DataStudio',
         })
         self._fmt_cache = {}
         self._row_fmts = {}

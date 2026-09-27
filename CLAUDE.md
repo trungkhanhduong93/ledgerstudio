@@ -2,13 +2,13 @@
 
 > 📌 **DÀNH CHO TẤT CẢ AGENT AI (Claude Code, Gemini, Antigravity, Cursor, Windsurf, ChatGPT):**
 > File này là **NGUỒN SỰ THẬT DUY NHẤT (Single Source of Truth)** của dự án `LedgerStudio`. Khi được yêu cầu *"đọc toàn bộ file md hướng dẫn và kiến trúc"*, bạn **BẮT BUỘC** tuân thủ 100% các nguyên tắc, ma trận báo cáo, quy trình test/build và danh sách bẫy bug dưới đây trước khi thực hiện bất kỳ chỉnh sửa nào.
-> **Dự án:** LedgerStudio (`iPOS Ledger Studio`)  
+> **Dự án:** LedgerStudio — tên hiển thị **`DataStudio`** từ v1.8.7 (trước: `iPOS Ledger Studio`). Tên FILE vẫn `iPOS_Ledger_Studio.exe`, repo `ledgerstudio`, thư mục xuất `Downloads\iPOS_Ledger_Studio\` — đổi tên file là gãy tự cập nhật (Bẫy 13).  
 > 🔀 **GIT: repo riêng [`trungkhanhduong93/ledgerstudio`](https://github.com/trungkhanhduong93/ledgerstudio) — PUBLIC** (từ 17/09/2026, chỉ nhánh `main`).
 > Chỉ commit/push khi Trum bảo. Trước mọi push chạy `git remote get-url origin` — phải ra `.../ledgerstudio.git`.
 > Remote cũ từng trỏ nhầm repo **LedgerReport** (gỡ 16/08/2026): push nhầm là đè code Studio lên `main` của Report.
 > Repo công khai → **cấm commit mật khẩu / IP server DB / file dữ liệu khách** (`BaoCaoMau/` đã `.gitignore`).
 > Build vẫn chạy **`BuildEXE-LedgerStudio.bat`**, EXE nằm trong `dist` (không lên git). Phát hành qua **GitHub Releases** — app từ v1.8.3 tự cập nhật (mục 5, Bước 5).
-> **Cập nhật gần nhất:** 27/09/2026 (v1.8.6: EXE dùng giao diện dịch sẵn — Bẫy 14)
+> **Cập nhật gần nhất:** 27/09/2026 (v1.9.2: màn đăng nhập — mục 3.1, Bẫy 19 · v1.9.1: hộp thoại — mục 3.0, Bẫy 18 · v1.9.0: khung báo cáo + zoom — mục 3.0, Bẫy 17 · v1.8.9: bảng dữ liệu + cuộn mượt — mục 3.0, Bẫy 16 · v1.8.8: thanh lọc chip · v1.8.7: khung + tên DataStudio — Bẫy 15 · v1.8.6: giao diện dịch sẵn — Bẫy 14)
 
 ---
 
@@ -69,7 +69,21 @@
 
 ## 3. 📺 MO TẢ CHI TIẾT TỪNG MÀN HÌNH & TÍNH NĂNG
 
+### 3.0 Khung app — hướng "Sổ cái tĩnh" (từ v1.8.7, Đợt 1 nâng cấp giao diện)
+- **Thanh bên trái** `AppSidebar` (216px, nút thu gọn còn 56px — nhớ qua `localStorage['ds_sidebar_collapsed']`): nhóm *Dữ liệu* (7 tab từ `DOC_TABS`) + nhóm *Báo cáo* (9 mẫu từ `REPORT_TYPES`, xếp theo mã) + *Tải lại danh mục* (`id="btn-refresh-meta"`, `refreshMeta` tô xanh nút này) + *Đăng xuất*. Tên ngắn/icon ở `NAV_DOC_META`, `NAV_REPORT_META` — thêm tab/báo cáo vào `DOC_TABS`/`REPORT_TYPES` là tự hiện.
+- Chọn báo cáo ở thanh bên đi qua `pickReport()` — **cùng luật với dropdown "Mẫu báo cáo"**: đang có `reportData` mà đổi mẫu → hộp "Chuyển mẫu báo cáo?".
+- **Đầu trang** `AppPageHeader` (tên tab/báo cáo + mã, mẫu) · **Thanh trạng thái** `AppStatusBar` 26px (kết nối, CSDL, số bản ghi sổ cái, kỳ, version). Thay thanh đen trên cùng + `DocumentTabDropdown` (đã gỡ).
+- CSS khung: class `ds-*` trong `<style>` đầu `index.html`, biến `--ds-*`. Token màu cho các đợt sau: `tailwind.config` (`ink`, `line`, `canvas`, `wash`, `tint`, `rail`, `brand`, `ok/warn/bad`) — hai nơi giữ khớp nhau. Xanh iPOS `#0068AC` là màu nhấn duy nhất; cam `#FF9D3D` chỉ ở logo.
+- **Thanh lọc (v1.8.8, Đợt 2):** chip 32px nhãn nằm trong (`ds-chip`, `.ds-k`), nút `ds-btn`/`ds-btn-pri`, popup `ds-pop` + dòng chọn `ds-opt`, ô nhập `ds-input`, nút chuyển `ds-seg`. Component dùng chung đã đổi giao diện, GIỮ nguyên props/handler: `PeriodDropdown` (nhận thêm `from`/`to` để hiện "Kỳ Tháng 1/2026 · 01/01 – 31/01"), `IOSDatePicker` (ẩn hẳn khi `disabled` = ngoài kỳ Tùy ý — bọc trong `.ds-slot`, `:empty` tự ẩn), `PremiumDropdown`, `PageSizeDropdown`, `FilterToggleButton` ("Bộ lọc khác" + số), `IssueReceiveDropdown`, `ExportButton`. Thứ tự hàng lọc: bộ lọc … Bộ lọc khác | (phải) Hiển thị · N dòng · Xuất Excel · **Truy vấn** (nút chính ngoài cùng). Tab báo cáo: Xuất Excel · PDF · **Xem báo cáo**; đã gỡ `ReportTypeDropdown` (chọn mẫu ở thanh bên).
+- Hàng lọc có `flex-wrap`: thiếu chỗ thì tự xuống dòng thay vì tràn mép phải (đo 8 tab × 1366/1440/1920 px, thanh bên mở/thu: không tràn, sổ cái 1 dòng ở 1366).
+- **Bảng dữ liệu (v1.8.9, Đợt 3):** 7 bảng có class `ds-grid`; CSS trong `<style>` đè kiểu cũ trong ô (`font-black`/`font-bold` → mực đậm vừa, `italic` → mực phụ, mọi chữ xanh/đỏ/teal/chàm → mực, `font-mono` → Inter tabular-nums) — KHÔNG sửa từng ô của 7 component dòng. Nợ/Có cùng màu. Đầu cột chữ thường (`thead th` 11.5px, nền `wash`, không blur), hàng tìm theo cột `ds-search-row` + ô `ds-colsearch`, dòng nhóm `ds-grp-0/1` (nền xám nhạt thay chàm đặc), vùng gom nhóm `ds-groupzone` + chip `ds-gchip` (nút × thay icon ổ khoá), lúc tải `ds-loading` (vạch 2px + nhãn, vẫn chặn bấm, bỏ blur), chân `ds-pager`, `PageJumper` dùng chung đổi giao diện. Thêm cột mới vào bảng thì cứ dùng class cũ (`font-black`, `italic`…) — CSS tự đổi.
+- **Khung báo cáo (v1.9.0, Đợt 4):** nền bàn `ds-desk` (#E9EDF2), tờ giấy bóng nhẹ + viền mảnh, lề 20px (bỏ `transition: all` kiểu nảy). Thanh dưới `ReportBar` (`.app-reportbar`, cùng kiểu `ds-pager`): bên trái `PageJumper` (BC007/BC008/BC013/BC012 khi >1 trang) · số dòng · A4 ngang/dọc; bên phải lên đầu · xuống cuối · zoom − % + · **Vừa khung** (mặc định). Thay 2 nút tròn nổi góc phải + viên phân trang nổi canh giữa CỬA SỔ (lệch khi có thanh bên). Lớp "đang kết xuất" chuyển từ App vào ReportTab, nằm dưới thanh lọc (`ds-loading`, bỏ blur 4px + hộp tròn to). Zoom: Bẫy 17. Nội dung tờ A4 KHÔNG đổi (so 887 phần tử BC006 + BC007 với v1.8.9: 0 khác biệt).
+- **Hộp thoại (v1.9.1, Đợt 5):** khung dùng chung `ds-scrim` (nền tối 42%, KHÔNG blur) + `ds-dialog` (440px, `is-wide` 580px; hiện 0,16 s, bỏ kiểu nảy 0,4 s) + `ds-dlg-head` / `ds-dlg-body` / `ds-dlg-foot` (chân nền `wash`, nút phải: phụ `ds-btn` → chính `ds-btn-pri`). Icon trạng thái `ds-dlg-ic` (`is-ok`/`is-warn`/`is-bad`, `is-lg` cho màn kết quả). Thành phần: `ds-choice` + `ds-radio` (thẻ chọn), `ds-filename`, `ds-checks`, `ds-note` (`is-warn`/`is-info`/`is-bad`), `ds-progress` (`is-busy` = vô định), `ds-steps`, `ds-stat`, `ds-path`, `ds-tag`, `ds-kbd`, `ds-menuitem` + `ds-fmt` (menu Xuất Excel tab dữ liệu), `ds-updbar` (banner bản mới — xanh nhạt, trước là cam→chàm: cam chỉ ở logo). Đã làm lại 9 hộp đang dùng: xuất báo cáo (4 bước), đang xuất/đã xuất của tab dữ liệu, chuyển mẫu báo cáo, thông báo `showNotice`, cập nhật (đang tải/lỗi), cài ODBC driver (màn đăng nhập) + màn "Mất kết nối" (script thường, style inline). Handler giữ nguyên — đoạn onClick dài được cắt từ khối cũ dán lại. Nút chính mọi hộp = xanh iPOS (trước: xanh lục, chàm, xanh trời lẫn lộn). Thêm hộp thoại mới thì dùng khung này.
+- **Màn đăng nhập (v1.9.2, Đợt 6 — đợt cuối):** xem mục 3.1. Đủ 6 đợt nâng cấp giao diện. Tài sản thiết kế + mockup: `Desktop\IVT\present IVT\SOC\` (ngoài repo; ảnh dùng trong app đã chép vào `assets/`).
+
 ### 3.1 Màn hình Đăng nhập (Login Modal)
+- **Giao diện (v1.9.2):** chia đôi `ds-login` (CSS `ds-login-*` trong `<style>`): trái `ds-login-art` = giấy sổ cái kẻ dòng + tiêu đề + 3 nhãn (số phân hệ/báo cáo lấy từ `DOC_TABS.length`, `REPORT_TYPES.length`) + sóc IACC `assets/soc-it.webp` + 2 thẻ số liệu MINH HOẠ (số cố định, không lấy từ CSDL); phải `ds-login-side` = banner bản mới (nếu có) + form + chân (© năm hiện tại, `appVersion`). Cửa sổ dưới 900px ẩn nửa trái. Cỡ sóc `--soc-h: min(505px, 60vh)` để màn 1366×768 không đè chữ. Ảnh: Bẫy 19.
+- **Form giữ nguyên logic:** `onSubmit={handleLogin}`, 4 ô gắn `loginData` (`required`, placeholder `sa` / `••••••••` như cũ), nhãn tiếng Việt Máy chủ · Cơ sở dữ liệu · Tài khoản · Mật khẩu. Thêm DUY NHẤT state hiển thị `showPw` (nút con mắt đổi `type` ô mật khẩu; `onMouseDown` chặn mất focus). `loginData.driver` vẫn mặc định `"SQL Server"` — form không có ô chọn driver (`driverOptions`/`driverDropdownOpen` khai báo nhưng không dùng). Hộp cài driver chỉ hiện khi `check_odbc_driver()` trả False — hiện luôn trả True.
 - **Tính năng:** Nhập cấu hình máy chủ SQL Server (`Server`, `Database`, `User`, `Password`, `Driver`).
 - **Xử lý Backend:** API `POST /api/login` thực hiện `_make_conn()`, thiết lập `session['db_config']`. Tự động nhận diện danh sách Driver SQL Server (ưu tiên `ODBC Driver 17 for SQL Server`).
 - **Ghi nhớ:** Lưu cấu hình vào `localStorage` giúp đăng nhập nhanh lần sau.
@@ -168,7 +182,7 @@ Tất cả các báo cáo hiển thị dưới dạng tờ **A4/A4 Ngang (`.repo
 
 ### Bẫy 9: Icon vô hình do dùng Tên Icon không tồn tại
 - **Triệu chứng:** Nút bấm hoặc Modal không hiển thị Icon.
-- **Nguyên nhân:** Khai báo `<Icon name="..."/>` với tên không có trong `const icons` của `index.html` (v1.8.2 có 29 icon, đã thêm `x`, `folder-open`, `external-link`, `clock`, `layers`, `hard-drive`, `rotate-ccw`, `zap`, `rows`; vẫn KHÔNG có `list`, `folder`).
+- **Nguyên nhân:** Khai báo `<Icon name="..."/>` với tên không có trong `const icons` của `index.html` (v1.8.2 có 29 icon, đã thêm `x`, `folder-open`, `external-link`, `clock`, `layers`, `hard-drive`, `rotate-ccw`, `zap`, `rows`; v1.8.7 thêm `receipt`, `wallet`, `shopping-cart`, `package`, `panel-left`, `refresh-cw` → 35; v1.9.0 thêm `minus`, `plus` → 37 và sửa `chevron-right` vẽ sai thành đường chéo "⁄" từ bản đầu (nút Trang sau); v1.9.2 thêm `server`, `user`, `eye`, `eye-off`, `arrow-right` → 42; vẫn KHÔNG có `list`, `folder`). `Icon` nhận `stroke` (mặc định 2.5).
 - **Cách khắc phục:** Kiểm tra hằng `const icons` trước khi dùng, hoặc dùng trực tiếp ký tự Unicode (như `✕`).
 
 ### Bẫy 10: Tự động khóa file EXE khi đang mở app
@@ -202,6 +216,36 @@ Tất cả các báo cáo hiển thị dưới dạng tờ **A4/A4 Ngang (`.repo
   `cd build_web && python -c "import sys; sys.path.insert(0,'..'); import server; c=server.app.test_client(); print(c.get('/app.js').status_code)"`
 - **Máy build cần Node.js 18+** (có sẵn v24). Lần đầu `build_exe.py` tự `npm ci` trong `webbuild/` (cần mạng).
 - Chứng minh "màn hình không đổi" (27/09/2026): puppeteer mở cả 2 bản với API giả, so computed style ~13.000 phần tử × 70 thuộc tính trên 5 màn (đăng nhập, sổ cái 3.000 dòng, cuộn, dropdown, báo cáo) → **0 khác biệt**.
+- **Bản nguồn (CDN) có thể đo sai chiều cao dòng bảng ảo:** Tailwind CDN chèn CSS SAU lượt vẽ đầu, `useVirtualScroll` đo dòng lúc chưa có CSS rồi ngừng đo sau 12 lần → tổng chiều cao lệch (đo được 19,8 px/dòng thay vì 29,5). Bản EXE có CSS từ đầu nên không dính. Thấy bảng "trắng dưới đáy" khi chạy `python server.py` thì kiểm lại trên EXE trước khi sửa.
+
+### Bẫy 16: Bảng ảo — vẽ lại cả App theo từng pixel cuộn / listener cuộn gắn hụt (sửa v1.8.9)
+- `useVirtualScroll` được gọi trong `App` (7 bảng) → mỗi `setScrollTop` là **cả App** vẽ lại (thanh lọc, dropdown, `ExportButton` khai báo trong App bị gỡ-lắp lại). Trước v1.8.9 mỗi sự kiện cuộn đều `setScrollTop` → cuộn touchpad 600 bước × 20 px: JS 5,7 s, layout 3,8 s; CPU ×4: 74 s, 599/600 khung giật.
+- Nay chỉ đổi state khi cuộn đủ **10 dòng** (`setScrollTop(prev => …)` trả `prev` = React bỏ qua); overscan 50 dòng mỗi phía nên màn hình luôn phủ kín (kiểm 932 khung: 0 lần hở). JS còn 0,65 s, CPU ×4 còn 12,4 s. **Đừng giảm overscan xuống dưới ~20 dòng** nếu giữ bước 10 dòng.
+- Listener cuộn trước đây gắn trong `useEffect(…, [containerRef.current])` — deps đọc lúc RENDER, khung vừa mount thì ref còn null → chỉ gắn ở lần vẽ lại SAU; không có lần đó (hoặc khung gắn lại) là bảng đứng im, trắng dưới đáy (bắt được 1/4 lần chạy thử, không tái hiện được có chủ đích). Nay effect chạy sau mỗi render, so phần tử trong `boundRef`, khác thì gỡ cũ gắn mới.
+- `table-layout: fixed`, bỏ blur đầu bảng, `content-visibility` cho dòng: đã đo — **không** nhanh hơn (fixed còn chậm hơn ~20%). Đừng thử lại.
+
+### Bẫy 15: CSS in (`@media print`) ẩn theo VỊ TRÍ phần tử — đổi khung là in ra trang trắng
+- Luật cũ `#root > div > div:first-child { display:none }` nhắm thanh đen trên cùng. Khung mới đặt `.app-shell` (chứa toàn bộ app) làm con đầu → luật đó ẩn sạch báo cáo khi bấm PDF.
+- Đã sửa: `:not(.app-shell)` + ẩn tường minh `.app-sidebar, .app-pagehead, .app-statusbar` (+ `.app-reportbar` từ v1.9.0). Thêm phần khung mới thì gắn class rồi thêm vào danh sách ẩn khi in.
+- Kiểm bản in bằng puppeteer: `page.emulateMediaType('print')` + `page.pdf()` — so số trang và danh sách phần tử hiện với bản cũ (27/09: 2 trang, cùng 130 phần tử + 2 div bọc).
+
+### Bẫy 17: Zoom tờ báo cáo — dùng `transform: scale`, KHÔNG dùng CSS `zoom` (v1.9.0)
+- `ReportBar` (thanh dưới khu báo cáo) đặt `transform: scale(z)` lên `.report-paper` và cỡ `W×z, H×z` lên khung bọc `.ds-papersizer` — qua ref, không qua state của ReportTab — rồi theo dõi tờ đổi cỡ (nạp dữ liệu, đổi dọc/ngang) bằng ResizeObserver. Bấm zoom chỉ vẽ lại thanh, không vẽ lại ReportTab.
+- CSS `zoom` đã thử: BC012 10.000 dòng/trang tính lại style + layout **4,3–5 s mỗi lần bấm**. `transform: scale`: 0,8–1,1 s. Nạp BC012 10.000 dòng không chậm đi: trung vị 5,30 s trước, 5,36–5,50 s sau, nằm trong mức nhiễu.
+- Scale không đổi chỗ tờ chiếm trong layout → thiếu `.ds-papersizer` là thu nhỏ xong còn dư khoảng trắng dưới/phải tờ. Zoom 100% = gỡ hết class và style → khung y hệt bản chưa có zoom.
+- `transform` biến tờ giấy thành khối chứa của `position: fixed` bên trong nó → đừng đặt popup/nút `fixed` trong `.report-paper` (sẽ trôi theo tờ và bị scale). Nút nổi cũ đã chuyển ra `ReportBar`.
+- In: `@media print` gỡ scale + cỡ khung giữ chỗ. Kiểm 27/09: bấm PDF lúc đang 75% → nội dung PDF (luồng đã giải nén) trùng bản 100% và bản v1.8.9, cùng 2 trang.
+- "Vừa khung" (mặc định) chỉ THU NHỎ cho vừa bề ngang, không phóng quá 100%; tính theo `clientWidth` khung cuộn, có `scrollbar-gutter: stable` để không nhảy qua lại khi thanh cuộn hiện/ẩn. Lựa chọn nhớ ở `localStorage['ds_report_zoom']`.
+
+### Bẫy 18: Hộp xuất báo cáo — đừng tách state "mở hộp" ra khỏi ReportTab (v1.9.1)
+- Mở/đóng `ReportExportDialog` gọi `setShowExport` trong ReportTab → vẽ lại cả tờ báo cáo: ~0,45 s với BC012 10.000 dòng. Nhìn thì muốn chuyển nút + hộp thành component con tự giữ state để khỏi vẽ lại tờ.
+- **ĐỪNG** làm vậy khi chưa sửa cách chụp bộ lọc: `exportCfg` đọc `viewSnapRef`, mà ref này được cập nhật trong `useEffect` SAU lượt vẽ có dữ liệu mới. Hiện nay lượt vẽ do `setShowExport(true)` gây ra mới tính lại `exportCfg` với snapshot đúng. Tách ra thì hộp nhận cfg tính TRƯỚC effect → file ghi tiêu đề/kỳ của lần xem trước (đúng lỗi Bẫy 6, sai mà im).
+- `webbuild/build.js` ghim `compact: true` cho Babel: mặc định `auto` chỉ nén khoảng trắng khi nguồn > 500 KB. Đợt 5 làm nguồn JSX tụt dưới ngưỡng → app.js 456 → 553 KB (chỉ thêm xuống dòng/thụt lề). Ghim xong: 438 KB. app.css 48 → 33 KB là thật: bỏ ~65 tổ hợp class Tailwind của hộp thoại cũ.
+
+### Bẫy 19: Ảnh giao diện (ảnh sóc màn đăng nhập) — đường dẫn, đóng gói, kiểu file, bóng đổ (v1.9.2)
+- Đặt ảnh trong `assets/` ở gốc repo, gọi bằng đường dẫn tương đối `assets/…` → chạy nguồn (`python server.py` phục vụ gốc repo) và bản EXE (phục vụ `build_web/`) dùng chung một đường dẫn. `webbuild/build.js` chép `assets/` → `build_web/assets/`; `build_exe.py` thêm `build_web/assets;assets` vào `ADD_DATA`. Thêm ảnh mà quên một trong hai bước là EXE hiện ô ảnh vỡ, không báo lỗi.
+- `server.py` phải khai báo `mimetypes.add_type('image/webp', '.webp')`: máy dev (Python 3.12 + registry Windows) trả `None` cho `.webp` → Flask gửi `application/octet-stream` (cùng lý do với `.woff2`).
+- **Đừng dùng `filter: drop-shadow` lên ảnh lớn.** Đo 27/09 (headless, API giả, 8 vòng luân phiên): màn đăng nhập có filter FCP 344 ms, bỏ filter 308 ms, bản cũ 276 ms. Bóng đổ nay VẼ SẴN trong `assets/soc-it.webp` (1068×1332 = sóc 900×1292 + lề 84px hai bên, 40px trên; đáy cắt ngang vì khung ẩn phần tràn) → CSS phóng `height × 1.031`, `translateX(-46.63%)` để sóc giữ đúng chỗ và cỡ cũ. Làm lại ảnh thì chạy lại đoạn PIL trong `NHAT_KY_CONG_VIEC.md` mục 18 từ PNG gốc `Desktop\IVT\present IVT\SOC\soc IT - tach nen.png` (không nén chồng từ webp).
 
 ---
 
@@ -234,7 +278,7 @@ python build_exe.py
 ```
 
 ### Bước 4: Kiểm tra File Output
-- Verify mtime + dung lượng (~16,4 MB từ v1.8.6 — thêm React/xlsx/font đóng kèm) của `dist/iPOS_Ledger_Studio.exe`; chạy thử `/api/version` ra đúng `version.txt`.
+- Verify mtime + dung lượng (~16,5 MB từ v1.9.2 — React/xlsx/font + ảnh sóc 77 KB đóng kèm) của `dist/iPOS_Ledger_Studio.exe`; chạy thử `/api/version` ra đúng `version.txt`.
 
 ### Bước 5: Phát hành bản cập nhật (chỉ khi Trum bảo)
 ```bash

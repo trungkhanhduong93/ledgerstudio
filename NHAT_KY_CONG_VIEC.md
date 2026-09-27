@@ -2,7 +2,7 @@
 
 > Toàn bộ những gì đã làm với **LedgerStudio**, và **vì sao**. Đọc file này trước khi sửa tiếp.
 > Kiến trúc và ma trận báo cáo: [CLAUDE.md](CLAUDE.md).
-> Phiên gần nhất: **27/09/2026** · EXE build mới nhất: **iPOS_Ledger_Studio v1.8.6** (chưa phát hành) · bản phát hành: v1.8.5
+> Phiên gần nhất: **27/09/2026** · EXE build mới nhất: **iPOS_Ledger_Studio v1.8.9** — tên hiển thị DataStudio (chưa phát hành) · bản phát hành: v1.8.5
 
 ---
 
@@ -437,3 +437,248 @@ DB thật, xem vài tab + xuất 1 file Excel là đủ M4 cho đợt này (logi
 
 **Đợt tiếp theo:** Đợt 1 — token màu/chữ + khung (thanh bên trái, thanh trạng thái, đầu trang). Nhớ sửa CSS `@media print` (đang ẩn
 theo vị trí `#root > div > div:first-child`, `.shrink-0`) cùng đợt, và chụp so bản in PDF.
+
+---
+
+## 13. Đợt 1: khung app mới + tên hiển thị DataStudio — v1.8.7 *(27/09/2026)*
+
+Trum chốt: tên hiển thị **DataStudio** (bỏ "Data-Report" vì gần LedgerReport); chỉ đổi phần hiển thị — file EXE, repo,
+thư mục xuất giữ tên cũ; giữ logo ô vuông cam; ảnh sóc được đưa lên repo (đợt màn đăng nhập).
+
+**Đã làm (`index.html` trừ khi ghi khác):**
+- Thanh bên `AppSidebar`: 7 tab dữ liệu (`DOC_TABS`) + 9 báo cáo (`REPORT_TYPES`, xếp theo mã) + Tải lại danh mục + Đăng xuất;
+  thu gọn 56px, nhớ theo máy (`localStorage` bọc try). Không animate bề ngang (bảng 34 cột bên cạnh sẽ reflow từng khung hình).
+- `AppPageHeader` (tên + mã/mẫu báo cáo), `AppStatusBar` (kết nối · CSDL · số bản ghi · kỳ · version). Gỡ thanh đen trên cùng
+  và `DocumentTabDropdown`.
+- `pickReport()`: chọn báo cáo ở thanh bên cùng luật dropdown "Mẫu báo cáo" (có `reportData` mà đổi mẫu → hỏi xác nhận).
+- Token: `tailwind.config` thêm `ink/line/canvas/wash/tint/rail/brand/ok/warn/bad`; CSS `ds-*` + biến `--ds-*`. Icon thêm
+  `receipt, wallet, shopping-cart, package, panel-left, refresh-cw`; `Icon` nhận `stroke` (mặc định 2.5 như cũ).
+- 8 hàng lọc thêm `flex-wrap` — khung mới làm nút "Xuất Excel" tràn mép phải 86 px ở màn 1366–1440 (bản cũ vốn đã tràn 1–36 px).
+- CSS in: `#root > div > div:first-child:not(.app-shell)` + ẩn `.app-sidebar, .app-pagehead, .app-statusbar` (Bẫy 15).
+- Đổi tên: title/meta/`APP_NAME`/6 chân bảng/hộp thông báo; `manifest.json`; `xlsx_report.py` author/comments;
+  `build_exe.py` `DISPLAY_NAME` → FileDescription/ProductName = DataStudio (OriginalFilename vẫn `iPOS_Ledger_Studio.exe`).
+- `webbuild/build.js`: đọc khối `tailwind.config` nhiều dòng bằng đếm ngoặc (regex 1 dòng cũ sẽ gãy).
+
+### 13.1 Verify
+
+| Mức | Kiểm | Kết quả |
+|---|---|---|
+| M1 | `check_babel.js`; build web; `new Function(app.js)` | OK |
+| M3 | puppeteer API giả, so nội dung tab bản HEAD (v1.8.6) vs mới — bỏ width/height vì khung hẹp hơn: sổ cái 1.379 phần tử (25 dòng đầu), BC006 201 phần tử | Chỉ lệch lề `auto` căn giữa + vị trí cụm nút xuống dòng; style còn lại **0 khác biệt** |
+| M3 | Bản nguồn vs `build_web` (tính cả toạ độ) | BC006 0 khác biệt; sổ cái chỉ lệch tổng chiều cao bảng ảo (bản nguồn đo sai dòng — ghi ở Bẫy 14) |
+| M3 | Chức năng: 7 tab + 9 báo cáo từ thanh bên; hộp xác nhận: không dữ liệu → không hỏi, có dữ liệu → hỏi, Hủy giữ BC005, Xác nhận sang BC006; thu gọn 56 px + tải lại vẫn thu; đăng xuất về màn đăng nhập; không lỗi trang | Qua (cả bản nguồn lẫn build) |
+| M3 | Bản in (emulate print + `page.pdf`): 2 trang, cùng danh sách phần tử hiện (+2 div bọc), không lọt khung; PDF lệch đúng 8 byte = độ dài tên trong tiêu đề | Qua |
+| M3 | Tràn ngang thanh lọc 8 tab × 1366/1440/1920 px × thanh bên mở/thu | Hết tràn (bản cũ tràn ở 1366/1440) |
+| M3 | EXE thật 1.8.7 (16,4 MB): file trả về trùng SHA-1 `build_web`; title + h1 đăng nhập "DataStudio"; Properties: FileDescription/ProductName DataStudio, OriginalFilename iPOS_Ledger_Studio.exe; không request ra ngoài | Qua |
+
+Chưa verify với DB thật. Ở màn 1366×768 thanh lọc sổ cái thành 2 dòng, bảng còn ~10 dòng nhìn thấy — Đợt 2 (bộ lọc dạng chip,
+nút lên đầu trang) sẽ trả lại 1 dòng.
+
+**Đợt tiếp theo:** Đợt 2 — bộ lọc: chip 32px có nhãn bên trong, gộp Kỳ + ngày, "Bộ lọc khác", nút Truy vấn/Xuất lên đầu trang,
+bỏ dropdown "Mẫu báo cáo" trùng thanh bên.
+
+---
+
+## 14. Đợt 2: thanh lọc dạng chip — v1.8.8 *(27/09/2026)*
+
+**Đã làm (`index.html`, chỉ giao diện):**
+- CSS `ds-chip / ds-btn / ds-btn-pri / ds-btn-ghost / ds-input / ds-seg / ds-pop / ds-opt / ds-check / ds-cell / ds-meta / ds-badge / ds-slot`.
+- 7 component lọc dùng chung đổi phần vẽ, props + handler giữ nguyên: `PeriodDropdown` (+ `from`/`to`, nhãn "Tháng 1/2026",
+  "Quý 2/2026", "Năm 2026", "Tùy ý"), `IOSDatePicker` (`if (disabled) return null` đặt sau mọi hook; lịch đổi sang xanh iPOS,
+  font Inter), `PremiumDropdown` (nút "Xong" thay "XÁC NHẬN"), `PageSizeDropdown`, `FilterToggleButton`, `IssueReceiveDropdown`,
+  `ExportButton`. Gỡ `ReportTypeDropdown` (thanh bên đã thay).
+- 8 thanh lọc: bỏ khung bọc bề ngang cố định (`w-64/w-32/w-40` → `ds-slot`), ô Số chứng từ thành `ds-input`, nhóm nút trạng thái
+  tab DT chờ phân bổ + Chi tiết/Tổng hợp BC007/BC013 thành `ds-seg`, hàng "Bộ lọc khác" thành `flex-wrap`. Thanh lọc giữ class
+  `bg-white border-b` (CSS in ẩn theo cặp này).
+- **Cố ý KHÔNG** đưa nút Truy vấn lên đầu trang như dự kiến ban đầu: chip gọn nên hàng lọc đã vừa 1 dòng ở màn 1366 px;
+  đưa lên đầu trang phải dùng portal cho 8 tab — rủi ro không đáng.
+
+### 14.1 Verify
+
+| Mức | Kiểm | Kết quả |
+|---|---|---|
+| M1 | `check_babel.js`, build web | OK |
+| M3 | Bấm CÙNG 9 kịch bản lọc trên bản v1.8.7 và v1.8.8 (nguồn + build), so URL API: sổ cái (Loại CT 2 mục, Đơn vị, Tài khoản ở Bộ lọc khác, 1.000 dòng, Quý 2), kỳ Tùy ý chọn ngày 5 → 20, bán hàng gõ số CT + Enter, kho Nhập/Xuất + số CT hàng 2, DT chờ phân bổ 2 nhóm nút, BC012, BC007 Tổng hợp, BC013, BC006 | **9/9 trùng khớp** |
+| M3 | PDF gọi `window.print`, Excel mở hộp xuất; không lỗi trang | Qua |
+| M3 | Phần dưới thanh lọc: sổ cái 1.285 phần tử, BC006 137 phần tử — v1.8.7 vs v1.8.8 | 0 khác biệt style |
+| M3 | Bản in BC006: 2 trang, PDF trùng từng byte (245.784) giữa v1.8.7 / v1.8.8 / build; không chip/nút nào lọt vào | Qua |
+| M3 | Tràn ngang 8 tab × 1366/1440/1920 × thanh bên mở/thu | Không tràn; sổ cái 1 dòng ở 1366 |
+| M3 | EXE thật 1.8.8: file trùng SHA-1 `build_web`, title DataStudio, không request ra ngoài | Qua |
+
+**Lỗi CÓ SẴN phát hiện khi kiểm (chưa sửa — đợt giao diện không đụng logic):** ô "Số chứng từ" của BC012 gọi
+`onToggleFilter('tran_no', e.target.value)` — hàm bật/tắt phần tử MẢNG. Gõ "PC1" thành `['P','PC','P,PC1']` → gửi
+`tran_no=P,PC,P,PC1`. Sửa đúng: `setFilters(p => ({ ...p, tran_no: e.target.value }))` — cần Trum duyệt + kiểm server
+`/api/cash_book` hiểu `tran_no` là chuỗi. BC013 bấm "Tổng hợp" khi chưa có dữ liệu không gọi API (cả 2 bản như nhau — có thể cố ý).
+
+**Đợt tiếp theo:** Đợt 3 — 6 bảng dữ liệu: đầu cột chữ thường, số mực đen canh phải tabular-nums, Nợ/Có cùng màu, dòng 30 px
+(tuỳ chọn 26/36), ghim cột đầu, gom nhóm + tìm theo cột ẩn sau 2 nút icon, bỏ overlay mờ khi tải; xử lý layout bảng khi cuộn.
+
+---
+
+## 15. Đợt 3: bảng dữ liệu + cuộn mượt + sửa BC012 — v1.8.9 *(27/09/2026)*
+
+**Sửa lỗi BC012 (Trum duyệt):** ô "Số chứng từ" gọi `onToggleFilter('tran_no', …)` — hàm bật/tắt phần tử MẢNG — gõ "PC1"
+thành `['P','PC','P,PC1']`, gửi `tran_no=P,PC,P,PC1`. Nay `setFilters(p => ({ ...p, tran_no: v }))`. Server `/api/cash_book`
+vốn lọc `TRAN_NO LIKE %...%` theo chuỗi. Các tab khác có gửi kèm `tran_no` nhưng server không đọc → không ảnh hưởng.
+Kiểm: gõ "PC 0902-01" → gửi đúng chuỗi đó; xoá trắng → gửi rỗng.
+
+**Giao diện bảng (`index.html`):** class `ds-grid` cho 7 bảng + CSS đè kiểu cũ trong ô (xem CLAUDE.md mục 3.0) thay vì sửa
+~250 ô của 7 component dòng. Dòng nhóm `ds-grp-0/1`, vùng gom nhóm gọn (viền đứt, chip + nút ×), lớp phủ lúc tải bỏ blur +
+vòng quay 48 px → vạch 2 px + nhãn nhỏ (vẫn chặn bấm), chân phân trang gọn, bỏ nhãn tiếng Anh "... Detail View", `PageJumper`
+đổi giao diện (dùng chung cả phân trang báo cáo). 5 đầu cột Title Case → chữ thường ("Số chứng từ", "Tên đơn vị",
+"Mã đối tượng", "TK ngân hàng", "TK đích").
+
+**Cố ý KHÔNG làm:** ẩn hàng tìm theo cột / vùng gom nhóm sau nút icon (giữ hiện nhưng gọn — ẩn là mất tính năng người dùng
+đang quen); ghim cột đầu (dòng nhóm dùng `colSpan` → dính trái lệch); tuỳ chọn mật độ dòng 26/30/36; tô đỏ số âm (cần logic
+trong ô). Bảng kho/tồn kho giữ dòng thấp như cũ (~21 px, ô không có padding dọc).
+
+**Hiệu năng cuộn — nguyên nhân đo được:** `useVirtualScroll` gọi trong `App`; mỗi sự kiện cuộn `setScrollTop` → CẢ App vẽ lại.
+Đã thử và LOẠI (đo không nhanh hơn): `table-layout: fixed` (chậm hơn ~20%), bỏ blur đầu bảng, `content-visibility` cho `tr`.
+Sửa: chỉ đổi state khi cuộn đủ 10 dòng + listener cuộn gắn lại khi khung cuộn đổi (CLAUDE.md Bẫy 16).
+
+### 15.1 Verify
+
+| Mức | Kiểm | Kết quả |
+|---|---|---|
+| M1 | `check_babel.js`, build web | OK |
+| M3 | Chữ trong 25 dòng đầu + URL API: v1.8.8 vs v1.8.9 (nguồn + build) qua tải, sắp xếp "Số chứng từ" 2 lần, tìm cột Diễn giải "số 12", gom nhóm theo Tài khoản (kéo-thả giả lập), thu nhóm | **5/5 trùng**, API trùng, không lỗi trang |
+| M3 | Độ phủ bảng ảo: cuộn đều xuống 17 px/bước, lên 23 px/bước, 8 lần nhảy xa, chạm đáy, về đầu — 932 khung | 0 lần hở (build chạy 8 lần, 1 lần hở trước khi sửa gắn listener, sau đó 5/5 đạt); đáy = dòng 3.000 |
+| M3 | Đổi tab rồi quay lại sổ cái, cuộn tới 30.000 px | 3/3 đạt (cả bản cũ) |
+| Đo | Cuộn touchpad 600 bước × 20 px, cùng bản nguồn: JS 5.708 → 649 ms, layout 3.797 → 476 ms; CPU ×4: 74 s → 12,4 s, khung giật 599 → 78/600. EXE: máy thường 0/600 khung giật | ~6–10× |
+| M3 | BC006 dưới thanh lọc 0 khác biệt; PDF BC006 trùng từng byte v1.8.7/8/9 | Qua |
+| M3 | EXE thật 1.8.9: file trùng SHA-1 `build_web`, không request ra ngoài, title DataStudio | Qua |
+
+Chưa verify với DB thật.
+
+**Đợt tiếp theo:** Đợt 4 — khung báo cáo (nền canvas, thanh zoom, các thanh phân trang/tổng trong khu báo cáo; nội dung tờ
+A4 KHÔNG đụng), rồi hộp thoại (xuất Excel, thông báo), cuối cùng màn đăng nhập DataStudio + sóc.
+
+## 16. Đợt 4: khung báo cáo + zoom — v1.9.0 *(27/09/2026)*
+
+**Làm gì (`index.html`, chỉ khung quanh tờ A4):**
+- Nền khu báo cáo `bg-slate-200 p-4` → `ds-desk` (#E9EDF2, `scrollbar-gutter: stable`). Tờ `.report-paper`: lề 30 → 20px,
+  bóng `0 20px 60px` → bóng nhẹ, viền mảnh, bỏ `transition: all 0.3s cubic-bezier(…1.56…)` (kiểu nảy, animate cả bề ngang).
+- Component mới `ReportBar` = thanh dưới (`.app-reportbar`, kiểu `ds-pager` như bảng dữ liệu): trái `PageJumper` + số dòng +
+  "A4 ngang/dọc"; phải lên đầu · xuống cuối · − % + · "Vừa khung". Gỡ 2 nút tròn `fixed bottom-10 right-10` và viên phân
+  trang `fixed left-1/2` (canh giữa CỬA SỔ nên lệch sang phải phần báo cáo khi có thanh bên 216px; nổi trên lớp đang tải
+  nên bấm được trong lúc tải). Số dòng giờ hiện cả khi chỉ 1 trang, BC012 cũng có (trước chỉ BC007/008/013 khi >1 trang).
+- Zoom: `transform: scale` + khung `.ds-papersizer` (CLAUDE.md Bẫy 17). Mức 50/67/75/80/90/100/110/125/150%, bấm số % về
+  100%, "Vừa khung" mặc định (chỉ thu nhỏ, không phóng quá 100%). Nhớ qua `localStorage['ds_report_zoom']`.
+- Lớp "Đang kết xuất báo cáo" ở `App` (phủ cả thanh lọc, blur 4px, hộp tròn 40px bo) → `ds-loading` trong ReportTab, dưới
+  thanh lọc: vạch 2px + nhãn nhỏ, vẫn chặn bấm tờ + thanh dưới. Thanh lọc (z-900) vẫn bấm được như trước.
+- Sửa lỗi hình có từ bản đầu: icon `chevron-right` = `m9 18 6-6 6-6` (đường chéo "⁄") → `m9 18 6-6-6-6`. Ảnh hưởng nút
+  Trang sau của mọi bảng + báo cáo, nút tháng sau trong lịch.
+
+**Đã thử và LOẠI:** CSS `zoom` (đơn giản hơn, nhưng BC012 10.000 dòng mất 4,3–5 s mỗi lần bấm vì tính lại style + layout
+90.000 ô; `content-visibility` trên `tr` không cứu được vì dòng bảng không nhận layout containment).
+
+### 16.1 Verify (API giả, puppeteer, build v1.8.9 vs build v1.9.0)
+
+| Mức | Kiểm | Kết quả |
+|---|---|---|
+| M1 | build web (Babel 7.29.7 + Tailwind) | OK |
+| M3 | Nội dung tờ: computed style + vị trí tương đối so với tờ, BC006 (124 phần tử) + BC007 1.000 dòng (763 phần tử, 60 dòng đầu), 1440 px | **0 khác biệt** |
+| M3 | URL API BC007 tải + bấm Trang sau | Trùng (`page=1`, `page=2`) |
+| M3 | Bản in BC006 (`emulateMediaType('print')` + `page.pdf`): v1.8.9 / v1.9.0 / v1.9.0 đang zoom 75% | 2 trang; luồng nội dung giải nén trùng cả 3 (khác giờ tạo + 1 nút cấu trúc cho thẻ bọc) |
+| M3 | 1366 px, thanh bên mở, BC006 ngang | "Vừa khung" 98%, tờ 1100 px, cuộn ngang 0 (v1.8.9: 5 px) |
+| M3 | + → 100%, − − → 80%, tải lại trang → vẫn 80%; "Vừa khung" → 98%; thu thanh bên → 100%, mở lại → 98%; sang BC005 (dọc) → 100% | Đúng cả |
+| M3 | Khoảng trắng dưới tờ khi thu nhỏ (80%, 98%) | 20–21 px = lề dưới, không dư |
+| M3 | Xuống cuối / Lên đầu (BC007 1.000 dòng) | 34.016/34.017 px → 0 |
+| M3 | Lớp đang tải (API trả chậm 1,5 s) | Vạch 2px ngay dưới thanh lọc (87 = 87 px), nhãn hiện, thanh dưới bị chặn, không blur, tắt khi xong |
+| Đo | Bấm zoom trên BC012 10.000 dòng/trang | CSS zoom 4,3–5 s → scale 0,8–1,1 s |
+| Đo | Nạp BC012 10.000 dòng, 3 vòng luân phiên | Trung vị: v1.8.9 5,30 s (1366) / 5,30 s (1440); v1.9.0 5,50 s (98%) / 5,36 s (100%) / 5,42 s (1440) — trong mức nhiễu |
+| M3 | Bảng dữ liệu sổ cái (tải/sắp xếp/tìm cột/gom nhóm/thu nhóm) v1.8.9 vs v1.9.0 | 5/5 trùng, API trùng |
+| M3 | EXE thật 1.9.0: `/api/version` = 1.9.0, `app.js` trùng SHA-1 `build_web`, không request ra ngoài, màn đăng nhập 246–671 ms | Qua |
+
+Chưa verify với DB thật. Lỗi 401 ở `/api/metadata` trước khi đăng nhập là bình thường (có từ trước).
+
+**Đợt tiếp theo:** hộp thoại (xuất Excel `ReportExportDialog`, thông báo, xác nhận chuyển mẫu), rồi màn đăng nhập DataStudio + sóc.
+
+## 17. Đợt 5: hộp thoại — v1.9.1 *(27/09/2026)*
+
+**Làm gì (`index.html`):** CSS khung hộp thoại dùng chung (CLAUDE.md mục 3.0) rồi làm lại từng hộp, props/handler giữ nguyên
+(đoạn onClick dài của hộp cài driver và hộp chuyển mẫu được CẮT từ khối cũ bằng script rồi dán lại, không gõ lại).
+
+| Hộp thoại | Trước | Sau |
+|---|---|---|
+| Xuất báo cáo `ReportExportDialog` | bo 28px, đầu gradient lục, vòng tròn % + thanh sọc chạy, nút lục/trời/chàm, chữ IN HOA | khung 580px, thẻ chọn `ds-choice`, số % + thanh 6px, các bước chấm tròn, 3 ô số liệu, nút chính xanh iPOS |
+| Đang xuất / Đã xuất (tab dữ liệu) | vòng quay 48px; thanh 100% giả trang trí | icon quay nhỏ + thanh thật; bỏ thanh 100% giả, giữ đường dẫn; icon "Mở folder" đúng (trước là icon file) |
+| Menu Xuất Excel (tab dữ liệu) | ô màu XLSX/CSV/ORG, chữ đậm | dòng menu `ds-menuitem` + nhãn `ds-fmt` |
+| Chuyển mẫu báo cáo | bo 32px, nền kính mờ, nút IN HOA | hộp cảnh báo nhỏ, Hủy / Xác nhận |
+| Thông báo `showNotice` | + dòng phụ "Hệ thống DataStudio" | bỏ dòng phụ; bấm nền vẫn đóng |
+| Cập nhật (đang tải / lỗi) | icon nhảy, thanh cam→chàm, ô xanh nhấp nháy | thanh xanh iPOS (xong: xanh lục), ghi chú tĩnh |
+| Banner bản mới | gradient cam→chàm, chấm ping | nền xanh nhạt, nút Cập nhật ngay |
+| Cài ODBC driver (màn đăng nhập) | 2 nút xếp dọc full ngang | chân hộp: Bỏ qua · Cài đặt driver ngay |
+| Mất kết nối (script thường) | nền tối 92% + emoji ⚠️ + chữ IN HOA | hộp trắng giống các hộp khác, style inline (chạy trước React/Tailwind) |
+
+**Cố ý KHÔNG làm:** 2 hộp chết (`exportConfirm`, `exportNoticeModal`) — để nguyên, ghi vào CLAUDE.md Bẫy 18. Tách state mở
+hộp xuất khỏi ReportTab để khỏi vẽ lại tờ (~0,45 s trên BC012 10.000 dòng) — sẽ làm file xuất lấy snapshot bộ lọc cũ (Bẫy 18).
+`alert()` gốc trình duyệt (lỗi xuất, cài driver) — đổi là đụng luồng xử lý. Chữ "Đang xuất Excel" cả khi chọn CSV — giữ chữ cũ.
+
+**Build:** `webbuild/build.js` ghim Babel `compact: true` (CLAUDE.md Bẫy 18) — app.js 438 KB.
+
+### 17.1 Verify (API giả, puppeteer, build v1.9.0 vs build v1.9.1)
+
+| Mức | Kiểm | Kết quả |
+|---|---|---|
+| M1 | build web | OK |
+| M3 | Xuất BC006: mở → CSV → Excel → Enter → đang ghi → xong → Mở file | Body `/api/report_export/start` + `/api/open_file` + chuỗi poll **trùng** |
+| M3 | Xuất lỗi → Thử lại → xuất → Hủy xuất → đã hủy → Esc | API trùng (kể cả `/api/export/cancel`), trạng thái trùng |
+| M3 | BC007 chọn mẫu Tổng hợp → tên file `…_TongHop_…` | Trùng |
+| M3 | Tab sổ cái: menu Xuất Excel (3 dòng, chữ trùng) → XLSX → đang xuất → đã xuất → Mở folder → Đóng | API trùng (count, stream_csv, 3 lần poll, open_folder) |
+| M3 | Chuyển mẫu BC005 (có dữ liệu) → BC006: Hủy giữ BC005, Xác nhận sang BC006 | Trùng |
+| M3 | Thông báo BC008 thiếu TK: Đã hiểu đóng; bấm nền đóng | Trùng |
+| M3 | Cập nhật: banner → Cập nhật ngay → 42% (6,9/16,5 MB) → lỗi → Đóng | `/api/apply_update` trùng, trạng thái trùng |
+| M3 | Màn đăng nhập thiếu driver → Cài đặt (lỗi, alert) → vẫn mở → Bỏ qua | `/api/install_driver` + nội dung alert trùng |
+| M3 | Màn Mất kết nối | Chữ giữ nguyên (trừ tiêu đề thường hoá), nút Thử lại |
+| Đo | Mở hộp xuất trên BC012 10.000 dòng | 0,49–0,55 s → 0,44–0,47 s (phần lớn là vẽ lại tờ — Bẫy 18) |
+| Đo | Khung hình 3 s lúc hộp xuất đang chạy trên BC012 | Cả hai bản 0 khung giật (headless) — bỏ blur không tạo khác biệt đo được ở đây |
+| M3 | Tờ báo cáo BC006 + BC007 so v1.8.9; PDF BC006 (kể cả zoom 75%); bảng sổ cái 5 thao tác | 0 khác biệt / trùng / 5/5 trùng |
+| M3 | EXE thật 1.9.1: `/api/version`, `app.js` trùng SHA-1 `build_web`, không request ra ngoài | Qua |
+
+Chưa verify với DB thật.
+
+**Dọn sau Đợt 5 (27/09/2026, có trong EXE 1.9.2):** xoá 2 hộp thoại chết `exportConfirm` ("Xuất dữ liệu lớn") và `exportNoticeModal` ("Xuất Excel thành công!" ở màn đăng nhập) + state + prop `onExportSuccess` của ReportTab. Kiểm: build web qua; bộ kiểm hộp thoại (xuất báo cáo, lỗi/hủy, xuất tab dữ liệu, chuyển mẫu, thông báo, cập nhật, driver) 39/39 mục + API 5 luồng trùng bản trước khi xoá. app.js 438 → 431 KB.
+
+**Đợt tiếp theo (cuối):** màn đăng nhập DataStudio — chia đôi, trái nền giấy sổ cái + sóc (ảnh đã tách nền), phải form.
+
+## 18. Đợt 6 (cuối): màn đăng nhập — v1.9.2 *(27/09/2026)*
+
+**Làm gì:** màn đăng nhập theo mockup đã duyệt (`Desktop\IVT\present IVT\SOC\DataReport-mockup.html`, bấm "Đăng nhập"),
+đổi tên Data-Report → DataStudio, "6 phân hệ" → số thật từ `DOC_TABS` (7), "9 báo cáo TT200" → "9 báo cáo kế toán" (BC011–BC013
+không phải mẫu TT200), "Chứng từ tháng 9" → "Chứng từ trong kỳ". Bỏ dòng "ODBC Driver 17 for SQL Server" dưới nút (mockup có):
+app không biết driver nào sẽ dùng — `loginData.driver` luôn là `"SQL Server"`, hiện tên driver khác là nói sai.
+- `index.html`: CSS `ds-login-*`, 5 icon mới, state `showPw`, JSX màn đăng nhập (khối hộp cài driver cắt từ bản cũ dán lại).
+  Gỡ CSS `.glass-login`, `.login-input` (kính mờ blur 20px) không còn ai dùng.
+- `assets/soc-it.webp` (77 KB, lên repo Public theo Trum duyệt 27/09), `webbuild/build.js`, `build_exe.py`, `server.py` — Bẫy 19.
+
+**Ảnh sóc — cách tạo lại (bóng đổ vẽ sẵn):**
+```python
+from PIL import Image, ImageFilter
+png = Image.open(r'...\SOC\soc IT - tach nen.png').convert('RGBA')
+src = png.resize((900, round(png.height * 900 / png.width)), Image.LANCZOS)   # 900×1292
+W, H = src.size; s = 505 / H; off = round(18 / s); sigma = 11 / s            # = drop-shadow(0 18px 22px) ở cỡ 505px
+PX, PT = 84, 40
+canvas = Image.new('RGBA', (W + 2 * PX, H + PT), (0, 0, 0, 0))
+sh = Image.new('L', canvas.size, 0); sh.paste(src.getchannel('A'), (PX, PT + off))
+sh = sh.filter(ImageFilter.GaussianBlur(sigma)).point(lambda v: int(v * 0.18))
+shadow = Image.new('RGBA', canvas.size, (13, 48, 80, 0)); shadow.putalpha(sh)
+canvas = Image.alpha_composite(canvas, shadow); canvas.alpha_composite(src, (PX, PT))
+canvas.save('assets/soc-it.webp', 'WEBP', quality=80, method=6)
+```
+
+### 18.1 Verify (API giả, puppeteer)
+
+| Mức | Kiểm | Kết quả |
+|---|---|---|
+| M1 | build web; `python -c "import server"` + test_client `GET /assets/soc-it.webp` | OK · 200 `image/webp` 77 KB |
+| M3 | v1.9.1 vs v1.9.2 vs bản nguồn CDN: 4 ô (giá trị nhớ từ localStorage, type, required, placeholder), gõ mật khẩu sai → lỗi 18456 hiện trong form, sửa → Kết nối → vào app, body 2 lần `/api/login`, localStorage sau đăng nhập, lỗi trang | **Trùng cả 6 mục** |
+| M3 | Nút con mắt: hiện → `text`, ẩn → `password`, focus vẫn ở ô mật khẩu | Đúng |
+| M3 | 1366×697 · 1440×900 · 1920×1009 · 820×700 | Không cuộn ngang, form vừa màn, thẻ số liệu không đè chữ; 820 ẩn nửa trái |
+| M3 | Banner bản mới trên màn đăng nhập → Cập nhật ngay | `/api/apply_update`, hộp cập nhật hiện |
+| M3 | Thiếu driver → hộp cài driver | Hiện đúng |
+| M3 | Hộp thoại (9 luồng Đợt 5) v1.9.1 vs v1.9.2 | 39/39 trùng, API trùng |
+| Đo | FCP màn đăng nhập (headless, 8 vòng luân phiên, bỏ vòng đầu): v1.9.1 276–280 · có `drop-shadow` 344 · bỏ filter 308 · bóng vẽ sẵn 324 · bỏ cả nửa trái 308 ms | Nửa trái còn tốn ~16 ms |
+| M3 | EXE thật 1.9.2: `/api/version`, `/assets/soc-it.webp` 200 `image/webp`, ảnh `complete` 1068×1332, `app.js` trùng SHA-1, không request ra ngoài, vẽ màn 188–269 ms (sau lần mở đầu) | Qua |
+
+Chưa verify với DB thật (đăng nhập thật, driver thật trên máy khách).

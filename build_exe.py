@@ -67,6 +67,8 @@ if os.path.exists('manifest.json'):
     ADD_DATA.append('manifest.json;.')
 if os.path.exists('icon.svg'):
     ADD_DATA.append('icon.svg;.')
+if os.path.exists(f'{WEB_DIR}/assets'):
+    ADD_DATA.append(f'{WEB_DIR}/assets;assets')   # ảnh giao diện (sóc màn đăng nhập) — webbuild chép từ assets/
 
 VERSION_FILE = 'version.txt'
 # version.txt phải nhúng vào EXE: server.py đọc file này rồi tiêm vào APP_VERSION của index.html
@@ -112,6 +114,9 @@ with open(VERSION_FILE, 'w') as f:
 ADD_DATA.append(f'{VERSION_FILE};.')
 
 # Generate version_info.txt
+# Tên hiển thị (Task Manager, Properties của file EXE) — Studio đổi thành DataStudio từ 27/09/2026.
+# Tên FILE vẫn là iPOS_Ledger_Studio.exe: updater chỉ nhận đúng tên asset đó (CLAUDE.md Bẫy 13).
+DISPLAY_NAME = 'DataStudio' if APP_NAME == 'iPOS_Ledger_Studio' else APP_NAME
 v_parts = list(map(int, new_version.split('.')))
 v_tuple = f'{v_parts[0]}, {v_parts[1]}, {v_parts[2]}, 0'
 
@@ -132,11 +137,11 @@ version_info = f"""VSVersionInfo(
       StringTable(
         '040904B0',
         [StringStruct('CompanyName', 'iPOS.vn'),
-        StringStruct('FileDescription', '{APP_NAME}'),
+        StringStruct('FileDescription', '{DISPLAY_NAME}'),
         StringStruct('FileVersion', '{new_version}'),
         StringStruct('InternalName', '{APP_NAME}'),
         StringStruct('OriginalFilename', '{APP_NAME}.exe'),
-        StringStruct('ProductName', '{APP_NAME}'),
+        StringStruct('ProductName', '{DISPLAY_NAME}'),
         StringStruct('ProductVersion', '{new_version}')])
       ]), 
     VarFileInfo([VarStruct('Translation', [1033, 1200])])

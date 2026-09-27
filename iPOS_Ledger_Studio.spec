@@ -9,7 +9,7 @@ a = Analysis(
     ['server.py'],
     pathex=[],
     binaries=[],
-    datas=[('build_web/index.html', '.'), ('build_web/app.js', '.'), ('build_web/app.css', '.'), ('build_web/vendor', 'vendor'), ('install_driver.ps1', '.'), ('manifest.json', '.'), ('icon.svg', '.'), ('version.txt', '.')],
+    datas=[('build_web/index.html', '.'), ('build_web/app.js', '.'), ('build_web/app.css', '.'), ('build_web/vendor', 'vendor'), ('install_driver.ps1', '.'), ('manifest.json', '.'), ('icon.svg', '.'), ('build_web/assets', 'assets'), ('version.txt', '.')],
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},

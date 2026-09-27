@@ -7,7 +7,7 @@
 > Remote cũ từng trỏ nhầm repo **LedgerReport** (gỡ 16/08/2026): push nhầm là đè code Studio lên `main` của Report.
 > Repo công khai → **cấm commit mật khẩu / IP server DB / file dữ liệu khách** (`BaoCaoMau/` đã `.gitignore`).
 > Build vẫn chạy **`BuildEXE-LedgerStudio.bat`**, EXE nằm trong `dist` (không lên git). Phát hành qua **GitHub Releases** — app từ v1.8.3 tự cập nhật (mục 5, Bước 5).
-> **Cập nhật gần nhất:** 27/09/2026 (v1.8.6: EXE dùng giao diện dịch sẵn — Bẫy 14)
+> **Cập nhật gần nhất:** 27/09/2026 (v1.9.2: màn đăng nhập — Bẫy 19 · v1.9.1: hộp thoại — Bẫy 18 · v1.9.0: khung báo cáo + zoom — Bẫy 17 · v1.8.9: bảng dữ liệu + cuộn mượt — Bẫy 16 · v1.8.8: thanh lọc chip · v1.8.7: khung + DataStudio — Bẫy 15 · v1.8.6: dịch sẵn — Bẫy 14)
 
 ---
 
@@ -196,6 +196,23 @@ Tất cả các báo cáo hiển thị dưới dạng tờ **A4/A4 Ngang (`.repo
 - `index.html` gốc vẫn là bản nguồn để sửa; `python server.py` vẫn chạy nó qua CDN + Babel. Test bằng `python server.py` KHÔNG chứng minh được bản EXE — phải build lại.
 - Thêm/đổi thẻ CDN trong `<head>` → `build.js` DỪNG BUILD (`[LOI webbuild]`), cố ý. Đừng đổi preset Babel (`react, env` → ES5) để khỏi văng lỗi TDZ.
 - Chi tiết: `CLAUDE.md` Bẫy 14.
+
+### Bẫy 15: CSS in ẩn theo VỊ TRÍ phần tử (từ v1.8.7)
+- Khung mới (thanh bên `AppSidebar`, đầu trang, thanh trạng thái — CLAUDE.md mục 3.0) đặt `.app-shell` làm con đầu của `#root > div`. Luật in cũ `#root > div > div:first-child` sẽ ẩn cả báo cáo → đã thêm `:not(.app-shell)` + ẩn tường minh `.app-sidebar, .app-pagehead, .app-statusbar`. Thêm khung thì gắn class và thêm vào danh sách ẩn khi in.
+- Tên hiển thị app là **DataStudio**; tên file EXE vẫn `iPOS_Ledger_Studio.exe` (đừng đổi — gãy tự cập nhật).
+- Từ v1.8.8 thanh lọc dùng chip `ds-chip` (nhãn trong chip), không còn `.label-text` phía trên; `IOSDatePicker` ẩn khi ngoài kỳ Tùy ý; dropdown "Mẫu báo cáo" đã gỡ. Chi tiết CLAUDE.md mục 3.0.
+
+### Bẫy 16: Bảng ảo (v1.8.9)
+- `useVirtualScroll` chỉ `setScrollTop` khi cuộn đủ 10 dòng (trước: mỗi pixel → cả App vẽ lại, CPU yếu 599/600 khung giật). Listener cuộn gắn lại sau mỗi render nếu khung cuộn đổi (trước: deps `[containerRef.current]` gắn hụt). Đừng giảm overscan dưới ~20. `table-layout: fixed` đã đo là CHẬM hơn. Chi tiết CLAUDE.md Bẫy 16.
+
+### Bẫy 17: Zoom tờ báo cáo (v1.9.0)
+- Thanh dưới khu báo cáo `ReportBar` zoom bằng `transform: scale` trên `.report-paper` + khung giữ chỗ `.ds-papersizer` (đặt qua ref). KHÔNG dùng CSS `zoom`: BC012 10.000 dòng mất 4,3–5 s mỗi lần bấm (scale 0,8–1,1 s). Đừng đặt phần tử `position: fixed` trong tờ giấy (transform làm nó trôi theo tờ). In tự gỡ scale. Chi tiết CLAUDE.md Bẫy 17.
+
+### Bẫy 18: Hộp thoại (v1.9.1)
+- Mọi hộp thoại dùng khung `ds-scrim` + `ds-dialog` (không blur nền). Đừng tách state mở hộp xuất báo cáo ra khỏi ReportTab: `exportCfg` phụ thuộc lượt vẽ lại đó để lấy snapshot bộ lọc đúng (sai là file ghi kỳ cũ). `webbuild/build.js` ghim Babel `compact: true`. Chi tiết CLAUDE.md Bẫy 18 + mục 3.0.
+
+### Bẫy 19: Ảnh giao diện (v1.9.2)
+- Ảnh để trong `assets/`, gọi `assets/…`; `webbuild/build.js` chép sang `build_web/assets/`, `build_exe.py` đóng `build_web/assets` vào EXE, `server.py` khai báo kiểu `.webp`. Đừng dùng `filter: drop-shadow` lên ảnh lớn (+36 ms lượt vẽ đầu) — bóng của ảnh sóc đã vẽ sẵn trong file. Chi tiết CLAUDE.md Bẫy 19 + mục 3.1.
 
 ---
 

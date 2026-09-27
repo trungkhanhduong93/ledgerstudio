@@ -67,13 +67,23 @@ async function main() {
         presets: ['react', 'env'],
         plugins: ['transform-class-properties', 'transform-object-rest-spread', 'transform-flow-strip-types'],
         targets: { browsers: undefined },
+        // Ghim compact: mặc định 'auto' chỉ nén khoảng trắng khi nguồn > 500 KB → nguồn nhỏ đi dưới ngưỡng là app.js
+        // phình ~20% (xuống dòng + thụt lề). Chỉ khác định dạng, mã chạy y hệt.
+        compact: true,
     }).code;
     const tBabel = Date.now() - t0;
 
-    // ---- 3. Tailwind: config lấy thẳng từ dòng `tailwind.config = {...}` trong index.html ----
-    const cfgMatch = html.match(/tailwind\.config\s*=\s*(\{.*\})\s*$/m);
-    if (!cfgMatch) fail('Khong tim thay dong `tailwind.config = {...}` trong index.html.');
-    const userCfg = new Function(`return (${cfgMatch[1]});`)();
+    // ---- 3. Tailwind: config lấy thẳng từ khối `tailwind.config = {...}` trong index.html (được viết nhiều dòng) ----
+    const cfgAt = html.indexOf('tailwind.config =');
+    if (cfgAt < 0) fail('Khong tim thay `tailwind.config = {...}` trong index.html.');
+    const cfgStart = html.indexOf('{', cfgAt);
+    let depth = 0, cfgEnd = -1;
+    for (let i = cfgStart; i < html.length; i++) {   // config chỉ gồm object/mảng/chuỗi hex → đếm ngoặc là đủ
+        if (html[i] === '{') depth++;
+        else if (html[i] === '}' && --depth === 0) { cfgEnd = i + 1; break; }
+    }
+    if (cfgEnd < 0) fail('Khoi `tailwind.config = {...}` trong index.html khong dong ngoac.');
+    const userCfg = new Function(`return (${html.slice(cfgStart, cfgEnd)});`)();
     const postcss = require('postcss');
     const tailwind = require('tailwindcss');
     const t1 = Date.now();
@@ -117,6 +127,9 @@ async function main() {
     for (const f of fs.readdirSync(path.join(__dirname, 'fonts')).filter(f => f.endsWith('.woff2'))) {
         fs.copyFileSync(path.join(__dirname, 'fonts', f), path.join(OUT, 'vendor', 'fonts', f));
     }
+    // Ảnh giao diện (ảnh sóc màn đăng nhập…) — index.html gọi thẳng assets/… nên bản nguồn và bản EXE cùng một đường dẫn
+    const ASSETS = path.join(ROOT, 'assets');
+    if (fs.existsSync(ASSETS)) fs.cpSync(ASSETS, path.join(OUT, 'assets'), { recursive: true });
 
     const kb = (f) => (fs.statSync(path.join(OUT, f)).size / 1024).toFixed(0) + ' KB';
     console.log(`[webbuild] Babel ${VER.babel} (${tBabel} ms) · Tailwind ${VER.tailwind} (${tTw} ms) · React ${VER.react} · xlsx ${VER.xlsx}`);

@@ -60,6 +60,7 @@ import xlsx_report as XR
 # Font Inter đóng kèm bản EXE (vendor/fonts/*.woff2): registry Windows nhiều máy không có kiểu này
 # → Flask trả application/octet-stream. Khai báo thẳng cho đúng.
 mimetypes.add_type('font/woff2', '.woff2')
+mimetypes.add_type('image/webp', '.webp')   # ảnh sóc màn đăng nhập (assets/soc-it.webp) — cùng lý do
 
 def resource_path(relative_path):
     try:
