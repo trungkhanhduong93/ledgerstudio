@@ -69,6 +69,7 @@
 ### 3.1 Màn hình Đăng nhập (Login Modal)
 - **Tính năng:** Nhập cấu hình máy chủ SQL Server (`Server`, `Database`, `User`, `Password`, `Driver`).
 - **Xử lý Backend:** API `POST /api/login` thực hiện `_make_conn()`, thiết lập `session['db_config']`. Tự động nhận diện danh sách Driver SQL Server (ưu tiên `ODBC Driver 17 for SQL Server`).
+- **Lỗi đăng nhập (v1.9.5):** `_login_error_message` đổi lỗi 08001 / HYT00 (máy không tới được máy chủ — driver "SQL Server" báo "SQL Server does not exist or access denied", DBNETLIB) thành câu tiếng Việt: bật VPN công ty rồi đăng nhập lại. Lỗi khác (sai mật khẩu 28000…) giữ nguyên văn. Driver cũ bỏ qua `timeout=5` (tên sai 11 s, IP không tới được 48 s mới báo) → `_make_conn_capped` nối trong luồng riêng, quá `_LOGIN_WAIT` = 8 s thì báo luôn; kết nối lỡ tới muộn tự đóng. Màn đăng nhập ghi "báo cáo theo thông tư mới nhất" — KHÔNG ghi tên thông tư cụ thể (Trum yêu cầu 27/09).
 - **Ghi nhớ:** Lưu cấu hình vào `localStorage` giúp đăng nhập nhanh lần sau.
 
 ### 3.2 Các Màn hình Dữ liệu thô (Data Tabs)

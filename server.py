@@ -408,6 +408,51 @@ def install_driver():
     success, message = install_odbc_driver()
     return jsonify({"success": success, "message": message})
 
+_LOGIN_WAIT = 8  # giây — kết nối qua VPN bình thường mất dưới 2 s
+
+def _make_conn_capped(db_config, wait=_LOGIN_WAIT):
+    """_make_conn nhưng chờ tối đa `wait` giây. Driver "SQL Server" bỏ qua timeout=5 khi IP không tới được
+    (đo 27/09: 47,7 s mới báo lỗi; tên sai 11,2 s) → chạy trong luồng riêng, quá giờ thì báo TimeoutError.
+    Luồng đó chạy nốt tới khi driver trả về; lỡ nối được thì tự đóng kết nối."""
+    box, lock = {}, threading.Lock()
+
+    def run():
+        try:
+            box['conn'] = _make_conn(db_config)
+        except Exception as e:
+            box['err'] = e
+        with lock:
+            box['done'] = True
+            late = box.get('late')
+        if late and box.get('conn') is not None:
+            try:
+                box['conn'].close()
+            except Exception:
+                pass
+
+    t = threading.Thread(target=run, daemon=True)
+    t.start()
+    t.join(wait)
+    with lock:
+        if not box.get('done'):
+            box['late'] = True
+            raise TimeoutError(f"Quá {wait} giây chưa kết nối được máy chủ")
+    if 'err' in box:
+        raise box['err']
+    return box['conn']
+
+def _login_error_message(e, server_name):
+    """Đổi lỗi đăng nhập sang câu người dùng hiểu được.
+    08001 (driver "SQL Server" báo "SQL Server does not exist or access denied" — DBNETLIB) / HYT00 (hết giờ chờ)
+    / quá _LOGIN_WAIT giây = máy không tới được máy chủ: gần như luôn do chưa bật VPN công ty.
+    Sai mật khẩu là 28000, không vào nhánh này. Loại 'SSL': ODBC Driver 18 báo lỗi chứng chỉ cũng mang mã 08001."""
+    state = e.args[0] if isinstance(e, pyodbc.Error) and e.args else ''
+    text = str(e)
+    if isinstance(e, TimeoutError) or ((state in ('08001', 'HYT00') or '[08001]' in text) and 'SSL' not in text):
+        return (f'Không kết nối được máy chủ "{server_name}" — máy chưa vào mạng công ty. '
+                'Hãy bật VPN công ty rồi đăng nhập lại. Đã bật VPN mà vẫn lỗi thì kiểm tra lại tên máy chủ.')
+    return f"Lỗi kết nối: {text}"
+
 @app.route("/api/login", methods=["POST"])
 def login():
     try:
@@ -418,7 +463,7 @@ def login():
             close_pool_for(old)
 
         # Test kết nối bằng cách tạo conn mới và lưu vào pool luôn
-        conn = _make_conn(data)
+        conn = _make_conn_capped(data)
         # Giữ lại trong pool (không close)
         key = _pool_key(data)
         with _pool_lock:
@@ -428,7 +473,7 @@ def login():
         _meta_cache.pop(data.get('database'), None)
         return jsonify({"status": "ok", "message": "Kết nối SQL Server thành công!"})
     except Exception as e:
-        return jsonify({"status": "error", "message": f"Lỗi kết nối: {str(e)}"}), 401
+        return jsonify({"status": "error", "message": _login_error_message(e, (request.get_json(silent=True) or {}).get('server', ''))}), 401
 
 @app.route("/api/logout", methods=["POST"])
 def logout():
