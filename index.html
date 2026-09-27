@@ -211,6 +211,39 @@ window.showConnectionLost = function() {
         .ds-btn-pri { background: var(--ds-brand); border-color: var(--ds-brand); color: #fff; }
         .ds-btn-pri:hover:not(:disabled) { background: var(--ds-brand-hover); border-color: var(--ds-brand-hover); }
         .ds-btn-pri svg { color: #fff; }
+        @keyframes dsPulseNeedQuery {
+            0% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.7), 0 2px 6px rgba(249, 115, 22, 0.3); transform: scale(1); }
+            50% { box-shadow: 0 0 0 6px rgba(249, 115, 22, 0), 0 4px 12px rgba(249, 115, 22, 0.45); transform: scale(1.02); }
+            100% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0); transform: scale(1); }
+        }
+        @keyframes dsDotBlink {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.3; transform: scale(0.75); }
+        }
+        .ds-btn-need-query {
+            background: linear-gradient(135deg, #f97316 0%, #ea580c 100%) !important;
+            border-color: #c2410c !important;
+            color: #ffffff !important;
+            font-weight: 600 !important;
+            animation: dsPulseNeedQuery 1.8s infinite ease-in-out !important;
+            position: relative;
+        }
+        .ds-btn-need-query:hover:not(:disabled) {
+            background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%) !important;
+            border-color: #9a3412 !important;
+        }
+        .ds-btn-need-query svg { color: #ffffff !important; }
+        .ds-btn-need-query .ds-btn-dirty-dot {
+            position: absolute;
+            top: -3px;
+            right: -3px;
+            width: 9px;
+            height: 9px;
+            background: #ef4444;
+            border: 2px solid #ffffff;
+            border-radius: 50%;
+            animation: dsDotBlink 1.2s infinite ease-in-out;
+        }
         .ds-btn-ghost { border-color: transparent; background: transparent; color: var(--ds-ink-3); }
         .ds-btn-ghost:hover:not(:disabled) { background: var(--ds-tint); border-color: transparent; color: var(--ds-ink); }
         .ds-input { height: 32px; padding: 0 10px; border: 1px solid var(--ds-line); border-radius: 8px; background: #fff; font-size: 12.5px; color: var(--ds-ink); outline: none; transition: border-color .12s, box-shadow .12s, background-color .12s; }
@@ -2075,7 +2108,7 @@ window.showConnectionLost = function() {
             );
         };
 
-        const ReportTab = ({ filters, setFilters, period, setPeriod, meta, onToggleFilter, activeDropdown, setActiveDropdown, reportData: initialReportData, loadReportData, loading, monthList, monthlyData: initialMonthlyData, jobList, jobData: initialJobData, reportType, setReportType, setPendingReportType, setShowClearModal, trialBalanceData, trialBalanceTotal, cashBookData, vatSalesTotals, vatSalesMode, setVatSalesMode, journalViewMode, setJournalViewMode, showNotice }) => {
+        const ReportTab = ({ filters, setFilters, period, setPeriod, meta, onToggleFilter, activeDropdown, setActiveDropdown, reportData: initialReportData, loadReportData, loading, monthList, monthlyData: initialMonthlyData, jobList, jobData: initialJobData, reportType, setReportType, setPendingReportType, setShowClearModal, trialBalanceData, trialBalanceTotal, cashBookData, vatSalesTotals, vatSalesMode, setVatSalesMode, journalViewMode, setJournalViewMode, showNotice, isDirty }) => {
             const paperScrollRef = React.useRef(null);
             const paperRef = React.useRef(null), sizerRef = React.useRef(null);   // ReportBar đặt zoom vào tờ này
             const isLandscape = ['BC001', 'BC002', 'BC003', 'BC004', 'BC006', 'BC007', 'BC011', 'BC012', 'BC013'].includes(reportType);
@@ -2460,9 +2493,15 @@ window.showConnectionLost = function() {
                             <div className="ml-auto flex items-center gap-2">
                                 <button onClick={() => setShowExport(true)} title="Xuất Excel chuẩn form (.xlsx) hoặc CSV" disabled={reportType === 'BC012' ? cbRows.length === 0 : (reportType === 'BC006' || reportType === 'BC011') ? trialBalanceData.length === 0 : Object.keys(reportData).length === 0} className="ds-btn"><Icon name="file-spreadsheet" size={14} stroke={2} className="ds-ic-ok"/> Xuất Excel</button>
                                 <button onClick={exportToPDF} disabled={reportType === 'BC012' ? cbRows.length === 0 : (reportType === 'BC006' || reportType === 'BC011') ? trialBalanceData.length === 0 : Object.keys(reportData).length === 0} className="ds-btn"><Icon name="download" size={14} stroke={2}/> PDF</button>
-                                <button onClick={() => loadReportData(1)} disabled={loading} className="ds-btn ds-btn-pri">
+                                <button 
+                                    onClick={() => loadReportData(1)} 
+                                    disabled={loading} 
+                                    title={isDirty ? 'Bộ lọc đã thay đổi! Nhấn để cập nhật báo cáo mới' : 'Xem báo cáo'} 
+                                    className={`ds-btn ds-btn-pri ${isDirty ? 'ds-btn-need-query' : ''}`}
+                                >
+                                    {isDirty && <span className="ds-btn-dirty-dot" />}
                                     {loading ? <Icon name="loader" size={14} className="animate-spin" /> : <Icon name="search" size={14} stroke={2} />}
-                                    <span>Xem báo cáo</span>
+                                    <span>{loading ? 'Đang kết xuất' : isDirty ? 'Cập nhật báo cáo' : 'Xem báo cáo'}</span>
                                 </button>
                             </div>
                         </div>
@@ -3798,6 +3837,7 @@ window.showConnectionLost = function() {
                         setPagination(res.pagination);
                         setSummary(res.summary);
                         setFilters(p => ({ ...p, page: targetPage, page_size: targetPageSize }));
+                        markTabApplied('ledger');
                         // đo tới lúc bảng vẽ xong (2 khung hình sau khi đổi state)
                         const st = parseServerTiming(r.headers.get('Server-Timing'));
                         requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -3956,6 +3996,7 @@ window.showConnectionLost = function() {
                         setSalePagination(res.pagination);
                         if (res.summary) setSaleSummary(res.summary);
                         setFilters(p => ({ ...p, page: targetPage, page_size: targetPageSize }));
+                        markTabApplied('sale');
                     } else {
                         alert('Lỗi truy vấn SALE_VIEW:\n\n' + (res.message || JSON.stringify(res)));
                     }
@@ -4026,6 +4067,7 @@ window.showConnectionLost = function() {
                         setIncomeAllocData(res.data);
                         setIncomeAllocPagination(res.pagination);
                         if (res.summary) setIncomeAllocSummary(res.summary);
+                        markTabApplied('income_alloc');
                     } else {
                         alert('Lỗi truy vấn Doanh thu chờ phân bổ:\n\n' + (res.message || JSON.stringify(res)));
                     }
@@ -4131,6 +4173,7 @@ window.showConnectionLost = function() {
                         setVoucherPagination(res.pagination);
                         if (res.summary) setVoucherSummary(res.summary);
                         setFilters(p => ({ ...p, page: targetPage, page_size: targetPageSize }));
+                        markTabApplied('voucher');
                     } else {
                         alert('Lỗi truy vấn VOUCHER_VIEW:\n\n' + (res.message || JSON.stringify(res)));
                     }
@@ -4312,6 +4355,7 @@ window.showConnectionLost = function() {
                         setPurchasePagination(res.pagination);
                         if (res.summary) setPurchaseSummary(res.summary);
                         setFilters(p => ({ ...p, page: targetPage, page_size: targetPageSize }));
+                        markTabApplied('purchase');
                     } else {
                         alert('Lỗi truy vấn PURCHASE_VIEW:\n\n' + (res.message || JSON.stringify(res)));
                     }
@@ -4456,6 +4500,7 @@ window.showConnectionLost = function() {
                         setWarehousePagination(res.pagination);
                         if (res.summary) setWarehouseSummary(res.summary);
                         setFilters(p => ({ ...p, page: targetPage, page_size: targetPageSize }));
+                        markTabApplied('warehouse');
                     } else {
                         alert('Lỗi truy vấn WAREHOUSE_VIEW:\n\n' + (res.message || JSON.stringify(res)));
                     }
@@ -4546,6 +4591,7 @@ window.showConnectionLost = function() {
                         setWarehouseBalanceData(res.data);
                         setWarehouseBalancePagination(res.pagination);
                         setFilters(p => ({ ...p, page_size: targetPageSize }));
+                        markTabApplied('warehouse_balance');
                     } else {
                         alert('Lỗi truy vấn tồn kho thực tế:\n\n' + (res.message || JSON.stringify(res)));
                     }
@@ -4639,6 +4685,7 @@ window.showConnectionLost = function() {
                         setPrDetailPagination(res.pagination || { total_rows: 0, total_pages: 1, page: 1 });
                         if (res.summary) setPrDetailSummary(res.summary);
                         setPrDetailPageSize(targetPageSize);
+                        markTabApplied('pr_detail');
                     } else {
                         alert('Lỗi truy vấn danh mục đối tượng:\n\n' + (res.message || JSON.stringify(res)));
                     }
@@ -4651,6 +4698,154 @@ window.showConnectionLost = function() {
             useEffect(() => {
                 if (isLoggedIn && activeTab === 'pr_detail' && prDetailData.length > 0) loadPrDetailData(1, prDetailPageSize);
             }, [prDetailSort]);
+
+            // ============ THEO DÕI THAY ĐỔI BỘ LỌC (DIRTY FILTER TRACKING) ============
+            const [appliedSnapshots, setAppliedSnapshots] = useState({});
+
+            const getTabFilterSnapshot = useCallback((tab) => {
+                try {
+                    if (tab === 'ledger') {
+                        return JSON.stringify([
+                            filters.from_date, filters.to_date,
+                            (filters.org_ids||[]).slice().sort(),
+                            (filters.tran_ids||[]).slice().sort(),
+                            (filters.acc_ids||[]).slice().sort(),
+                            (filters.contra_acc_ids||[]).slice().sort(),
+                            (filters.job_ids||[]).slice().sort(),
+                            (filters.expense_ids||[]).slice().sort(),
+                            (filters.item_ids||[]).slice().sort(),
+                            (filters.product_ids||[]).slice().sort(),
+                        ]);
+                    }
+                    if (tab === 'sale') {
+                        return JSON.stringify([
+                            filters.from_date, filters.to_date,
+                            (filters.org_ids||[]).slice().sort(),
+                            (filters.tran_ids||[]).slice().sort(),
+                            (filters.job_ids||[]).slice().sort(),
+                            (filters.expense_ids||[]).slice().sort(),
+                            (filters.item_ids||[]).slice().sort(),
+                            (filters.pr_detail_ids||[]).slice().sort(),
+                            (filters.acc_ids||[]).slice().sort(),
+                            (saleFilters.wh_ids||[]).slice().sort(),
+                            saleFilters.tran_no_search || '',
+                            saleFilters.is_return || '',
+                        ]);
+                    }
+                    if (tab === 'income_alloc') {
+                        return JSON.stringify([
+                            filters.from_date, filters.to_date,
+                            (filters.org_ids||[]).slice().sort(),
+                            (filters.tran_ids||[]).slice().sort(),
+                            (filters.acc_ids||[]).slice().sort(),
+                            (filters.contra_acc_ids||[]).slice().sort(),
+                            (filters.job_ids||[]).slice().sort(),
+                            (filters.expense_ids||[]).slice().sort(),
+                            (filters.item_ids||[]).slice().sort(),
+                            (filters.pr_detail_ids||[]).slice().sort(),
+                            incomeAllocFilters.active,
+                            incomeAllocFilters.alloc_status,
+                            (incomeAllocFilters.acc_des_ids||[]).slice().sort(),
+                            incomeAllocFilters.tran_no_search || '',
+                        ]);
+                    }
+                    if (tab === 'voucher') {
+                        return JSON.stringify([
+                            filters.from_date, filters.to_date,
+                            (filters.org_ids||[]).slice().sort(),
+                            (filters.tran_ids||[]).slice().sort(),
+                            (filters.acc_ids||[]).slice().sort(),
+                            (filters.contra_acc_ids||[]).slice().sort(),
+                            (filters.job_ids||[]).slice().sort(),
+                            (filters.expense_ids||[]).slice().sort(),
+                            (filters.pr_detail_ids||[]).slice().sort(),
+                            voucherFilters.tran_no_search || '',
+                        ]);
+                    }
+                    if (tab === 'purchase') {
+                        return JSON.stringify([
+                            filters.from_date, filters.to_date,
+                            (filters.org_ids||[]).slice().sort(),
+                            (filters.tran_ids||[]).slice().sort(),
+                            (filters.job_ids||[]).slice().sort(),
+                            (filters.expense_ids||[]).slice().sort(),
+                            (filters.item_ids||[]).slice().sort(),
+                            (filters.pr_detail_ids||[]).slice().sort(),
+                            (purchaseFilters.wh_ids||[]).slice().sort(),
+                            purchaseFilters.tran_no_search || '',
+                        ]);
+                    }
+                    if (tab === 'warehouse') {
+                        return JSON.stringify([
+                            filters.from_date, filters.to_date,
+                            (filters.org_ids||[]).slice().sort(),
+                            (filters.tran_ids||[]).slice().sort(),
+                            (filters.job_ids||[]).slice().sort(),
+                            (filters.expense_ids||[]).slice().sort(),
+                            (filters.item_ids||[]).slice().sort(),
+                            (filters.product_ids||[]).slice().sort(),
+                            (filters.pr_detail_ids||[]).slice().sort(),
+                            warehouseFilters.issue_receive || '',
+                            (warehouseFilters.wh_ids||[]).slice().sort(),
+                            warehouseFilters.tran_no_search || '',
+                        ]);
+                    }
+                    if (tab === 'warehouse_balance') {
+                        return JSON.stringify([
+                            filters.from_date, filters.to_date,
+                            (filters.org_ids||[]).slice().sort(),
+                            (filters.acc_ids||[]).slice().sort(),
+                            (filters.item_ids||[]).slice().sort(),
+                            (warehouseBalanceFilters.wh_ids||[]).slice().sort(),
+                        ]);
+                    }
+                    if (tab === 'pr_detail') {
+                        return JSON.stringify([
+                            (prDetailFilters.search || '').trim(),
+                            prDetailFilters.active || '',
+                            (prDetailFilters.class_ids||[]).slice().sort(),
+                        ]);
+                    }
+                    if (tab === 'report') {
+                        return JSON.stringify([
+                            reportType,
+                            filters.from_date, filters.to_date,
+                            (filters.org_ids||[]).slice().sort(),
+                            (filters.acc_ids||[]).slice().sort(),
+                            (filters.contra_acc_ids||[]).slice().sort(),
+                            (filters.job_ids||[]).slice().sort(),
+                            (filters.pr_detail_ids||[]).slice().sort(),
+                            filters.tran_no || '',
+                            journalViewMode,
+                            vatSalesMode,
+                        ]);
+                    }
+                } catch (e) {
+                    return '';
+                }
+                return '';
+            }, [filters, saleFilters, incomeAllocFilters, voucherFilters, purchaseFilters, warehouseFilters, warehouseBalanceFilters, prDetailFilters, reportType, journalViewMode, vatSalesMode]);
+
+            const markTabApplied = (tab) => {
+                setAppliedSnapshots(p => ({ ...p, [tab]: getTabFilterSnapshot(tab) }));
+            };
+
+            const isTabDirty = (tab) => {
+                const cur = getTabFilterSnapshot(tab);
+                const app = appliedSnapshots[tab];
+                if (tab === 'pr_detail') {
+                    if (!app) {
+                        return !!((prDetailFilters.search && prDetailFilters.search.trim()) || prDetailFilters.active || (prDetailFilters.class_ids && prDetailFilters.class_ids.length > 0));
+                    }
+                    return cur !== app;
+                }
+                if (tab === 'report') {
+                    if (!app) return false;
+                    return cur !== app;
+                }
+                if (app === undefined) return false;
+                return cur !== app;
+            };
 
             // ============ EXCEL EXPORT ============
             const LEDGER_EXPORT_COLS = [
@@ -5175,6 +5370,7 @@ window.showConnectionLost = function() {
                         if (res.status === 'ok') {
                             setTrialBalanceData(res.data);
                             setTrialBalanceTotal(res.total);
+                            markTabApplied('report');
                         }
                     } else if (reportType === 'BC005') {
                         const r = await fetch(`/api/balance_sheet?${query.toString()}`, { signal: abortRef.current.signal });
@@ -5186,6 +5382,7 @@ window.showConnectionLost = function() {
                             setMonthlyData({});
                             setJobList([]);
                             setJobData({});
+                            markTabApplied('report');
                         }
                     } else if (reportType === 'BC007') {
                         const r = await fetch(`/api/journal?${query.toString()}`, { signal: abortRef.current.signal });
@@ -5193,6 +5390,7 @@ window.showConnectionLost = function() {
                         const res = await r.json();
                         if (res.status === 'ok') {
                             setReportData(res);
+                            markTabApplied('report');
                         }
                     } else if (reportType === 'BC008') {
                         const r = await fetch(`/api/account_details?${query.toString()}&account_id=${filters.acc_ids.join(',')}`, { signal: abortRef.current.signal });
@@ -5200,6 +5398,7 @@ window.showConnectionLost = function() {
                         const res = await r.json();
                         if (res.status === 'ok') {
                             setReportData(res);
+                            markTabApplied('report');
                         } else {
                             alert('Lỗi xem Sổ chi tiết: ' + (res.message || 'không có dữ liệu'));
                         }
@@ -5211,6 +5410,7 @@ window.showConnectionLost = function() {
                         if (res.status === 'ok') {
                             setTrialBalanceData(res.data);
                             setTrialBalanceTotal(res.total);
+                            markTabApplied('report');
                         } else {
                             alert('Lỗi xem báo cáo công nợ: ' + (res.message || 'không có dữ liệu'));
                         }
@@ -5223,6 +5423,7 @@ window.showConnectionLost = function() {
                     if (res.status === 'ok') {
                         setReportData(res);
                         setVatSalesTotals(res.totals || { total_amount_item: 0, taxable_amount_item: 0, total_vat_amount: 0 });
+                        markTabApplied('report');
                     } else {
                         alert('Lỗi xem bảng kê bán ra: ' + (res.message || 'không có dữ liệu'));
                     }
@@ -5233,6 +5434,7 @@ window.showConnectionLost = function() {
                         const res = await r.json();
                         if (res.status === 'ok') {
                             setCashBookData({ rows: res.rows || [], pagination: res.pagination || { total_rows: 0, total_pages: 1, page: 1 } });
+                            markTabApplied('report');
                         } else {
                             alert('Lỗi xem Sổ tiền mặt và ngân hàng: ' + (res.message || 'không có dữ liệu'));
                         }
@@ -5244,6 +5446,7 @@ window.showConnectionLost = function() {
                             const cf = res.data || {};
                             setReportData(reportType === 'BC009' ? (cf.direct || {}) : (cf.indirect || {}));
                             setMonthList([]); setMonthlyData({}); setJobList([]); setJobData({});
+                            markTabApplied('report');
                         }
                     }
                 } catch (err) {
@@ -5433,9 +5636,15 @@ window.showConnectionLost = function() {
                                                     />
                                             <span className="ds-meta"><b>{pagination.total_rows?.toLocaleString()}</b> dòng</span>
                                             <ExportButton kind="ledger" />
-                                            <button onClick={() => loadData(1, filters.page_size, null, { fresh: true })} disabled={loading} className="ds-btn ds-btn-pri">
+                                            <button 
+                                                onClick={() => loadData(1, filters.page_size, null, { fresh: true })} 
+                                                disabled={loading} 
+                                                title={isTabDirty('ledger') ? 'Bộ lọc đã thay đổi! Nhấn để áp dụng bộ lọc mới' : 'Truy vấn dữ liệu'}
+                                                className={`ds-btn ds-btn-pri ${isTabDirty('ledger') ? 'ds-btn-need-query' : ''}`}
+                                            >
+                                                {isTabDirty('ledger') && <span className="ds-btn-dirty-dot" />}
                                                 {loading && activeTab === 'ledger' ? <Icon name="loader" size={14} className="animate-spin" /> : <Icon name="search" size={14} stroke={2} />}
-                                                <span>{loading && activeTab === 'ledger' ? 'Đang tải' : 'Truy vấn'}</span>
+                                                <span>{loading && activeTab === 'ledger' ? 'Đang tải' : isTabDirty('ledger') ? 'Áp dụng bộ lọc' : 'Truy vấn'}</span>
                                             </button>
                                         </div>
                                     </div>
@@ -5625,9 +5834,15 @@ window.showConnectionLost = function() {
                                             <PageSizeDropdown value={filters.page_size} onChange={newSize => { setFilters(p => ({ ...p, page_size: newSize, page: 1 })); }} />
                                             <span className="ds-meta"><b>{salePagination.total_rows?.toLocaleString()}</b> dòng</span>
                                             <ExportButton kind="sale" />
-                                            <button onClick={() => loadSaleData()} disabled={saleLoading} className="ds-btn ds-btn-pri">
+                                            <button 
+                                                onClick={() => loadSaleData()} 
+                                                disabled={saleLoading} 
+                                                title={isTabDirty('sale') ? 'Bộ lọc đã thay đổi! Nhấn để áp dụng bộ lọc mới' : 'Truy vấn dữ liệu'}
+                                                className={`ds-btn ds-btn-pri ${isTabDirty('sale') ? 'ds-btn-need-query' : ''}`}
+                                            >
+                                                {isTabDirty('sale') && <span className="ds-btn-dirty-dot" />}
                                                 {saleLoading ? <Icon name="loader" size={14} className="animate-spin" /> : <Icon name="search" size={14} stroke={2} />}
-                                                <span>{saleLoading ? 'Đang tải' : 'Truy vấn'}</span>
+                                                <span>{saleLoading ? 'Đang tải' : isTabDirty('sale') ? 'Áp dụng bộ lọc' : 'Truy vấn'}</span>
                                             </button>
                                         </div>
                                     </div>
@@ -5829,9 +6044,15 @@ window.showConnectionLost = function() {
                                             <PageSizeDropdown value={incomeAllocPageSize} onChange={newSize => { setIncomeAllocPageSize(newSize); }} />
                                             <span className="ds-meta"><b>{incomeAllocPagination.total_rows?.toLocaleString()}</b> dòng</span>
                                             <ExportButton kind="income_alloc" />
-                                            <button onClick={() => loadIncomeAllocData()} disabled={incomeAllocLoading} className="ds-btn ds-btn-pri">
+                                            <button 
+                                                onClick={() => loadIncomeAllocData()} 
+                                                disabled={incomeAllocLoading} 
+                                                title={isTabDirty('income_alloc') ? 'Bộ lọc đã thay đổi! Nhấn để áp dụng bộ lọc mới' : 'Truy vấn dữ liệu'}
+                                                className={`ds-btn ds-btn-pri ${isTabDirty('income_alloc') ? 'ds-btn-need-query' : ''}`}
+                                            >
+                                                {isTabDirty('income_alloc') && <span className="ds-btn-dirty-dot" />}
                                                 {incomeAllocLoading ? <Icon name="loader" size={14} className="animate-spin" /> : <Icon name="search" size={14} stroke={2} />}
-                                                <span>{incomeAllocLoading ? 'Đang tải' : 'Truy vấn'}</span>
+                                                <span>{incomeAllocLoading ? 'Đang tải' : isTabDirty('income_alloc') ? 'Áp dụng bộ lọc' : 'Truy vấn'}</span>
                                             </button>
                                         </div>
                                     </div>
@@ -5953,9 +6174,15 @@ window.showConnectionLost = function() {
                                             <PageSizeDropdown value={filters.page_size} onChange={newSize => { setFilters(p => ({ ...p, page_size: newSize, page: 1 })); }} />
                                             <span className="ds-meta"><b>{voucherPagination.total_rows?.toLocaleString()}</b> dòng</span>
                                             <ExportButton kind="voucher" />
-                                            <button onClick={() => loadVoucherData()} disabled={voucherLoading} className="ds-btn ds-btn-pri">
+                                            <button 
+                                                onClick={() => loadVoucherData()} 
+                                                disabled={voucherLoading} 
+                                                title={isTabDirty('voucher') ? 'Bộ lọc đã thay đổi! Nhấn để áp dụng bộ lọc mới' : 'Truy vấn dữ liệu'}
+                                                className={`ds-btn ds-btn-pri ${isTabDirty('voucher') ? 'ds-btn-need-query' : ''}`}
+                                            >
+                                                {isTabDirty('voucher') && <span className="ds-btn-dirty-dot" />}
                                                 {voucherLoading ? <Icon name="loader" size={14} className="animate-spin" /> : <Icon name="search" size={14} stroke={2} />}
-                                                <span>{voucherLoading ? 'Đang tải' : 'Truy vấn'}</span>
+                                                <span>{voucherLoading ? 'Đang tải' : isTabDirty('voucher') ? 'Áp dụng bộ lọc' : 'Truy vấn'}</span>
                                             </button>
                                         </div>
                                     </div>
@@ -6127,9 +6354,15 @@ window.showConnectionLost = function() {
                                                     />
                                             <span className="ds-meta"><b>{purchasePagination.total_rows?.toLocaleString()}</b> dòng</span>
                                             <ExportButton kind="purchase" />
-                                            <button onClick={() => loadPurchaseData()} disabled={purchaseLoading} className="ds-btn ds-btn-pri">
+                                            <button 
+                                                onClick={() => loadPurchaseData()} 
+                                                disabled={purchaseLoading} 
+                                                title={isTabDirty('purchase') ? 'Bộ lọc đã thay đổi! Nhấn để áp dụng bộ lọc mới' : 'Truy vấn dữ liệu'}
+                                                className={`ds-btn ds-btn-pri ${isTabDirty('purchase') ? 'ds-btn-need-query' : ''}`}
+                                            >
+                                                {isTabDirty('purchase') && <span className="ds-btn-dirty-dot" />}
                                                 {purchaseLoading ? <Icon name="loader" size={14} className="animate-spin" /> : <Icon name="search" size={14} stroke={2} />}
-                                                <span>{purchaseLoading ? 'Đang tải' : 'Truy vấn'}</span>
+                                                <span>{purchaseLoading ? 'Đang tải' : isTabDirty('purchase') ? 'Áp dụng bộ lọc' : 'Truy vấn'}</span>
                                             </button>
                                         </div>
                                     </div>
@@ -6326,9 +6559,15 @@ window.showConnectionLost = function() {
                                                     />
                                             <span className="ds-meta"><b>{warehousePagination.total_rows?.toLocaleString()}</b> dòng</span>
                                             <ExportButton kind="warehouse" />
-                                            <button onClick={() => loadWarehouseData()} disabled={warehouseLoading} className="ds-btn ds-btn-pri">
+                                            <button 
+                                                onClick={() => loadWarehouseData()} 
+                                                disabled={warehouseLoading} 
+                                                title={isTabDirty('warehouse') ? 'Bộ lọc đã thay đổi! Nhấn để áp dụng bộ lọc mới' : 'Truy vấn dữ liệu'}
+                                                className={`ds-btn ds-btn-pri ${isTabDirty('warehouse') ? 'ds-btn-need-query' : ''}`}
+                                            >
+                                                {isTabDirty('warehouse') && <span className="ds-btn-dirty-dot" />}
                                                 {warehouseLoading ? <Icon name="loader" size={14} className="animate-spin" /> : <Icon name="search" size={14} stroke={2} />}
-                                                <span>{warehouseLoading ? 'Đang tải' : 'Truy vấn'}</span>
+                                                <span>{warehouseLoading ? 'Đang tải' : isTabDirty('warehouse') ? 'Áp dụng bộ lọc' : 'Truy vấn'}</span>
                                             </button>
                                         </div>
                                     </div>
@@ -6505,9 +6744,15 @@ window.showConnectionLost = function() {
                                                     />
                                             <span className="ds-meta"><b>{warehouseBalancePagination.total_rows?.toLocaleString()}</b> dòng</span>
                                             <ExportButton kind="warehouse_balance" />
-                                            <button onClick={() => loadWarehouseBalanceData()} disabled={warehouseBalanceLoading} className="ds-btn ds-btn-pri">
+                                            <button 
+                                                onClick={() => loadWarehouseBalanceData()} 
+                                                disabled={warehouseBalanceLoading} 
+                                                title={isTabDirty('warehouse_balance') ? 'Bộ lọc đã thay đổi! Nhấn để áp dụng bộ lọc mới' : 'Truy vấn dữ liệu'}
+                                                className={`ds-btn ds-btn-pri ${isTabDirty('warehouse_balance') ? 'ds-btn-need-query' : ''}`}
+                                            >
+                                                {isTabDirty('warehouse_balance') && <span className="ds-btn-dirty-dot" />}
                                                 {warehouseBalanceLoading ? <Icon name="loader" size={14} className="animate-spin" /> : <Icon name="search" size={14} stroke={2} />}
-                                                <span>{warehouseBalanceLoading ? 'Đang tải' : 'Truy vấn'}</span>
+                                                <span>{warehouseBalanceLoading ? 'Đang tải' : isTabDirty('warehouse_balance') ? 'Áp dụng bộ lọc' : 'Truy vấn'}</span>
                                             </button>
                                         </div>
                                     </div>
@@ -6642,9 +6887,15 @@ window.showConnectionLost = function() {
                                             <PageSizeDropdown value={prDetailPageSize} onChange={newSize => { setPrDetailPageSize(newSize); loadPrDetailData(1, newSize); }} />
                                             <span className="ds-meta"><b>{prDetailPagination.total_rows?.toLocaleString()}</b> đối tượng</span>
                                             <ExportButton kind="pr_detail" />
-                                            <button onClick={() => loadPrDetailData(1, prDetailPageSize)} disabled={prDetailLoading} className="ds-btn ds-btn-pri">
+                                            <button 
+                                                onClick={() => loadPrDetailData(1, prDetailPageSize)} 
+                                                disabled={prDetailLoading} 
+                                                title={isTabDirty('pr_detail') ? 'Bộ lọc đã thay đổi! Nhấn để áp dụng bộ lọc mới' : 'Truy vấn danh mục đối tượng'}
+                                                className={`ds-btn ds-btn-pri ${isTabDirty('pr_detail') ? 'ds-btn-need-query' : ''}`}
+                                            >
+                                                {isTabDirty('pr_detail') && <span className="ds-btn-dirty-dot" />}
                                                 {prDetailLoading ? <Icon name="loader" size={14} className="animate-spin" /> : <Icon name="search" size={14} stroke={2} />}
-                                                <span>{prDetailLoading ? 'Đang tải' : 'Truy vấn'}</span>
+                                                <span>{prDetailLoading ? 'Đang tải' : isTabDirty('pr_detail') ? 'Áp dụng bộ lọc' : 'Truy vấn'}</span>
                                             </button>
                                         </div>
                                     </div>
@@ -6807,6 +7058,7 @@ window.showConnectionLost = function() {
                                 vatSalesMode={vatSalesMode}
                                 setVatSalesMode={setVatSalesMode}
                                 showNotice={showNotice}
+                                isDirty={isTabDirty('report')}
                             />
                         </div>
                     )}
