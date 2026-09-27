@@ -2,7 +2,7 @@
 
 > Toàn bộ những gì đã làm với **LedgerStudio**, và **vì sao**. Đọc file này trước khi sửa tiếp.
 > Kiến trúc và ma trận báo cáo: [CLAUDE.md](CLAUDE.md).
-> Phiên gần nhất: **27/09/2026** · EXE build mới nhất: **iPOS_Ledger_Studio v1.9.4** — tên hiển thị DataStudio · bản phát hành: v1.9.4
+> Phiên gần nhất: **27/09/2026** · EXE build mới nhất: **iPOS_Ledger_Studio v1.9.5** — tên hiển thị DataStudio · bản phát hành: v1.9.5
 
 ---
 
@@ -803,3 +803,36 @@ tạo lại từ EXE mới. API công khai `releases/latest` trả `v1.9.4`, dig
 **Test cập nhật thật:** EXE release v1.9.3 (SHA khớp asset) → `check_update`: có v1.9.4 → bấm "Cập nhật ngay" trên giao diện
 v1.9.3 → tải 100% trong 8 s → bản 1.9.4 lên sau 16 s kể từ lúc bấm → thư mục còn 1 file, SHA = asset v1.9.4, hết báo bản mới,
 `/api/ledger` chưa đăng nhập 401. Đã tắt EXE test + cửa sổ app.
+
+---
+
+## 23. v1.9.5: đăng nhập báo bật VPN + chờ tối đa 8 s + bỏ tên Thông tư 200 *(27/09/2026)*
+
+**Yêu cầu Trum:** đăng nhập báo `08001 … [DBNETLIB] SQL Server does not exist or access denied … ConnectionOpen (Connect())` là do
+chưa bật VPN công ty → dịch ra, bảo người dùng bật VPN; rút thời gian chờ; bỏ chữ "Thông tư 200", ghi "thông tư mới nhất".
+
+**Đã sửa (`server.py`, `index.html`):**
+- `_login_error_message`: 08001 / HYT00 / quá giờ chờ → *Không kết nối được máy chủ "X" — máy chưa vào mạng công ty. Hãy bật VPN
+  công ty rồi đăng nhập lại. Đã bật VPN mà vẫn lỗi thì kiểm tra lại tên máy chủ.* Lỗi khác giữ nguyên văn. Loại 08001 có chữ `SSL`
+  (ODBC Driver 18 báo lỗi chứng chỉ cùng mã).
+- `_make_conn_capped` (chỉ `/api/login` dùng): driver "SQL Server" bỏ qua `timeout=5` → nối trong luồng riêng, `join(8)`, quá giờ
+  thì `TimeoutError`; luồng chạy nốt, lỡ nối được thì tự `close()`. 5 chỗ khác gọi `_make_conn` giữ nguyên.
+- Màn đăng nhập: "lập báo cáo theo Thông tư 200." → "… theo thông tư mới nhất.". Đây là chỗ DUY NHẤT người dùng thấy tên thông tư;
+  còn 3 comment code (server.py BC005/BC009, index.html mã mẫu F01) + `temp.jsx` (file cũ không dùng) — giữ nguyên.
+
+**Verify (driver "SQL Server", test_client + EXE 1.9.5):**
+
+| Ca | Trước | Sau |
+|---|---|---|
+| Tên máy chủ sai (DNS) | 11,2 s, lỗi ODBC tiếng Anh | 8,0 s, câu bật VPN |
+| IP không tới được (IP nội bộ giả) | 47,7 s, lỗi ODBC | 8,0 s (EXE qua giao diện: 8,1 s), câu bật VPN |
+| Sai mật khẩu (`localhost\SQLEXPRESS`) | 28000 nguyên văn | giữ nguyên, 0,0 s |
+| Đăng nhập đúng (vá Windows auth) | — | HTTP 200, `/api/metadata` 200 |
+| Kết nối tới muộn (giả lập 1,5 s, chờ 0,5 s) | — | `TimeoutError` sau 0,5 s, kết nối muộn `closed = True` |
+
+**Phát hành:** QA 🟢 (không IP/mật khẩu trong diff). Build lại với `version.txt` đặt tạm 1.9.4 → EXE 1.9.5 16.536.251 byte.
+Commit `8235ccd` push `main` → `gh release create v1.9.5` (+ zip tạo lại). API `releases/latest` = `v1.9.5`, digest exe
+`d3b8b044…` / zip `82e75bfd…` = SHA-256 local.
+
+**Test cập nhật thật:** EXE release v1.9.4 (SHA khớp asset) → `check_update` có v1.9.5 → bấm "Cập nhật ngay" → tải 100% trong
+8,3 s → server cũ thoát ở 9,8 s → 1.9.5 lên ngay sau đó → thư mục còn 1 file, SHA = asset v1.9.5, `has_update=False`. Đã tắt EXE test.

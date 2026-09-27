@@ -289,6 +289,10 @@ Một công cụ/script "thêm NOLOCK" chạy lên `server.py` đã **làm hỏn
 
 ## 13. Changelog & bàn giao chi tiết
 
+### 2026-09-27 — v1.9.5: đăng nhập báo bật VPN + chờ tối đa 8 s + bỏ tên Thông tư 200 *(chỉ LedgerStudio)*
+
+Đăng nhập lỗi 08001/HYT00 (máy không tới được máy chủ — thường do chưa bật VPN công ty) → câu tiếng Việt yêu cầu bật VPN (`_login_error_message`); lỗi khác giữ nguyên văn. `_make_conn_capped` chặn chờ 8 s (driver "SQL Server" bỏ qua `timeout=5`: IP không tới được 47,7 s → 8 s). Màn đăng nhập ghi "theo thông tư mới nhất" thay "Thông tư 200". **Đã phát hành** GitHub Release `v1.9.5` (commit `8235ccd`); cập nhật thật từ EXE release v1.9.4 đạt. Chi tiết: `NHAT_KY_CONG_VIEC.md` mục 23; CLAUDE.md mục 3.1.
+
 ### 2026-09-27 — v1.9.4: kéo thanh cuộn mượt + tiêu đề bảng lọt chữ + cột mã dropdown *(chỉ LedgerStudio)*
 
 Trum báo 3 lỗi sau khi dùng 1.9.3. (1) Cuộn bảng thì chữ dòng dưới lọt lên khe giữa hàng tiêu đề và hàng ô tìm — Chrome vẽ sai `thead` dính với viền gộp; 7 bảng chuyển sang viền tách (`border-collapse: separate`), vạch ngang dời xuống ô. (2) Kéo thanh cuộn giật — mỗi khung hình vẽ lại ~130 dòng + cả App và vẽ sau khi khung hình hiện; tách `VirtualRows` (hook bảng ảo ra khỏi App), chế độ kéo nhanh (8 dòng dự phòng, `flushSync`, dùng lại `<tr>`): 10.000 dòng 89 → 16 ms/khung (CPU ×4: 286 → 78 ms), hết khung trắng. (3) Dropdown lọc: cột mã đo bề rộng mã dài nhất → tên thẳng hàng. Verify: dòng hiện đúng dữ liệu mọi khung khi kéo, 7 bảng trùng toạ độ cột/chiều cao dòng với 1.9.3, thao tác bảng + panel lọc + bản nguồn đạt, EXE 1.9.4 chạy đúng. **Đã phát hành** GitHub Release `v1.9.4` (commit `71e8295`, Release mới nhất); cập nhật thật từ EXE release v1.9.3: 16 giây, thư mục còn 1 file, SHA khớp asset. Chi tiết: `NHAT_KY_CONG_VIEC.md` mục 22; bẫy CLAUDE.md 16, 22.
