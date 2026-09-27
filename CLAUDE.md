@@ -8,7 +8,7 @@
 > Remote cũ từng trỏ nhầm repo **LedgerReport** (gỡ 16/08/2026): push nhầm là đè code Studio lên `main` của Report.
 > Repo công khai → **cấm commit mật khẩu / IP server DB / file dữ liệu khách** (`BaoCaoMau/` đã `.gitignore`).
 > Build vẫn chạy **`BuildEXE-LedgerStudio.bat`**, EXE nằm trong `dist` (không lên git). Phát hành qua **GitHub Releases** — app từ v1.8.3 tự cập nhật (mục 5, Bước 5).
-> **Cập nhật gần nhất:** 27/09/2026 (v1.9.2: màn đăng nhập — mục 3.1, Bẫy 19 · v1.9.1: hộp thoại — mục 3.0, Bẫy 18 · v1.9.0: khung báo cáo + zoom — mục 3.0, Bẫy 17 · v1.8.9: bảng dữ liệu + cuộn mượt — mục 3.0, Bẫy 16 · v1.8.8: thanh lọc chip · v1.8.7: khung + tên DataStudio — Bẫy 15 · v1.8.6: giao diện dịch sẵn — Bẫy 14)
+> **Cập nhật gần nhất:** 27/09/2026 (**v1.9.2 đã phát hành** — Release mới nhất; test cập nhật thật từ v1.8.5 · v1.9.2: màn đăng nhập — mục 3.1, Bẫy 19 · v1.9.1: hộp thoại — mục 3.0, Bẫy 18 · v1.9.0: khung báo cáo + zoom — mục 3.0, Bẫy 17 · v1.8.9: bảng dữ liệu + cuộn mượt — mục 3.0, Bẫy 16 · v1.8.8: thanh lọc chip · v1.8.7: khung + tên DataStudio — Bẫy 15 · v1.8.6: giao diện dịch sẵn — Bẫy 14)
 
 ---
 
@@ -285,10 +285,14 @@ python build_exe.py
 # 1. Đẩy mã nguồn đúng bản vừa build
 git remote get-url origin          # phải ra .../ledgerstudio.git
 git add -A && git commit -m "vX.Y.Z: ..." && git push origin main
-# 2. Release: tag = version.txt, asset tên ĐÚNG iPOS_Ledger_Studio.exe (+ .zip cho người tải tay)
-gh release create vX.Y.Z dist/iPOS_Ledger_Studio.exe dist/iPOS_Ledger_Studio.zip --repo trungkhanhduong93/ledgerstudio --target main --title "iPOS Ledger Studio vX.Y.Z" --notes-file notes.md
+# 2. TẠO LẠI ZIP từ EXE vừa build — build_exe.py KHÔNG làm zip; dist/*.zip để lại là zip của bản trước
+python -c "import zipfile; z=zipfile.ZipFile(r'dist/iPOS_Ledger_Studio.zip','w',zipfile.ZIP_DEFLATED,compresslevel=9); z.write(r'dist/iPOS_Ledger_Studio.exe','iPOS_Ledger_Studio.exe'); z.close()"
+# 3. Release: tag = version.txt, asset tên ĐÚNG iPOS_Ledger_Studio.exe (+ .zip cho người tải tay)
+gh release create vX.Y.Z dist/iPOS_Ledger_Studio.exe dist/iPOS_Ledger_Studio.zip --repo trungkhanhduong93/ledgerstudio --target <SHA đầy đủ hoặc main> --title "DataStudio vX.Y.Z (iPOS Ledger Studio)" --notes-file notes.md
 ```
 - Máy đang chạy bản ≥ v1.8.3 thấy banner ở lần mở app kế tiếp. Máy còn bản ≤ v1.8.2 (chưa có updater) phải tải tay 1 lần.
+- **Zip cũ suýt lên release (27/09/2026):** `dist/iPOS_Ledger_Studio.zip` còn là bản v1.8.5 từ 17/09 — người tải tay sẽ nhận bản cũ mà không ai biết. Luôn so mtime/kích thước zip với EXE trước khi `gh release create`.
+- Phát hành xong kiểm như app kiểm: `GET https://api.github.com/repos/trungkhanhduong93/ledgerstudio/releases/latest` (không đăng nhập) → `tag_name` đúng, asset `iPOS_Ledger_Studio.exe` có `digest` = SHA-256 file vừa build. Muốn chắc chắn máy cũ lên được: tải EXE release trước (`gh release download vA.B.C --pattern iPOS_Ledger_Studio.exe`) vào thư mục tạm, chạy, bấm "Cập nhật ngay" (NHAT_KY mục 19).
 
 ---
 

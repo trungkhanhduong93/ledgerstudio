@@ -682,3 +682,24 @@ canvas.save('assets/soc-it.webp', 'WEBP', quality=80, method=6)
 | M3 | EXE thật 1.9.2: `/api/version`, `/assets/soc-it.webp` 200 `image/webp`, ảnh `complete` 1068×1332, `app.js` trùng SHA-1, không request ra ngoài, vẽ màn 188–269 ms (sau lần mở đầu) | Qua |
 
 Chưa verify với DB thật (đăng nhập thật, driver thật trên máy khách).
+
+## 19. Phát hành v1.9.2 + test cập nhật thật từ v1.8.5 *(27/09/2026)*
+
+**QA trước push (skill pre-push-qa):** phán quyết 🟡 VÀNG — không phát hiện lỗi; vàng vì chưa kiểm với DB thật. Đã rà: diff
+14 file (server.py chỉ thêm kiểu `.webp`, updater không đổi); 15 handler cũ không còn nguyên văn đều là phần cố ý gỡ/thay (dropdown
+mẫu báo cáo/tab → thanh bên, nút tròn nổi → thanh dưới, ô Số chứng từ BC012 đã sửa, 2 hộp chết); không có hook sau `return` sớm
+(App, IOSDatePicker); quét secret: không IP, chuỗi kết nối, token (khớp duy nhất là handler `password: e.target.value`); EXE build
+sau lần sửa source cuối. Chạy lại cả bộ kiểm trên bản build cuối: bảng 5/5, tờ báo cáo 0 khác biệt, PDF trùng, hộp thoại 39/39,
+đăng nhập 6/6, py_compile + test_client OK.
+
+**Phát hành:** commit `f2f887c` push `main` → `gh release create v1.9.2` (tiêu đề "DataStudio v1.9.2 (iPOS Ledger Studio)"),
+asset `iPOS_Ledger_Studio.exe` 16.525.495 byte + `.zip` tạo lại từ EXE mới (zip trong `dist/` còn là bản v1.8.5 — CLAUDE.md Bước 5).
+API công khai `releases/latest` trả `v1.9.2`, digest exe = SHA-256 file đã build.
+
+**Test cập nhật thật (máy khách giả lập):** tải đúng EXE release v1.8.5 (digest khớp GitHub) vào thư mục tạm → chạy → `/api/check_update`:
+`has_update=true, latest=v1.9.2` → bấm "Cập nhật ngay" trên giao diện v1.8.5 (puppeteer) → tải 0 → 100% trong 12 s → server cũ thoát
+→ bản mới lên, `/api/version` = 1.9.2 sau 33 s kể từ lúc bấm → thư mục chỉ còn 1 file `iPOS_Ledger_Studio.exe` (`.old` đã tự dọn),
+SHA-256 = asset v1.9.2; trang chủ title DataStudio, ảnh sóc 200. Máy 1.8.3/1.8.4 dùng cùng updater (không đổi từ 1.8.3) nên cùng kết quả;
+máy ≤ 1.8.2 phải tải tay.
+
+Chưa làm: kiểm với DB thật sau cập nhật (đăng nhập thật, xem báo cáo thật).
