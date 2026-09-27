@@ -7,7 +7,7 @@
 > Remote cũ từng trỏ nhầm repo **LedgerReport** (gỡ 16/08/2026): push nhầm là đè code Studio lên `main` của Report.
 > Repo công khai → **cấm commit mật khẩu / IP server DB / file dữ liệu khách** (`BaoCaoMau/` đã `.gitignore`).
 > Build vẫn chạy **`BuildEXE-LedgerStudio.bat`**, EXE nằm trong `dist` (không lên git). Phát hành qua **GitHub Releases** — app từ v1.8.3 tự cập nhật (mục 5, Bước 5).
-> **Cập nhật gần nhất:** 27/09/2026 (v1.9.5: đăng nhập báo bật VPN + chờ tối đa 8 s, bỏ tên Thông tư 200 — mục 3.1 · v1.9.4: kéo cuộn mượt — Bẫy 16, tiêu đề bảng lọt chữ — Bẫy 22 · v1.9.3: tốc độ sổ cái — Bẫy 20, bộ lọc nâng cao — Bẫy 21 · v1.9.2: màn đăng nhập — Bẫy 19 · v1.9.1: hộp thoại — Bẫy 18 · v1.9.0: khung báo cáo + zoom — Bẫy 17 · v1.8.9: bảng dữ liệu + cuộn mượt — Bẫy 16 · v1.8.8: thanh lọc chip · v1.8.7: khung + DataStudio — Bẫy 15 · v1.8.6: dịch sẵn — Bẫy 14)
+> **Cập nhật gần nhất:** 28/09/2026 (v1.9.7: tab Danh mục đối tượng DM_PR_DETAIL — mục 3.2 · v1.9.6: Force update bắt buộc cập nhật trước đăng nhập, popup giữa màn hình · v1.9.5: đăng nhập báo bật VPN + chờ tối đa 8 s, bỏ tên Thông tư 200 — mục 3.1 · v1.9.4: kéo cuộn mượt — Bẫy 16, tiêu đề bảng lọt chữ — Bẫy 22 · v1.9.3: tốc độ sổ cái — Bẫy 20, bộ lọc nâng cao — Bẫy 21 · v1.9.2: màn đăng nhập — Bẫy 19 · v1.9.1: hộp thoại — Bẫy 18 · v1.9.0: khung báo cáo + zoom — Bẫy 17 · v1.8.9: bảng dữ liệu + cuộn mượt — Bẫy 16 · v1.8.8: thanh lọc chip · v1.8.7: khung + DataStudio — Bẫy 15 · v1.8.6: dịch sẵn — Bẫy 14)
 
 ---
 
@@ -84,6 +84,12 @@
    - Virtual scroll 44 cột đồng bộ hoàn hảo giữa Header, Search Row, Row Render và Footer summary.
 5. **Chứng từ tiền (Tab VOUCHER):** 35 cột, nguồn từ `VOUCHER` ⋈ `VOUCHER_DETAIL`, hỗ trợ phân trang SQL Server (`OFFSET/FETCH`).
 6. **Doanh thu chờ phân bổ (Tab INCOME_ALLOC):** Sử dụng CTE SQL nâng cao, xuất CSV stream 27 cột qua `/api/income_alloc/stream_csv`.
+7. **Tồn kho thực tế (Tab WAREHOUSE_BALANCE):** Nguồn `dbo.WAREHOUSE_BALANCE_ACTUAL`, 15 cột, hỗ trợ lọc theo kho, hàng hóa, tài khoản, đơn vị và xuất file Excel/CSV.
+8. **Danh mục đối tượng (Tab PR_DETAIL — từ v1.9.7):**
+   - Nguồn dữ liệu: `dbo.DM_PR_DETAIL` tự động `LEFT JOIN dbo.DM_PR_DETAIL_CLASS` để lấy tên nhóm đối tượng.
+   - 18 cột dữ liệu đầy đủ: Mã ĐT, Tên đối tượng, Nhóm đối tượng, MST, Điện thoại, Email, Địa chỉ, TK ngầm định, Ngân hàng, Số TK NH, Chi nhánh NH, Chủ tài khoản, Loại ĐT, Trạng thái (Đang dùng / Ngừng), Người tạo.
+   - Bộ lọc linh hoạt: Ô tìm kiếm chung text nhanh, dropdown lọc Nhóm đối tượng, segment lọc Trạng thái (Đang dùng / Ngừng / Tất cả), tìm kiếm trên từng cột (Column Search Row).
+   - Phân trang mượt mà qua VirtualRows và PageJumper, xuất Excel/CSV bằng server-side export job.
 
 ### 3.3 Màn hình Báo cáo Kế toán (ReportTab)
 Tất cả các báo cáo hiển thị dưới dạng tờ **A4/A4 Ngang (`.report-paper`)**:
@@ -109,9 +115,10 @@ Tất cả các báo cáo hiển thị dưới dạng tờ **A4/A4 Ngang (`.repo
   - Áp dụng `content-visibility: auto` và `Intl.NumberFormat` giúp render mượt mà 0% CPU lag.
   - Xuất Excel 2 mẫu Chi tiết / Tổng hợp, thuế suất lưu dạng % thật (10% = 0.1), 3 dòng tổng dưới bảng là ô số.
 
-### 3.4 Tự cập nhật (từ v1.8.3)
+### 3.4 Tự cập nhật (từ v1.8.3, Force Update từ v1.9.6)
 - Mở app 1 giây → `GET /api/check_update` gọi `api.github.com/repos/trungkhanhduong93/ledgerstudio/releases/latest` (không đăng nhập, timeout 3s), so `tag_name` với `version.txt`. Lỗi mạng / chưa có release → im lặng.
-- Có bản mới → banner cam trên màn hình đăng nhập và màn hình chính (`AutoUpdateBanner`). Bấm "Cập nhật ngay" → `POST /api/apply_update` → poll `/api/update_progress` (`AutoUpdateModal`).
+- **Force Update (v1.9.6):** Khi có bản mới, popup chặn giữa màn hình (`ForceUpdateModal`), làm mờ và khóa tương tác form đăng nhập (`.ds-login-blocked`). Không có nút bỏ qua — người dùng bắt buộc cập nhật mới được sử dụng.
+- Bấm "Cập nhật ngay" → `POST /api/apply_update` → poll `/api/update_progress` (`AutoUpdateModal`).
 - Server (`_download_and_swap`): tải asset `iPOS_Ledger_Studio.exe` vào `<exe>.new`, kiểm dung lượng + SHA-256 (trường `digest` GitHub trả kèm asset) → đổi tên exe đang chạy thành `<exe>.old` → đặt bản mới vào tên cũ → đóng cửa sổ Chrome app → chạy bản mới (env đã gỡ biến `_PYI_*`) → thoát. Bản mới dọn `<exe>.old` (thử lại tới 60s).
 - Chạy từ source (`python server.py`) chỉ kiểm tra được bản mới, bấm cập nhật trả 400.
 - **Yêu cầu của Trum (17/09/2026):** bấm "Cập nhật ngay" xong KHÔNG giữ bản cũ — tự xoá EXE cũ và tự mở ngay EXE bản mới, thư mục chỉ còn 1 file `iPOS_Ledger_Studio.exe`. Đừng thêm cơ chế giữ bản sao lưu. Windows còn khoá `<exe>.old` quá 60 giây thì lần mở app sau dọn tiếp.
