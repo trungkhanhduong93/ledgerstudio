@@ -289,6 +289,10 @@ Một công cụ/script "thêm NOLOCK" chạy lên `server.py` đã **làm hỏn
 
 ## 13. Changelog & bàn giao chi tiết
 
+### 2026-09-27 — v1.9.3 (CHƯA phát hành): tốc độ tab sổ cái + bộ lọc nâng cao *(chỉ LedgerStudio)*
+
+Trum báo truy vấn ~2 triệu dòng mất gần 15 s. Đo: phần trình duyệt chỉ ~0,3 s — thời gian nằm ở SQL (trang 1 quét mọi dòng 2 lần: COUNT+SUM và sắp xếp lấy trang). Sửa `/api/ledger`: COUNT+SUM chạy song song trên kết nối phụ, dùng lại tổng khi bộ lọc không đổi (đổi trang/sắp xếp), OFFSET/FETCH khi SQL ≥ 2012 (tự dò, 2008 giữ ROW_NUMBER); header `Server-Timing` + thanh trạng thái hiện thời gian từng khâu. Kiểm trên SQL Server 2016 thật (DB demo, chỉ đọc): 8 nhóm — tập dòng/tổng/thứ tự từng trang trùng bản 1.9.2, các nhánh song song/tuần tự/dùng lại/2008 đúng. Chưa đo tốc độ trên DB thật (máy dev thiếu RAM). Kèm: panel "Bộ lọc nâng cao" theo mẫu Trum gửi — lưới ô lọc ẩn, chọn tối đa 4 ô ra ngoài, kéo đổi thứ tự, nhớ theo tab; áp 7 tab dữ liệu. Chi tiết: `NHAT_KY_CONG_VIEC.md` mục 20; bẫy CLAUDE.md 20–21.
+
 ### 2026-09-27 — v1.9.2: màn đăng nhập — Đợt 6 (cuối) *(chỉ LedgerStudio)*
 
 Màn đăng nhập theo mockup đã duyệt: trái giấy sổ cái + sóc IACC (`assets/soc-it.webp`, bóng đổ vẽ sẵn) + 2 thẻ số liệu minh hoạ, phải form tiếng Việt + nút ẩn/hiện mật khẩu; banner bản mới nằm đầu cột phải; dưới 900px chỉ còn form. Logic đăng nhập không đổi. Hạ tầng ảnh: `assets/` → `webbuild/build.js` chép, `build_exe.py` đóng gói, `server.py` khai báo `image/webp`. Kèm dọn 2 hộp thoại chết (`exportConfirm`, `exportNoticeModal` + prop `onExportSuccess`). Verify: body `/api/login`, báo lỗi, nhớ máy chủ/CSDL, vào app trùng v1.9.1 (cả bản nguồn CDN lẫn bản dịch sẵn); 4 cỡ màn 1366/1440/1920/820 không tràn; FCP 276 → 324 ms (headless); EXE thật phục vụ ảnh `image/webp`, không request ra ngoài. **Đã phát hành** GitHub Release `v1.9.2` (commit `f2f887c`, Release mới nhất); cập nhật thật từ EXE release v1.8.5 qua nút "Cập nhật ngay": 33 giây, thư mục còn 1 file, SHA khớp asset. Chi tiết: `NHAT_KY_CONG_VIEC.md` mục 18–19; bẫy: CLAUDE.md Bẫy 19 + mục 5 Bước 5.

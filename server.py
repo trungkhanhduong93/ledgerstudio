@@ -170,10 +170,13 @@ def _gzip_response(response):
         data = response.get_data()
         if len(data) < 1024:  # payload nhỏ thì bỏ qua, overhead không đáng
             return response
+        _t_gz = time.perf_counter()
         buf = _io.BytesIO()
         with gzip.GzipFile(fileobj=buf, mode='wb', compresslevel=5) as gz:
             gz.write(data)
         compressed = buf.getvalue()
+        if response.headers.get('Server-Timing'):
+            response.headers['Server-Timing'] += f", gzip;dur={(time.perf_counter() - _t_gz) * 1000:.1f}"
         response.set_data(compressed)
         response.headers['Content-Encoding'] = 'gzip'
         response.headers['Content-Length'] = str(len(compressed))
@@ -290,9 +293,38 @@ def get_connection():
     db_config = session.get('db_config')
     if not db_config:
         raise Exception("Vui lòng đăng nhập SQL Server trước!")
+    return _pool_get(_pool_key(db_config), db_config)
 
-    key = _pool_key(db_config)
 
+def get_side_connection():
+    """Kết nối PHỤ cùng tài khoản — chỉ để /api/ledger chạy COUNT+SUM song song với truy vấn lấy trang.
+    An toàn luồng: chỉ get_ledger dùng, get_ledger chạy dưới global_db_lock (@with_db_lock) và luôn join luồng đếm
+    trước khi trả về → không bao giờ 2 luồng dùng chung một kết nối pyodbc cùng lúc."""
+    db_config = session.get('db_config')
+    if not db_config:
+        raise Exception("Vui lòng đăng nhập SQL Server trước!")
+    return _pool_get(_pool_key(db_config) + _SIDE_SUFFIX, db_config)
+
+
+_SIDE_SUFFIX = ':side'
+
+
+def _drop_side_connection():
+    """Bỏ kết nối phụ hỏng (lượt sau tự mở lại)."""
+    db_config = session.get('db_config')
+    if not db_config:
+        return
+    key = _pool_key(db_config) + _SIDE_SUFFIX
+    with _pool_lock:
+        conn = _conn_pool.pop(key, None)
+        _conn_last_used.pop(key, None)
+    if conn:
+        try: conn.close()
+        except: pass
+
+
+def _pool_get(key, db_config):
+    """Lấy connection theo key trong pool, tạo mới nếu chưa có hoặc đã chết."""
     with _pool_lock:
         conn = _conn_pool.get(key)
         if conn is not None:
@@ -322,16 +354,40 @@ def get_connection():
         return conn
 
 def close_pool_for(db_config):
-    """Đóng connection trong pool khi logout."""
+    """Đóng connection trong pool khi logout (cả kết nối phụ của /api/ledger)."""
     if not db_config:
         return
     key = _pool_key(db_config)
-    with _pool_lock:
-        conn = _conn_pool.pop(key, None)
-        _conn_last_used.pop(key, None)   # bỏ luôn mốc thời gian, giữ 2 dict luôn khớp nhau
-    if conn:
-        try: conn.close()
-        except: pass
+    for k in (key, key + _SIDE_SUFFIX):
+        with _pool_lock:
+            conn = _conn_pool.pop(k, None)
+            _conn_last_used.pop(k, None)   # bỏ luôn mốc thời gian, giữ 2 dict luôn khớp nhau
+        if conn:
+            try: conn.close()
+            except: pass
+
+
+# SQL Server có nhận OFFSET … FETCH (2012+) không — dò 1 lần mỗi (server, database, user). 2008 → False → giữ ROW_NUMBER.
+_offset_ok = {}
+
+
+def _supports_offset(conn):
+    key = _pool_key(session.get('db_config') or {})
+    if key not in _offset_ok:
+        try:
+            conn.cursor().execute("SELECT 1 AS x ORDER BY x OFFSET 0 ROWS FETCH NEXT 1 ROWS ONLY").fetchall()
+            _offset_ok[key] = True
+        except Exception:
+            _offset_ok[key] = False
+    return _offset_ok[key]
+
+
+def _server_timing(tm, desc=''):
+    """{'count': 1.23 (giây), …} → header Server-Timing (ms). App đọc header này để hiện thời gian từng khâu."""
+    parts = [f"{k};dur={v * 1000:.1f}" for k, v in tm.items()]
+    if desc:
+        parts.append(f'mode;desc="{desc}"')
+    return ", ".join(parts)
 
 def invalidate_pool():
     """Drop connection hiện tại khỏi pool (gọi khi query lỗi — có thể do conn chết giữa chừng)."""
@@ -680,14 +736,17 @@ def _build_where(request_args):
 @with_db_lock
 def get_ledger():
     try:
+        t_start   = time.perf_counter()
+        tm        = {}   # thời gian từng khâu (giây) → header Server-Timing
         page      = int(request.args.get("page",     1))
         page_size = int(request.args.get("page_size", 100))
         export_all = request.args.get("export_all") == "1"
-        # Nếu frontend biết total từ lần query trước (đổi trang) → skip COUNT+SUM
+        # Frontend gửi known_* khi BỘ LỌC không đổi so với lần đếm trước (đổi trang, đổi số dòng/trang, sắp xếp)
+        # → dùng lại tổng, khỏi quét lại toàn bộ dòng. Bấm "Truy vấn" thì frontend không gửi → luôn đếm lại.
         known_total  = request.args.get("known_total")
         known_deb    = request.args.get("known_deb")
         known_crd    = request.args.get("known_crd")
-        skip_count   = page > 1 and known_total is not None and not export_all
+        skip_count   = known_total is not None and not export_all
 
         where_sql, params, join_clauses, join_params = _build_where(request.args)
 
@@ -748,6 +807,14 @@ def get_ledger():
                 ) AS RowConstrainedResult
                 WHERE RowNum > ? AND RowNum <= ?
             """
+            offset_sql = f"""
+                SELECT {BASE_COLS}
+                {JOIN_TABLES}
+                WHERE {where_sql}
+                AND {join_filter}
+                ORDER BY {order_by_sql}
+                OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+            """
             count_params = params + join_params
             data_params  = params + join_params
         else:
@@ -770,6 +837,13 @@ def get_ledger():
                     WHERE {where_sql}
                 ) AS RowConstrainedResult
                 WHERE RowNum > ? AND RowNum <= ?
+            """
+            offset_sql = f"""
+                SELECT {BASE_COLS}
+                FROM dbo.LEDGER L WITH (NOLOCK)
+                WHERE {where_sql}
+                ORDER BY {order_by_sql}
+                OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
             """
             count_params = params
             data_params  = params
@@ -807,22 +881,63 @@ def get_ledger():
                 if dc == 'DEB': total_debit += amt
                 elif dc == 'CRD': total_credit += amt
         else:
-            # Query 1: COUNT + SUM — chỉ chạy khi page=1 hoặc frontend không biết total
+            # Lấy trang: OFFSET/FETCH khi DB nhận (SQL Server 2012+), không thì ROW_NUMBER như cũ (2008).
+            use_offset = _supports_offset(conn)
+            modes = ['offset' if use_offset else 'rownum']
+            # COUNT + SUM (quét MỌI dòng khớp lọc) chạy SONG SONG trên kết nối phụ trong lúc kết nối chính lấy trang:
+            # chờ = khâu lâu hơn, thay vì cộng cả hai. Không mở được kết nối phụ → đếm tuần tự như cũ.
+            worker, box = None, {}
+            if not skip_count:
+                try:
+                    side = get_side_connection()
+                except Exception:
+                    side = None
+                if side is not None:
+                    def _count_job():
+                        t = time.perf_counter()
+                        try:
+                            c2 = side.cursor()
+                            c2.execute(count_sql, count_params)
+                            box['row'] = c2.fetchone()
+                        except Exception as e:
+                            box['err'] = e
+                        box['dur'] = time.perf_counter() - t
+                    worker = threading.Thread(target=_count_job, daemon=True)
+                    worker.start()
+            try:
+                t = time.perf_counter()
+                if use_offset:
+                    cursor.execute(offset_sql, data_params + [offset, page_size])
+                else:
+                    cursor.execute(paged_sql, data_params + [offset, offset + page_size])
+                columns  = [col[0] for col in cursor.description]
+                raw_rows = cursor.fetchall()
+                tm['page'] = time.perf_counter() - t
+            finally:
+                if worker is not None:
+                    worker.join()   # luôn chờ luồng đếm xong: kết nối phụ không được để lượt sau dùng khi còn đang chạy
+
             if skip_count:
                 total_rows   = int(known_total)
                 total_debit  = float(known_deb or 0)
                 total_credit = float(known_crd or 0)
+                modes.append('count-reuse')
             else:
-                cursor.execute(count_sql, count_params)
-                count_row    = cursor.fetchone()
+                if worker is not None and 'err' not in box:
+                    count_row = box['row']
+                    tm['count'] = box['dur']
+                    modes.append('parallel')
+                else:
+                    if worker is not None:   # kết nối phụ lỗi giữa chừng → bỏ nó, đếm lại trên kết nối chính
+                        _drop_side_connection()
+                    t = time.perf_counter()
+                    cursor.execute(count_sql, count_params)
+                    count_row = cursor.fetchone()
+                    tm['count'] = time.perf_counter() - t
+                    modes.append('sequential')
                 total_rows   = count_row[0] or 0
                 total_debit  = float(count_row[1] or 0)
                 total_credit = float(count_row[2] or 0)
-            
-            # Query 2: Data trang hiện tại (ROW_NUMBER)
-            cursor.execute(paged_sql, data_params + [offset, offset + page_size])
-            columns  = [col[0] for col in cursor.description]
-            raw_rows = cursor.fetchall()
 
         # Chuẩn bị dimension maps từ cache (để post-enrich khi không JOIN)
         db_name = session.get('db_config', {}).get('database', 'N/A')
@@ -894,6 +1009,7 @@ def get_ledger():
         def _strip(v):
             return v.strip() if isinstance(v, str) else (v or '')
 
+        t_build = time.perf_counter()
         rows = []
         rows_append = rows.append
         for raw in raw_rows:
@@ -929,8 +1045,10 @@ def get_ledger():
             if not has_bank_name_contra and idx_bank_contra != -1:
                 r['BANK_NAME_CONTRA']  = bank_map.get(_strip(raw[idx_bank_contra]), '')
             rows_append(r)
+        tm['build'] = time.perf_counter() - t_build
 
-        return jsonify({
+        t = time.perf_counter()
+        resp = jsonify({
             "status": "ok",
             "data": rows,
             "pagination": {
@@ -943,6 +1061,10 @@ def get_ledger():
                 "total_credit": total_credit
             }
         })
+        tm['json'] = time.perf_counter() - t
+        tm['total'] = time.perf_counter() - t_start
+        resp.headers['Server-Timing'] = _server_timing(tm, "+".join(modes) if not export_all else 'export')   # '+' vì dấu phẩy là dấu tách của header
+        return resp
     except Exception as e:
         msg = str(e)
         if "đăng nhập" not in msg:

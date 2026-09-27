@@ -703,3 +703,41 @@ SHA-256 = asset v1.9.2; trang chủ title DataStudio, ảnh sóc 200. Máy 1.8.3
 máy ≤ 1.8.2 phải tải tay.
 
 Chưa làm: kiểm với DB thật sau cập nhật (đăng nhập thật, xem báo cáo thật).
+
+## 20. v1.9.3 (chưa phát hành): tốc độ tab sổ cái + bộ lọc nâng cao *(27/09/2026)*
+
+**Trum báo:** truy vấn ~2 triệu dòng mất gần 15 giây. Trả lời theo mặc định Trum duyệt: màn = tab sổ cái; trước giờ vẫn chậm;
+làm đo + song song + OFFSET trong 1 bản; không tạo index.
+
+**Đo trước khi sửa (API giả, 0 ms SQL):** sổ cái 10.000 dòng — trình duyệt đọc JSON 0,1 s + vẽ 0,2 s (bản 1.9.2 nhanh hơn 1.8.6:
+0,83–0,86 s so với 1,03–1,23 s tính cả phần giả lập); trang BC007 1.000 dòng vẽ 0,75 s. → 15 s nằm ở server/SQL.
+
+**Sửa (`server.py` `get_ledger` + pool, `index.html` `loadData` sổ cái + thanh trạng thái):** xem CLAUDE.md Bẫy 20.
+
+**Thử dựng DB 2,5 triệu dòng để đo — LOẠI:** tạo `LS_PERF_TEST` trên SQL Express máy dev (nhân `TRUNGDEMO.dbo.LEDGER` × 170),
+kẹt ở tạo khoá chính: chờ cấp bộ nhớ `RESOURCE_SEMAPHORE` 19 phút — máy chỉ còn 0,4–1,1 GB RAM trống (13,8 GB), SQL tự co còn
+132 MB. Đã dừng và xoá DB (SQL Express còn đúng 6 DB như trước).
+
+**Bộ lọc nâng cao (Trum gửi hình mẫu giữa chừng):** `FilterConfigurator` + CSS `ds-afp-*`, `ds-switch`; script tách ô lọc cũ của
+7 tab (hàng chính sau ô ngày + hàng "Bộ lọc khác") thành `items`, gỡ `FilterToggleButton`, `filtersExpanded`, 7 `*Row2Count`.
+
+### 20.1 Verify
+
+| Mức | Kiểm | Kết quả |
+|---|---|---|
+| M1 | py_compile server.py; build web | OK |
+| M3 SQL thật | SQL Server 2016 Express, DB demo TRUNGDEMO (compat 100), CHỈ SELECT, 2024–2026 = 176 dòng; so bản mới với `server.py` HEAD (1.9.2) qua test_client, vá `_make_conn` sang Windows auth | **8/8 nhóm đạt** |
+| | 1 trang chứa hết: tổng dòng, tổng Nợ/Có, tập dòng, thứ tự TRAN_DATE DESC + TRAN_NO; mode `offset+parallel` | trùng |
+| | Phân trang 50 dòng × 4 trang: chuỗi khoá từng trang + hợp 4 trang | trùng |
+| | Gửi known_total ở trang 1 + sắp xếp AMOUNT desc | không đếm lại, tổng đúng số gửi, chuỗi số tiền trùng |
+| | Tìm theo tên đối tượng (nhánh JOIN); lọc TK 1* | trùng |
+| | Không mở được kết nối phụ / kết nối phụ lỗi giữa chừng | tự đếm tuần tự, bỏ kết nối hỏng, tổng đúng |
+| | gzip ghi `gzip;dur`; đăng xuất đóng kết nối phụ (1 → 0); giả SQL 2008 → `rownum` | đúng |
+| M3 giao diện | Panel lọc sổ cái 1366px: lưới 6 ô, cấu hình 8 dòng, chọn TK trong panel → badge 1, bật 2 ô → 4 ô ngoài + 4 công tắc khoá, kéo "Đơn vị" lên đầu → thanh lọc đổi thứ tự, tải lại trang vẫn giữ, Xoá tất cả 1 → 0, Esc / bấm ngoài đóng, Lọc gửi `acc_ids=111` không kèm known_total | đạt |
+| | 7 tab: số ô lưới/cấu hình 6/8 · 6/8 · 5/7 · 6/8 · 8/10 · 6/8 · 3/4, panel nằm trong màn | đạt, không lỗi trang |
+| | Sắp xếp → gửi known_total; Truy vấn → không; Trang sau → gửi | đúng |
+| | Thanh trạng thái (Server-Timing giả 6,1 s đếm ‖ 7,2 s trang) | "SQL 7,2 s" (lấy khâu lâu hơn), tooltip đủ khâu |
+| M3 hồi quy | Bảng sổ cái 5 thao tác vs Đợt 3: dữ liệu trùng; URL trùng khi bỏ `known_*` (khác duy nhất: sắp xếp giờ gửi kèm tổng cũ) · hộp thoại 39/39 · đăng nhập 6/6 · tờ báo cáo 0 khác biệt | đạt |
+| M3 EXE | 1.9.3: `/api/version`, app.js trùng SHA-1 build_web, `/api/ledger` chưa đăng nhập vẫn 401 | đạt |
+
+**Chưa làm được:** đo tốc độ trên DB thật 2 triệu dòng — chờ Trum chạy 1.9.3 và gửi số ở thanh trạng thái (rê chuột để xem đủ).

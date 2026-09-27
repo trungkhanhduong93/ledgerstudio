@@ -7,7 +7,7 @@
 > Remote cũ từng trỏ nhầm repo **LedgerReport** (gỡ 16/08/2026): push nhầm là đè code Studio lên `main` của Report.
 > Repo công khai → **cấm commit mật khẩu / IP server DB / file dữ liệu khách** (`BaoCaoMau/` đã `.gitignore`).
 > Build vẫn chạy **`BuildEXE-LedgerStudio.bat`**, EXE nằm trong `dist` (không lên git). Phát hành qua **GitHub Releases** — app từ v1.8.3 tự cập nhật (mục 5, Bước 5).
-> **Cập nhật gần nhất:** 27/09/2026 (v1.9.2: màn đăng nhập — Bẫy 19 · v1.9.1: hộp thoại — Bẫy 18 · v1.9.0: khung báo cáo + zoom — Bẫy 17 · v1.8.9: bảng dữ liệu + cuộn mượt — Bẫy 16 · v1.8.8: thanh lọc chip · v1.8.7: khung + DataStudio — Bẫy 15 · v1.8.6: dịch sẵn — Bẫy 14)
+> **Cập nhật gần nhất:** 27/09/2026 (v1.9.3: tốc độ sổ cái — Bẫy 20, bộ lọc nâng cao — Bẫy 21 · v1.9.2: màn đăng nhập — Bẫy 19 · v1.9.1: hộp thoại — Bẫy 18 · v1.9.0: khung báo cáo + zoom — Bẫy 17 · v1.8.9: bảng dữ liệu + cuộn mượt — Bẫy 16 · v1.8.8: thanh lọc chip · v1.8.7: khung + DataStudio — Bẫy 15 · v1.8.6: dịch sẵn — Bẫy 14)
 
 ---
 
@@ -213,6 +213,12 @@ Tất cả các báo cáo hiển thị dưới dạng tờ **A4/A4 Ngang (`.repo
 
 ### Bẫy 19: Ảnh giao diện (v1.9.2)
 - Ảnh để trong `assets/`, gọi `assets/…`; `webbuild/build.js` chép sang `build_web/assets/`, `build_exe.py` đóng `build_web/assets` vào EXE, `server.py` khai báo kiểu `.webp`. Đừng dùng `filter: drop-shadow` lên ảnh lớn (+36 ms lượt vẽ đầu) — bóng của ảnh sóc đã vẽ sẵn trong file. Chi tiết CLAUDE.md Bẫy 19 + mục 3.1.
+
+### Bẫy 20: Tốc độ tab sổ cái (v1.9.3)
+- `/api/ledger` đếm tổng trên kết nối PHỤ song song với lấy trang (luôn join trước khi trả, lỗi thì đếm tuần tự), dùng lại tổng khi app gửi `known_*` (app gửi khi bộ lọc không đổi — đổi trang/sắp xếp; bấm Truy vấn thì không), OFFSET/FETCH khi DB nhận. Header `Server-Timing` (mode nối bằng `+`, không dùng dấu phẩy) → thanh trạng thái hiện thời gian từng khâu. Máy dev thiếu RAM: SQL Express chỉ dùng kiểm tính đúng, không đo tốc độ. Chi tiết CLAUDE.md Bẫy 20.
+
+### Bẫy 21: Bộ lọc nâng cao (v1.9.3)
+- Panel "Bộ lọc khác" = `FilterConfigurator` (cấp trên cùng) nhận `items` {key, label, active, clear, node}; tối đa 4 ô ra ngoài, nhớ theo tab `localStorage['ds_filters_<tab>']`; kéo đổi thứ tự dùng ref. Thêm ô lọc = thêm phần tử vào `items` của tab. Chi tiết CLAUDE.md Bẫy 21.
 
 ---
 

@@ -189,6 +189,8 @@ window.showConnectionLost = function() {
         .ds-status b { font-weight: 500; color: var(--ds-ink-2); font-variant-numeric: tabular-nums; }
         .ds-status .ds-dot { display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: var(--ds-ok); vertical-align: 1px; }
         .ds-status .ds-right { margin-left: auto; display: flex; gap: 16px; }
+        .ds-status .ds-timing { color: var(--ds-ink-2); cursor: help; }
+        .ds-status .ds-timing span { color: var(--ds-ink-3); }
 
         /* ===== BỘ LỌC (Đợt 2, 27/09/2026): chip 32px nhãn nằm trong, nút, popup, ô nhập, nút chuyển ===== */
         :root { --ds-line-strong: #CFD8E3; --ds-wash: #F8FAFC; --ds-brand-hover: #00568F; --ds-brand-soft: #E6F0F8; --ds-brand-line: #B9D3E8; --ds-ok-ink: #0A7F50; }
@@ -421,6 +423,46 @@ window.showConnectionLost = function() {
         .ds-login-foot { display: flex; justify-content: space-between; flex: none; padding: 0 24px 16px; font-size: 11.5px; color: var(--ds-ink-4); }
         @media (max-width: 900px) { .ds-login { grid-template-columns: 1fr; } .ds-login-art { display: none; } .ds-login-side { border-left: 0; } }
         @media (prefers-reduced-motion: reduce) { .ds-fc { animation: none; } }
+
+        /* ===== BỘ LỌC NÂNG CAO (27/09/2026): panel "Bộ lọc khác" + chọn ô lọc hiện ngoài thanh lọc =====
+           Lưới ô lọc đang ẩn · Xoá tất cả · Cấu hình tham số lọc (công tắc, tối đa 4 ô ra ngoài, kéo đổi thứ tự) · Đóng / Lọc.
+           Panel position: fixed (tính theo nút) để không bị khung cha cắt; popup của ô lọc trong lưới được tràn ra ngoài panel. */
+        .ds-afp { position: fixed; z-index: 1000; display: flex; flex-direction: column; }
+        .ds-afp-head { display: flex; align-items: center; gap: 8px; padding: 12px 12px 12px 16px; border-bottom: 1px solid var(--ds-line-soft); }
+        .ds-afp-head > svg { color: var(--ds-ink-3); }
+        .ds-afp-head b { font-size: 14px; font-weight: 600; color: var(--ds-ink); }
+        .ds-afp-link { margin-left: auto; padding: 4px 6px; border-radius: 6px; font-size: 12.5px; font-weight: 500; color: var(--ds-brand); }
+        .ds-afp-link:hover:not(:disabled) { background: var(--ds-brand-soft); }
+        .ds-afp-link:disabled { color: var(--ds-ink-4); cursor: default; }
+        .ds-afp-body { padding: 16px; }
+        .ds-afp-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+        .ds-afp-grid > * { min-width: 0; }
+        .ds-afp-grid .ds-chip { width: 100%; }
+        .ds-afp-grid .ds-chip > svg:last-child { margin-left: auto; }
+        .ds-afp-grid input.ds-input { width: 100% !important; }
+        .ds-afp-grid > :nth-child(3n) .ds-pop { left: auto !important; right: 0 !important; }
+        .ds-afp-grid > :nth-child(3n+1) .ds-pop, .ds-afp-grid > :nth-child(3n+2) .ds-pop { left: 0 !important; right: auto !important; }
+        .ds-afp-empty { font-size: 12.5px; color: var(--ds-ink-3); }
+        .ds-afp-cfg { border-top: 1px solid var(--ds-line-soft); }
+        .ds-afp-cfghead { display: flex; align-items: center; gap: 8px; width: 100%; padding: 12px 16px; text-align: left; font-size: 12px; color: var(--ds-ink-3); }
+        .ds-afp-cfghead b { font-size: 13px; font-weight: 600; color: var(--ds-brand); }
+        .ds-afp-cfghead > svg { margin-left: auto; color: var(--ds-ink-3); }
+        .ds-badge.is-soft { background: var(--ds-brand-soft); color: var(--ds-brand); }
+        .ds-afp-hint { padding: 0 16px 6px; font-size: 12px; color: var(--ds-ink-3); }
+        .ds-afp-list { max-height: 232px; overflow-y: auto; padding: 0 8px 8px; }
+        .ds-afp-row { display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 8px; border-radius: 8px; font-size: 13px; color: var(--ds-ink-2); cursor: grab; user-select: none; }
+        .ds-afp-row:hover { background: var(--ds-tint); }
+        .ds-afp-row.is-drag { background: var(--ds-brand-soft); cursor: grabbing; }
+        .ds-afp-row > svg { flex: none; color: var(--ds-ink-4); }
+        .ds-afp-row .is-on { color: var(--ds-ink); font-weight: 500; }
+        .ds-switch { position: relative; flex: none; width: 36px; height: 20px; margin-left: auto; border-radius: 10px; background: var(--ds-line-strong); transition: background-color .15s; }
+        .ds-switch i { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(14,26,43,.2); transition: transform .15s; }
+        .ds-switch.is-on { background: var(--ds-brand); }
+        .ds-switch.is-on i { transform: translateX(16px); }
+        .ds-switch:disabled { opacity: .45; cursor: not-allowed; }
+        .ds-switch:focus-visible { outline: 2px solid var(--ds-brand); outline-offset: 2px; }
+        .ds-afp-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--ds-line-soft); background: var(--ds-wash); border-radius: 0 0 12px 12px; }
+        @media (prefers-reduced-motion: reduce) { .ds-switch, .ds-switch i { transition: none; } }
 
         @media print {
             @page { size: landscape; margin: 15mm 10mm; }
@@ -945,6 +987,8 @@ window.showConnectionLost = function() {
                 "eye": '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>',
                 "eye-off": '<path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/>',
                 "arrow-right": '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
+                // Bộ lọc nâng cao — tay nắm kéo đổi thứ tự
+                "grip": '<line x1="5" x2="19" y1="7" y2="7"/><line x1="5" x2="19" y1="12" y2="12"/><line x1="5" x2="19" y1="17" y2="17"/>',
             };
             return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" className={className} dangerouslySetInnerHTML={{ __html: icons[name] || '' }} />;
         };
@@ -3083,16 +3127,125 @@ window.showConnectionLost = function() {
             </tr>
         ));
 
-        const FilterToggleButton = ({ expanded, onToggle, count = 0 }) => {
+        // ===== BỘ LỌC NÂNG CAO (27/09/2026) — thay nút "Bộ lọc khác" xổ hàng lọc thứ 2 =====
+        // items: [{ key, label, node, active, clear }] — node là JSX ô lọc CŨ của tab (props/handler giữ nguyên, chỉ đổi chỗ đặt).
+        // Ô nằm trong defaultOutside (= hàng chính cũ) hiện ngoài thanh lọc; còn lại nằm trong panel. Người dùng bật/tắt (tối đa
+        // FILTER_OUT_MAX) và kéo đổi thứ tự; nhớ theo tab ở localStorage['ds_filters_<tab>']. Kỳ + ô ngày luôn cố định, không nằm đây.
+        const FILTER_OUT_MAX = 4;
+        const readFilterCfg = (tab, keys, defaultOutside) => {
+            let saved = null;
+            try { saved = JSON.parse(localStorage.getItem('ds_filters_' + tab) || 'null'); } catch (e) {}
+            const order = saved && Array.isArray(saved.order) ? saved.order.filter(k => keys.includes(k)) : [];
+            keys.forEach(k => { if (!order.includes(k)) order.push(k); });   // ô lọc mới thêm sau → nối cuối
+            const outside = (saved && Array.isArray(saved.outside) ? saved.outside : defaultOutside).filter(k => keys.includes(k)).slice(0, FILTER_OUT_MAX);
+            return { order, outside };
+        };
+        const FilterConfigurator = ({ tab, items, defaultOutside, onApply, setActiveDropdown }) => {
+            const keys = items.map(i => i.key);
+            const byKey = {}; items.forEach(i => { byKey[i.key] = i; });
+            const [cfg, setCfg] = useState(() => readFilterCfg(tab, keys, defaultOutside));
+            const [open, setOpen] = useState(false);
+            const [pos, setPos] = useState(null);
+            const [cfgOpen, setCfgOpen] = useState(() => { try { return localStorage.getItem('ds_filters_cfg_open') !== '0'; } catch (e) { return true; } });
+            const [dragKey, setDragKey] = useState(null);   // chỉ để tô dòng đang kéo
+            const dragRef = useRef(null);                   // ô đang kéo — ref vì dragover tới liền sau dragstart, state chưa kịp cập nhật
+            const btnRef = useRef(null), panelRef = useRef(null);
+            const order = cfg.order.filter(k => byKey[k]);
+            const outside = order.filter(k => cfg.outside.includes(k));
+            const hidden = order.filter(k => !cfg.outside.includes(k));
+            const hiddenActive = hidden.filter(k => byKey[k].active).length;
+            const save = next => { setCfg(next); try { localStorage.setItem('ds_filters_' + tab, JSON.stringify(next)); } catch (e) {} };
+            const place = () => {
+                const b = btnRef.current; if (!b) return;
+                const r = b.getBoundingClientRect(), w = Math.min(760, window.innerWidth - 32);
+                setPos({ top: r.bottom + 8, left: Math.max(16, Math.min(r.left, window.innerWidth - w - 16)), width: w });
+            };
+            const close = () => { setActiveDropdown(null); setOpen(false); };
+            useEffect(() => {
+                if (!open) return;
+                const onDown = e => { if ((panelRef.current && panelRef.current.contains(e.target)) || (btnRef.current && btnRef.current.contains(e.target))) return; close(); };
+                const onKey = e => { if (e.key === 'Escape') close(); };
+                window.addEventListener('resize', place);
+                document.addEventListener('mousedown', onDown);
+                document.addEventListener('keydown', onKey);
+                return () => { window.removeEventListener('resize', place); document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+            }, [open]);
+            const switchOut = k => {
+                const on = cfg.outside.includes(k);
+                if (!on && cfg.outside.length >= FILTER_OUT_MAX) return;
+                save({ ...cfg, outside: on ? cfg.outside.filter(x => x !== k) : [...cfg.outside, k] });
+            };
+            const moveOver = overKey => {
+                const dk = dragRef.current;
+                if (!dk || dk === overKey) return;
+                const next = order.filter(k => k !== dk);
+                next.splice(order.indexOf(overKey), 0, dk);
+                save({ ...cfg, order: next });
+            };
+            const toggleCfg = () => { const v = !cfgOpen; setCfgOpen(v); try { localStorage.setItem('ds_filters_cfg_open', v ? '1' : '0'); } catch (e) {} };
             return (
-                <button type="button" onClick={onToggle}
-                        title={expanded ? 'Thu gọn bộ lọc nâng cao' : 'Mở rộng bộ lọc nâng cao'}
-                        className={`ds-chip ${expanded || count > 0 ? 'is-on' : ''}`}>
-                    <Icon name="sliders" size={14} stroke={2}/>
-                    <span>{expanded ? 'Thu gọn' : 'Bộ lọc khác'}</span>
-                    {count > 0 && <span className="ds-badge">{count}</span>}
-                    <Icon name={expanded ? 'chevron-up' : 'chevron-down'} size={12} stroke={2}/>
-                </button>
+                <>
+                    {outside.map(k => <div key={k} className="ds-slot">{byKey[k].node}</div>)}
+                    <button ref={btnRef} type="button" onClick={() => { if (open) close(); else { place(); setActiveDropdown(null); setOpen(true); } }}
+                            title="Bộ lọc nâng cao — chọn ô lọc hiện ra ngoài"
+                            className={`ds-chip ${open || hiddenActive > 0 ? 'is-on' : ''} ${open ? 'is-open' : ''}`}>
+                        <Icon name="sliders" size={14} stroke={2}/>
+                        <span>Bộ lọc khác</span>
+                        {hiddenActive > 0 && <span className="ds-badge">{hiddenActive}</span>}
+                        <Icon name={open ? 'chevron-up' : 'chevron-down'} size={12} stroke={2}/>
+                    </button>
+                    {open && pos && (
+                        <div ref={panelRef} className="ds-pop ds-pop-in ds-afp" style={{ top: pos.top, left: pos.left, width: pos.width }} role="dialog" aria-label="Bộ lọc nâng cao">
+                            <div className="ds-afp-head">
+                                <Icon name="sliders" size={16} stroke={2}/>
+                                <b>Bộ lọc nâng cao</b>
+                                <button type="button" className="ds-afp-link" disabled={hiddenActive === 0} onClick={() => hidden.forEach(k => byKey[k].active && byKey[k].clear())}>Xoá tất cả</button>
+                                <button type="button" className="ds-iconbtn" onClick={close} title="Đóng (Esc)"><Icon name="x" size={16} stroke={2}/></button>
+                            </div>
+                            <div className="ds-afp-body">
+                                {hidden.length > 0
+                                    ? <div className="ds-afp-grid">{hidden.map(k => <div key={k}>{byKey[k].node}</div>)}</div>
+                                    : <div className="ds-afp-empty">Mọi ô lọc đang hiện ngoài thanh lọc. Tắt bớt ở phần cấu hình bên dưới để đưa vào đây.</div>}
+                            </div>
+                            <div className="ds-afp-cfg">
+                                <button type="button" className="ds-afp-cfghead" onClick={toggleCfg} aria-expanded={cfgOpen}>
+                                    <b>Cấu hình tham số lọc</b>
+                                    <span className="ds-badge is-soft">{outside.length}</span>
+                                    <span>tối đa chọn {FILTER_OUT_MAX} ô lọc để đưa ra bên ngoài</span>
+                                    <Icon name={cfgOpen ? 'chevron-up' : 'chevron-down'} size={14} stroke={2}/>
+                                </button>
+                                {cfgOpen && (
+                                    <>
+                                        <div className="ds-afp-hint">Bật để hiện ngoài, kéo để đổi thứ tự</div>
+                                        <div className="ds-afp-list custom-scrollbar">
+                                            {order.map(k => {
+                                                const on = cfg.outside.includes(k);
+                                                const full = !on && cfg.outside.length >= FILTER_OUT_MAX;
+                                                return (
+                                                    <div key={k} draggable className={`ds-afp-row ${dragKey === k ? 'is-drag' : ''}`}
+                                                         onDragStart={e => { dragRef.current = k; setDragKey(k); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('application/x-ds-filter', k); }}
+                                                         onDragOver={e => { if (!dragRef.current) return; e.preventDefault(); moveOver(k); }}
+                                                         onDrop={e => e.preventDefault()}
+                                                         onDragEnd={() => { dragRef.current = null; setDragKey(null); }}>
+                                                        <Icon name="grip" size={16} stroke={2}/>
+                                                        <span className={on ? 'is-on' : ''}>{byKey[k].label}</span>
+                                                        <button type="button" role="switch" aria-checked={on} aria-label={`Hiện "${byKey[k].label}" ngoài thanh lọc`} disabled={full}
+                                                                title={full ? `Đã đủ ${FILTER_OUT_MAX} ô lọc bên ngoài — tắt bớt một ô trước` : ''}
+                                                                onClick={() => switchOut(k)} className={`ds-switch ${on ? 'is-on' : ''}`}><i></i></button>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                            <div className="ds-afp-foot">
+                                <button type="button" className="ds-btn" onClick={close}>Đóng</button>
+                                <button type="button" className="ds-btn ds-btn-pri" onClick={() => { close(); onApply(); }}>Lọc</button>
+                            </div>
+                        </div>
+                    )}
+                </>
             );
         };
 
@@ -3217,12 +3370,40 @@ window.showConnectionLost = function() {
             return <div className="app-pagehead ds-head"><h1>{d ? d.label : ''}</h1></div>;
         };
 
-        const AppStatusBar = ({ meta, filters, appVersion }) => (
+        // Server-Timing "count;dur=6123.4, page;dur=…, mode;desc="offset,parallel"" → { count: 6123.4, …, mode: 'offset,parallel' } (ms)
+        const parseServerTiming = (h) => {
+            const out = {};
+            (h || '').split(',').forEach(part => {
+                const [name, ...kv] = part.trim().split(';');
+                if (!name) return;
+                kv.forEach(x => { const [k, v] = x.split('='); if (k === 'dur') out[name] = Number(v); if (k === 'desc') out[name] = (v || '').replace(/"/g, ''); });
+            });
+            return out;
+        };
+        const fmtSec = ms => (Math.max(0, ms || 0) / 1000).toLocaleString('vi-VN', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' s';
+        // Thời gian lần Truy vấn sổ cái gần nhất: tổng · SQL · tải + đọc · vẽ; rê chuột xem đủ từng khâu (đo tốc độ trên DB thật).
+        const QueryTiming = ({ t }) => {
+            const mode = t.mode || '';
+            const parallel = mode.includes('parallel'), reuse = mode.includes('count-reuse');
+            const sql = reuse ? (t.page || 0) : parallel ? Math.max(t.count || 0, t.page || 0) : (t.count || 0) + (t.page || 0);
+            const detail = [
+                reuse ? 'SQL đếm + cộng tổng: dùng lại (bộ lọc không đổi)' : `SQL đếm + cộng tổng: ${fmtSec(t.count)}${parallel ? ' (chạy song song)' : ''}`,
+                `SQL lấy trang: ${fmtSec(t.page)} (${mode.includes('offset') ? 'OFFSET/FETCH' : 'ROW_NUMBER'})`,
+                `Máy chủ dựng dòng: ${fmtSec(t.build)} · đóng JSON: ${fmtSec(t.json)}${t.gzip ? ` · nén: ${fmtSec(t.gzip)}` : ''}`,
+                `Chờ máy chủ (gồm các khâu trên): ${fmtSec(t.wait)}`,
+                `Tải + đọc dữ liệu: ${fmtSec(t.read)} · vẽ bảng: ${fmtSec(t.draw)}`,
+                `${(t.rows || 0).toLocaleString('vi-VN')} dòng trang này`,
+            ].join('\n');
+            return <span className="ds-timing" title={detail}>Truy vấn <b>{fmtSec(t.total)}</b><span> (SQL {fmtSec(sql)} · tải {fmtSec(t.read)} · vẽ {fmtSec(t.draw)})</span></span>;
+        };
+
+        const AppStatusBar = ({ meta, filters, appVersion, timing }) => (
             <div className="app-statusbar ds-status">
                 <span><span className="ds-dot"></span><b>Đã kết nối</b></span>
                 <span>CSDL <b>{meta.db_info?.database}</b></span>
                 <span><b>{meta.global_total?.toLocaleString()}</b> bản ghi sổ cái</span>
                 <div className="ds-right">
+                    {timing && <QueryTiming t={timing} />}
                     <span>Kỳ {filters.from_date} – {filters.to_date}</span>
                     <span>{appVersion}</span>
                 </div>
@@ -3313,7 +3494,9 @@ window.showConnectionLost = function() {
             const [showPw, setShowPw] = useState(false);   // nút con mắt ở ô Mật khẩu (chỉ đổi type input)
             const [activeDropdown, setActiveDropdown] = useState(null);
             const [period, setPeriod] = useState({ year: 2026, type: 'month', value: 1 });
-            const [filters, setFilters] = useState({ from_date: '01/01/2026', to_date: '31/01/2026', tran_ids: [], org_ids: [], acc_ids: [], contra_acc_ids: [], job_ids: [], pr_detail_ids: [], item_ids: [], product_ids: [], expense_ids: [], tran_no: '', page: 1, page_size: 10000 });
+            const [queryTiming, setQueryTiming] = useState(null);   // đo lần Truy vấn sổ cái gần nhất (thanh trạng thái)
+            const ledgerCountKeyRef = useRef('');   // bộ lọc của lần ĐẾM tổng gần nhất — trùng thì dùng lại tổng
+            const [filters, setFilters] = useState({ from_date: '01/01/2026',to_date: '31/01/2026', tran_ids: [], org_ids: [], acc_ids: [], contra_acc_ids: [], job_ids: [], pr_detail_ids: [], item_ids: [], product_ids: [], expense_ids: [], tran_no: '', page: 1, page_size: 10000 });
             const [pagination, setPagination] = useState({ total_rows: 0, total_pages: 1, page: 1 });
             const [summary, setSummary] = useState({ total_debit: 0, total_credit: 0 });
             const [colSearch, setColSearch] = useState({});
@@ -3324,7 +3507,6 @@ window.showConnectionLost = function() {
                 try { localStorage.setItem('ds_sidebar_collapsed', v ? '0' : '1'); } catch (e) {}
                 return !v;
             }), []);
-            const [filtersExpanded, setFiltersExpanded] = useState(false);
 
             // Sort state cho 3 danh sách. field=null → dùng default backend.
             const [ledgerSort, setLedgerSort]       = useState({ field: null, dir: 'desc' });
@@ -3444,7 +3626,7 @@ window.showConnectionLost = function() {
                 }
             };
 
-            const loadData = async (targetPage = 1, targetPageSize = filters.page_size, searchOverride = null) => {
+            const loadData = async (targetPage = 1, targetPageSize = filters.page_size, searchOverride = null, opts = {}) => {
                 // Hủy request đang chạy nếu có
                 if (abortRef.current) abortRef.current.abort();
                 const _ctrl = new AbortController(); abortRef.current = _ctrl;
@@ -3479,13 +3661,6 @@ window.showConnectionLost = function() {
 
                 const isGrouped = groupByLedger.length > 0;
                 const isSearched = Object.keys(cleanSearch).length > 0;
-                // Skip COUNT: chỉ đổi trang (page>1) khi filter không đổi — frontend biết total
-                const extras = {};
-                if (targetPage > 1 && targetPageSize === filters.page_size && pagination.total_rows > 0) {
-                    extras.known_total = pagination.total_rows;
-                    extras.known_deb   = summary.total_debit;
-                    extras.known_crd   = summary.total_credit;
-                }
 
                 // Construct query parameters conditionally
                 const query = new URLSearchParams();
@@ -3501,19 +3676,38 @@ window.showConnectionLost = function() {
                     }
                 });
                 Object.keys(cleanSearch).forEach(k => { query.set(k, cleanSearch[k]); });
-                Object.keys(extras).forEach(k => { query.set(k, extras[k]); });
-                
+                // Tổng (COUNT + cộng Nợ/Có — quét MỌI dòng khớp lọc, 2 triệu dòng là vài giây) chỉ phụ thuộc bộ lọc:
+                // đổi trang, đổi số dòng/trang, sắp xếp → dùng lại số của lần đếm trước. Bấm Truy vấn / Lọc (opts.fresh)
+                // luôn đếm lại để thấy chứng từ vừa nhập thêm.
+                const countKey = [...query.entries()].filter(([k]) => k !== 'page' && k !== 'page_size').sort().join('&');
+                if (!opts.fresh && countKey === ledgerCountKeyRef.current && pagination.total_rows > 0) {
+                    query.set('known_total', pagination.total_rows);
+                    query.set('known_deb', summary.total_debit);
+                    query.set('known_crd', summary.total_credit);
+                }
+
                 if (ledgerSort.field) { query.set('order_by', ledgerSort.field); query.set('order_dir', ledgerSort.dir); }
 
                 try {
+                    const t0 = performance.now();
                     const r = await fetch(`/api/ledger?${query.toString()}`, { signal: abortRef.current.signal });
                     if (r.status === 401) { setIsLoggedIn(false); return; }
+                    const tResp = performance.now();
                     const res = await r.json();
+                    const tJson = performance.now();
                     if (res.status === 'ok') {
+                        ledgerCountKeyRef.current = countKey;
                         setData(res.data);
                         setPagination(res.pagination);
                         setSummary(res.summary);
                         setFilters(p => ({ ...p, page: targetPage, page_size: targetPageSize }));
+                        // đo tới lúc bảng vẽ xong (2 khung hình sau khi đổi state)
+                        const st = parseServerTiming(r.headers.get('Server-Timing'));
+                        requestAnimationFrame(() => requestAnimationFrame(() => {
+                            if (_ctrl.signal.aborted) return;
+                            const now = performance.now();
+                            setQueryTiming({ ...st, total: now - t0, wait: tResp - t0, read: tJson - tResp, draw: now - tJson, rows: (res.data || []).length });
+                        }));
                     } else {
                         alert('Lỗi truy vấn LEDGER:\n\n' + (res.message || JSON.stringify(res)));
                     }
@@ -3607,10 +3801,6 @@ window.showConnectionLost = function() {
                 });
             };
 
-            const saleRow2Count = useMemo(() => (
-                ['item_ids','expense_ids','job_ids','pr_detail_ids','tran_ids'].reduce((n,k) => n + (filters[k]?.length || 0), 0)
-                + (saleFilters.wh_ids?.length || 0)
-            ), [filters, saleFilters]);
 
             const buildSaleQuery = (targetPage = 1, targetPageSize = filters.page_size, searchOverride = null, extra = {}) => {
                 const cs = searchOverride !== null ? searchOverride : saleColSearch;
@@ -3706,10 +3896,6 @@ window.showConnectionLost = function() {
                 });
             };
 
-            const incomeAllocRow2Count = useMemo(() => (
-                ['item_ids','expense_ids','job_ids','pr_detail_ids','tran_ids'].reduce((n,k) => n + (filters[k]?.length || 0), 0)
-                + (incomeAllocFilters.acc_des_ids?.length || 0)
-            ), [filters, incomeAllocFilters]);
 
             const buildIncomeAllocQuery = (targetPage = 1, targetPageSize = incomeAllocPageSize, extra = {}) => {
                 const base = {
@@ -3796,10 +3982,6 @@ window.showConnectionLost = function() {
                 setToggleGroupRenderVoucher(v => v + 1);
             };
 
-            const voucherRow2Count = useMemo(() => (
-                ['tran_ids', 'acc_ids', 'pr_detail_ids', 'expense_ids', 'job_ids'].reduce((n,k) => n + (filters[k]?.length || 0), 0)
-                + (voucherFilters.tran_no_search?.trim() ? 1 : 0)
-            ), [filters, voucherFilters]);
 
             const buildVoucherQuery = (targetPage = 1, targetPageSize = filters.page_size, searchOverride = null, extra = {}) => {
                 const cs = searchOverride !== null ? searchOverride : voucherColSearch;
@@ -4061,21 +4243,6 @@ window.showConnectionLost = function() {
             };
 
             // Đếm số filter đang active ở hàng 2 — hiện badge trên nút "Bộ lọc"
-            const ledgerRow2Count = useMemo(() => (
-                ['acc_ids','contra_acc_ids','pr_detail_ids','job_ids','expense_ids','item_ids','product_ids']
-                    .reduce((n,k) => n + (filters[k]?.length || 0), 0)
-            ), [filters]);
-            const purchaseRow2Count = useMemo(() => (
-                ['item_ids','expense_ids','job_ids','pr_detail_ids'].reduce((n,k) => n + (filters[k]?.length || 0), 0)
-                + (purchaseFilters.wh_ids?.length || 0)
-                + (purchaseFilters.tran_no_search?.trim() ? 1 : 0)
-            ), [filters, purchaseFilters]);
-            const warehouseRow2Count = useMemo(() => (
-                ['item_ids','product_ids','expense_ids','job_ids','pr_detail_ids'].reduce((n,k) => n + (filters[k]?.length || 0), 0)
-                + (warehouseFilters.wh_ids?.length || 0)
-                + (warehouseFilters.tran_no_search?.trim() ? 1 : 0)
-                + (warehouseFilters.issue_receive ? 1 : 0)
-            ), [filters, warehouseFilters]);
 
             const buildWarehouseQuery = (targetPage = 1, targetPageSize = filters.page_size, searchOverride = null, extra = {}) => {
                 const cs = searchOverride !== null ? searchOverride : warehouseColSearch;
@@ -4241,9 +4408,6 @@ window.showConnectionLost = function() {
 
             const warehouseBalanceVS = useVirtualScroll(warehouseBalanceFlatData, 28, warehouseBalanceScrollRef);
 
-            const warehouseBalanceRow2Count = useMemo(() => (
-                (filters.acc_ids?.length || 0) + (filters.item_ids?.length || 0) + (warehouseBalanceFilters.wh_ids?.length || 0)
-            ), [filters.acc_ids, filters.item_ids, warehouseBalanceFilters.wh_ids]);
 
             const buildWarehouseBalanceQuery = (targetPage = 1, targetPageSize = filters.page_size, searchOverride = null, extra = {}) => {
                 const cs = searchOverride !== null ? searchOverride : warehouseBalanceColSearch;
@@ -4883,7 +5047,7 @@ window.showConnectionLost = function() {
                 // eslint-disable-next-line react-hooks/exhaustive-deps
             }, [data, groupByLedger, toggleGroupRender, colSearch]);
             
-            const ledgerRowHeight = 28; // Chiều cao thực tế của <tr> không đổi theo filtersExpanded
+            const ledgerRowHeight = 28; // Chiều cao thực tế của <tr> (không đổi theo bộ lọc)
             const ledgerVS = useVirtualScroll(ledgerFlatData, ledgerRowHeight, ledgerScrollRef);
 
             const handleToggleLedgerGroup = (id) => {
@@ -5027,10 +5191,24 @@ window.showConnectionLost = function() {
                                         <div className="ds-slot">
                                             <IOSDatePicker label="Đến ngày" value={filters.to_date} onChange={val => toggleFilter('to_date', val)} disabled={period.type !== 'custom'} />
                                         </div>
-                                        <div className="ds-slot"><PremiumDropdown label="Loại CT" items={meta.tran_ids} selectedItems={filters.tran_ids} onSelect={id => toggleFilter('tran_ids', id)} isActive={activeDropdown === 'Loại CT'} onToggle={setActiveDropdown} /></div>
-                                        <div className="ds-slot"><PremiumDropdown label="Đơn vị" items={meta.orgs} selectedItems={filters.org_ids} onSelect={id => toggleFilter('org_ids', id)} isActive={activeDropdown === 'Đơn vị'} onToggle={setActiveDropdown} align="right" /></div>
-                                        
-                                        <FilterToggleButton expanded={filtersExpanded} onToggle={() => setFiltersExpanded(v => !v)} count={ledgerRow2Count} />
+                                        <FilterConfigurator tab="ledger" defaultOutside={["filters.tran_ids", "filters.org_ids"]} onApply={() => loadData(1, filters.page_size, null, { fresh: true })}setActiveDropdown={setActiveDropdown} items={[
+                                            { key: 'filters.tran_ids', label: 'Loại CT', active: filters.tran_ids.length > 0, clear: () => setFilters(p => ({ ...p, tran_ids: [] })),
+                                              node: <PremiumDropdown label="Loại CT" items={meta.tran_ids} selectedItems={filters.tran_ids} onSelect={id => toggleFilter('tran_ids', id)} isActive={activeDropdown === 'Loại CT'} onToggle={setActiveDropdown} /> },
+                                            { key: 'filters.org_ids', label: 'Đơn vị', active: filters.org_ids.length > 0, clear: () => setFilters(p => ({ ...p, org_ids: [] })),
+                                              node: <PremiumDropdown label="Đơn vị" items={meta.orgs} selectedItems={filters.org_ids} onSelect={id => toggleFilter('org_ids', id)} isActive={activeDropdown === 'Đơn vị'} onToggle={setActiveDropdown} align="right" /> },
+                                            { key: 'filters.acc_ids', label: 'Tài khoản', active: filters.acc_ids.length > 0, clear: () => setFilters(p => ({ ...p, acc_ids: [] })),
+                                              node: <PremiumDropdown label="Tài khoản" items={meta.accounts} selectedItems={filters.acc_ids} onSelect={id => toggleFilter('acc_ids', id)} isActive={activeDropdown === 'Tài khoản'} onToggle={setActiveDropdown} /> },
+                                            { key: 'filters.pr_detail_ids', label: 'Đối tượng', active: filters.pr_detail_ids.length > 0, clear: () => setFilters(p => ({ ...p, pr_detail_ids: [] })),
+                                              node: <PremiumDropdown label="Đối tượng" items={meta.pr_details} selectedItems={filters.pr_detail_ids} onSelect={id => toggleFilter('pr_detail_ids', id)} isActive={activeDropdown === 'Đối tượng'} onToggle={setActiveDropdown} /> },
+                                            { key: 'filters.job_ids', label: 'Công việc', active: filters.job_ids.length > 0, clear: () => setFilters(p => ({ ...p, job_ids: [] })),
+                                              node: <PremiumDropdown label="Công việc" items={meta.jobs} selectedItems={filters.job_ids} onSelect={id => toggleFilter('job_ids', id)} isActive={activeDropdown === 'Công việc'} onToggle={setActiveDropdown} /> },
+                                            { key: 'filters.expense_ids', label: 'Mục chi phí', active: filters.expense_ids.length > 0, clear: () => setFilters(p => ({ ...p, expense_ids: [] })),
+                                              node: <PremiumDropdown label="Mục chi phí" items={meta.expenses} selectedItems={filters.expense_ids} onSelect={id => toggleFilter('expense_ids', id)} isActive={activeDropdown === 'Mục chi phí'} onToggle={setActiveDropdown} /> },
+                                            { key: 'filters.item_ids', label: 'Hàng hóa', active: filters.item_ids.length > 0, clear: () => setFilters(p => ({ ...p, item_ids: [] })),
+                                              node: <PremiumDropdown label="Hàng hóa" items={meta.items} selectedItems={filters.item_ids} onSelect={id => toggleFilter('item_ids', id)} isActive={activeDropdown === 'Hàng hóa'} onToggle={setActiveDropdown} align="right" /> },
+                                            { key: 'filters.product_ids', label: 'Sản phẩm', active: filters.product_ids.length > 0, clear: () => setFilters(p => ({ ...p, product_ids: [] })),
+                                              node: <PremiumDropdown label="Sản phẩm" items={meta.products} selectedItems={filters.product_ids} onSelect={id => toggleFilter('product_ids', id)} isActive={activeDropdown === 'Sản phẩm'} onToggle={setActiveDropdown} align="right" /> },
+                                        ]} />
                                         <div className="ml-auto flex items-center gap-2">
                                             <PageSizeDropdown 
                                                         value={filters.page_size} 
@@ -5038,20 +5216,12 @@ window.showConnectionLost = function() {
                                                     />
                                             <span className="ds-meta"><b>{pagination.total_rows?.toLocaleString()}</b> dòng</span>
                                             <ExportButton kind="ledger" />
-                                            <button onClick={() => loadData()} disabled={loading} className="ds-btn ds-btn-pri">
+                                            <button onClick={() => loadData(1, filters.page_size, null, { fresh: true })} disabled={loading} className="ds-btn ds-btn-pri">
                                                 {loading && activeTab === 'ledger' ? <Icon name="loader" size={14} className="animate-spin" /> : <Icon name="search" size={14} stroke={2} />}
                                                 <span>{loading && activeTab === 'ledger' ? 'Đang tải' : 'Truy vấn'}</span>
                                             </button>
                                         </div>
                                     </div>
-                                    {filtersExpanded && <div className="flex flex-wrap items-center gap-2">
-                                        <PremiumDropdown label="Tài khoản" items={meta.accounts} selectedItems={filters.acc_ids} onSelect={id => toggleFilter('acc_ids', id)} isActive={activeDropdown === 'Tài khoản'} onToggle={setActiveDropdown} />
-                                        <PremiumDropdown label="Đối tượng" items={meta.pr_details} selectedItems={filters.pr_detail_ids} onSelect={id => toggleFilter('pr_detail_ids', id)} isActive={activeDropdown === 'Đối tượng'} onToggle={setActiveDropdown} />
-                                        <PremiumDropdown label="Công việc" items={meta.jobs} selectedItems={filters.job_ids} onSelect={id => toggleFilter('job_ids', id)} isActive={activeDropdown === 'Công việc'} onToggle={setActiveDropdown} />
-                                        <PremiumDropdown label="Mục chi phí" items={meta.expenses} selectedItems={filters.expense_ids} onSelect={id => toggleFilter('expense_ids', id)} isActive={activeDropdown === 'Mục chi phí'} onToggle={setActiveDropdown} />
-                                        <PremiumDropdown label="Hàng hóa" items={meta.items} selectedItems={filters.item_ids} onSelect={id => toggleFilter('item_ids', id)} isActive={activeDropdown === 'Hàng hóa'} onToggle={setActiveDropdown} align="right" />
-                                        <PremiumDropdown label="Sản phẩm" items={meta.products} selectedItems={filters.product_ids} onSelect={id => toggleFilter('product_ids', id)} isActive={activeDropdown === 'Sản phẩm'} onToggle={setActiveDropdown} align="right" />
-                                    </div>}
                                 </div>
                             </div>
                             <div className="flex-1 min-h-0 p-3 overflow-hidden bg-canvas flex flex-col relative">
@@ -5215,12 +5385,27 @@ window.showConnectionLost = function() {
                                         <div className="ds-slot"><PeriodDropdown period={period} setPeriod={setPeriod} from={filters.from_date} to={filters.to_date} isActive={activeDropdown === 'period'} onToggle={setActiveDropdown} /></div>
                                         <div className="ds-slot"><IOSDatePicker label="Từ ngày" value={filters.from_date} onChange={val => toggleFilter('from_date', val)} disabled={period.type !== 'custom'} /></div>
                                         <div className="ds-slot"><IOSDatePicker label="Đến ngày" value={filters.to_date} onChange={val => toggleFilter('to_date', val)} disabled={period.type !== 'custom'} /></div>
-                                        <div className="relative">
-    <Icon name="search" size={14} stroke={2} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-4 pointer-events-none"/>
-    <input type="text" value={saleFilters.tran_no_search} onChange={e => setSaleFilters(p => ({...p, tran_no_search: e.target.value}))} onKeyDown={e => { if (e.key === 'Enter') loadSaleData(); }} placeholder="Số chứng từ" className={`ds-input pl-8 w-44 ${saleFilters.tran_no_search ? 'is-on' : ''}`} />
-</div>
-                                        <div className="ds-slot"><PremiumDropdown label="Đơn vị" items={meta.orgs} selectedItems={filters.org_ids} onSelect={id => toggleFilter('org_ids', id)} isActive={activeDropdown === 'Đơn vị'} onToggle={setActiveDropdown} align="right" /></div>
-                                        <FilterToggleButton expanded={filtersExpanded} onToggle={() => setFiltersExpanded(v => !v)} count={saleRow2Count} />
+                                        <FilterConfigurator tab="sale" defaultOutside={["saleFilters.tran_no_search", "filters.org_ids"]} onApply={() => loadSaleData()} setActiveDropdown={setActiveDropdown} items={[
+                                            { key: 'saleFilters.tran_no_search', label: 'Số chứng từ', active: !!(saleFilters.tran_no_search || '').trim(), clear: () => setSaleFilters(p => ({ ...p, tran_no_search: '' })),
+                                              node: <div className="relative">
+                                                <Icon name="search" size={14} stroke={2} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-4 pointer-events-none"/>
+                                                <input type="text" value={saleFilters.tran_no_search} onChange={e => setSaleFilters(p => ({...p, tran_no_search: e.target.value}))} onKeyDown={e => { if (e.key === 'Enter') loadSaleData(); }} placeholder="Số chứng từ" className={`ds-input pl-8 w-44 ${saleFilters.tran_no_search ? 'is-on' : ''}`} />
+                                                </div> },
+                                            { key: 'filters.org_ids', label: 'Đơn vị', active: filters.org_ids.length > 0, clear: () => setFilters(p => ({ ...p, org_ids: [] })),
+                                              node: <PremiumDropdown label="Đơn vị" items={meta.orgs} selectedItems={filters.org_ids} onSelect={id => toggleFilter('org_ids', id)} isActive={activeDropdown === 'Đơn vị'} onToggle={setActiveDropdown} align="right" /> },
+                                            { key: 'filters.item_ids', label: 'Hàng hóa', active: filters.item_ids.length > 0, clear: () => setFilters(p => ({ ...p, item_ids: [] })),
+                                              node: <PremiumDropdown label="Hàng hóa" items={meta.items} selectedItems={filters.item_ids} onSelect={id => toggleFilter('item_ids', id)} isActive={activeDropdown === 'Hàng hóa'} onToggle={setActiveDropdown} /> },
+                                            { key: 'filters.expense_ids', label: 'Mục chi phí', active: filters.expense_ids.length > 0, clear: () => setFilters(p => ({ ...p, expense_ids: [] })),
+                                              node: <PremiumDropdown label="Mục chi phí" items={meta.expenses} selectedItems={filters.expense_ids} onSelect={id => toggleFilter('expense_ids', id)} isActive={activeDropdown === 'Mục chi phí'} onToggle={setActiveDropdown} /> },
+                                            { key: 'filters.job_ids', label: 'Công việc', active: filters.job_ids.length > 0, clear: () => setFilters(p => ({ ...p, job_ids: [] })),
+                                              node: <PremiumDropdown label="Công việc" items={meta.jobs} selectedItems={filters.job_ids} onSelect={id => toggleFilter('job_ids', id)} isActive={activeDropdown === 'Công việc'} onToggle={setActiveDropdown} /> },
+                                            { key: 'filters.pr_detail_ids', label: 'Đối tượng', active: filters.pr_detail_ids.length > 0, clear: () => setFilters(p => ({ ...p, pr_detail_ids: [] })),
+                                              node: <PremiumDropdown label="Đối tượng" items={meta.pr_details} selectedItems={filters.pr_detail_ids} onSelect={id => toggleFilter('pr_detail_ids', id)} isActive={activeDropdown === 'Đối tượng'} onToggle={setActiveDropdown} /> },
+                                            { key: 'filters.tran_ids', label: 'Loại CT', active: filters.tran_ids.length > 0, clear: () => setFilters(p => ({ ...p, tran_ids: [] })),
+                                              node: <PremiumDropdown label="Loại CT" items={meta.tran_ids} selectedItems={filters.tran_ids} onSelect={id => toggleFilter('tran_ids', id)} isActive={activeDropdown === 'Loại CT'} onToggle={setActiveDropdown} align="right" /> },
+                                            { key: 'saleFilters.wh_ids', label: 'Kho', active: saleFilters.wh_ids.length > 0, clear: () => setSaleFilters(p => ({ ...p, wh_ids: [] })),
+                                              node: <PremiumDropdown label="Kho" items={meta.warehouses} selectedItems={saleFilters.wh_ids} onSelect={id => toggleSaleFilter('wh_ids', id)} isActive={activeDropdown === 'Kho'} onToggle={setActiveDropdown} align="right" /> },
+                                        ]} />
                                         <div className="ml-auto flex items-center gap-2">
                                             <PageSizeDropdown value={filters.page_size} onChange={newSize => { setFilters(p => ({ ...p, page_size: newSize, page: 1 })); }} />
                                             <span className="ds-meta"><b>{salePagination.total_rows?.toLocaleString()}</b> dòng</span>
@@ -5231,14 +5416,6 @@ window.showConnectionLost = function() {
                                             </button>
                                         </div>
                                     </div>
-                                    {filtersExpanded && <div className="flex flex-wrap items-center gap-2">
-                                        <PremiumDropdown label="Hàng hóa" items={meta.items} selectedItems={filters.item_ids} onSelect={id => toggleFilter('item_ids', id)} isActive={activeDropdown === 'Hàng hóa'} onToggle={setActiveDropdown} />
-                                        <PremiumDropdown label="Mục chi phí" items={meta.expenses} selectedItems={filters.expense_ids} onSelect={id => toggleFilter('expense_ids', id)} isActive={activeDropdown === 'Mục chi phí'} onToggle={setActiveDropdown} />
-                                        <PremiumDropdown label="Công việc" items={meta.jobs} selectedItems={filters.job_ids} onSelect={id => toggleFilter('job_ids', id)} isActive={activeDropdown === 'Công việc'} onToggle={setActiveDropdown} />
-                                        <PremiumDropdown label="Đối tượng" items={meta.pr_details} selectedItems={filters.pr_detail_ids} onSelect={id => toggleFilter('pr_detail_ids', id)} isActive={activeDropdown === 'Đối tượng'} onToggle={setActiveDropdown} />
-                                        <PremiumDropdown label="Loại CT" items={meta.tran_ids} selectedItems={filters.tran_ids} onSelect={id => toggleFilter('tran_ids', id)} isActive={activeDropdown === 'Loại CT'} onToggle={setActiveDropdown} align="right" />
-                                        <PremiumDropdown label="Kho" items={meta.warehouses} selectedItems={saleFilters.wh_ids} onSelect={id => toggleSaleFilter('wh_ids', id)} isActive={activeDropdown === 'Kho'} onToggle={setActiveDropdown} align="right" />
-                                    </div>}
                                 </div>
                             </div>
                             <div className="flex-1 min-h-0 p-3 overflow-hidden bg-canvas flex flex-col relative">
@@ -5414,12 +5591,27 @@ window.showConnectionLost = function() {
                                         <div className="ds-slot"><PeriodDropdown period={period} setPeriod={setPeriod} from={filters.from_date} to={filters.to_date} isActive={activeDropdown === 'period'} onToggle={setActiveDropdown} /></div>
                                         <div className="ds-slot"><IOSDatePicker label="Từ ngày" value={filters.from_date} onChange={val => toggleFilter('from_date', val)} disabled={period.type !== 'custom'} /></div>
                                         <div className="ds-slot"><IOSDatePicker label="Đến hết ngày" value={filters.to_date} onChange={val => toggleFilter('to_date', val)} disabled={period.type !== 'custom'} /></div>
-                                        <div className="relative">
-    <Icon name="search" size={14} stroke={2} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-4 pointer-events-none"/>
-    <input type="text" value={incomeAllocFilters.tran_no_search} onChange={e => setIncomeAllocFilters(p => ({...p, tran_no_search: e.target.value}))} onKeyDown={e => { if (e.key === 'Enter') loadIncomeAllocData(); }} placeholder="Số chứng từ" className={`ds-input pl-8 w-44 ${incomeAllocFilters.tran_no_search ? 'is-on' : ''}`} />
-</div>
-                                        <div className="ds-slot"><PremiumDropdown label="Đơn vị" items={meta.orgs} selectedItems={filters.org_ids} onSelect={id => toggleFilter('org_ids', id)} isActive={activeDropdown === 'Đơn vị'} onToggle={setActiveDropdown} align="right" /></div>
-                                        <FilterToggleButton expanded={filtersExpanded} onToggle={() => setFiltersExpanded(v => !v)} count={incomeAllocRow2Count} />
+                                        <FilterConfigurator tab="income_alloc" defaultOutside={["incomeAllocFilters.tran_no_search", "filters.org_ids"]} onApply={() => loadIncomeAllocData()} setActiveDropdown={setActiveDropdown} items={[
+                                            { key: 'incomeAllocFilters.tran_no_search', label: 'Số chứng từ', active: !!(incomeAllocFilters.tran_no_search || '').trim(), clear: () => setIncomeAllocFilters(p => ({ ...p, tran_no_search: '' })),
+                                              node: <div className="relative">
+                                                <Icon name="search" size={14} stroke={2} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-4 pointer-events-none"/>
+                                                <input type="text" value={incomeAllocFilters.tran_no_search} onChange={e => setIncomeAllocFilters(p => ({...p, tran_no_search: e.target.value}))} onKeyDown={e => { if (e.key === 'Enter') loadIncomeAllocData(); }} placeholder="Số chứng từ" className={`ds-input pl-8 w-44 ${incomeAllocFilters.tran_no_search ? 'is-on' : ''}`} />
+                                                </div> },
+                                            { key: 'filters.org_ids', label: 'Đơn vị', active: filters.org_ids.length > 0, clear: () => setFilters(p => ({ ...p, org_ids: [] })),
+                                              node: <PremiumDropdown label="Đơn vị" items={meta.orgs} selectedItems={filters.org_ids} onSelect={id => toggleFilter('org_ids', id)} isActive={activeDropdown === 'Đơn vị'} onToggle={setActiveDropdown} align="right" /> },
+                                            { key: 'filters.item_ids', label: 'Hàng hóa', active: filters.item_ids.length > 0, clear: () => setFilters(p => ({ ...p, item_ids: [] })),
+                                              node: <PremiumDropdown label="Hàng hóa" items={meta.items} selectedItems={filters.item_ids} onSelect={id => toggleFilter('item_ids', id)} isActive={activeDropdown === 'Hàng hóa'} onToggle={setActiveDropdown} /> },
+                                            { key: 'filters.expense_ids', label: 'Mục chi phí', active: filters.expense_ids.length > 0, clear: () => setFilters(p => ({ ...p, expense_ids: [] })),
+                                              node: <PremiumDropdown label="Mục chi phí" items={meta.expenses} selectedItems={filters.expense_ids} onSelect={id => toggleFilter('expense_ids', id)} isActive={activeDropdown === 'Mục chi phí'} onToggle={setActiveDropdown} /> },
+                                            { key: 'filters.job_ids', label: 'Công việc', active: filters.job_ids.length > 0, clear: () => setFilters(p => ({ ...p, job_ids: [] })),
+                                              node: <PremiumDropdown label="Công việc" items={meta.jobs} selectedItems={filters.job_ids} onSelect={id => toggleFilter('job_ids', id)} isActive={activeDropdown === 'Công việc'} onToggle={setActiveDropdown} /> },
+                                            { key: 'filters.pr_detail_ids', label: 'Đối tượng', active: filters.pr_detail_ids.length > 0, clear: () => setFilters(p => ({ ...p, pr_detail_ids: [] })),
+                                              node: <PremiumDropdown label="Đối tượng" items={meta.pr_details} selectedItems={filters.pr_detail_ids} onSelect={id => toggleFilter('pr_detail_ids', id)} isActive={activeDropdown === 'Đối tượng'} onToggle={setActiveDropdown} /> },
+                                            { key: 'incomeAllocFilters.acc_des_ids', label: 'TK đích', active: incomeAllocFilters.acc_des_ids.length > 0, clear: () => setIncomeAllocFilters(p => ({ ...p, acc_des_ids: [] })),
+                                              node: <PremiumDropdown label="TK đích" items={meta.accounts} selectedItems={incomeAllocFilters.acc_des_ids} onSelect={id => toggleIncomeAllocFilter('acc_des_ids', id)} isActive={activeDropdown === 'TK đích'} onToggle={setActiveDropdown} align="right" /> },
+                                            { key: 'filters.tran_ids', label: 'Loại CT', active: filters.tran_ids.length > 0, clear: () => setFilters(p => ({ ...p, tran_ids: [] })),
+                                              node: <PremiumDropdown label="Loại CT" items={meta.tran_ids} selectedItems={filters.tran_ids} onSelect={id => toggleFilter('tran_ids', id)} isActive={activeDropdown === 'Loại CT'} onToggle={setActiveDropdown} align="right" /> },
+                                        ]} />
                                         <div className="ml-auto flex items-center gap-2">
                                             <PageSizeDropdown value={incomeAllocPageSize} onChange={newSize => { setIncomeAllocPageSize(newSize); }} />
                                             <span className="ds-meta"><b>{incomeAllocPagination.total_rows?.toLocaleString()}</b> dòng</span>
@@ -5449,14 +5641,6 @@ window.showConnectionLost = function() {
                                         </div>
                                         <div className="text-[12px] text-ink-3">Lũy kế & Còn lại tính đến hết ngày "Đến hết ngày".</div>
                                     </div>
-                                    {filtersExpanded && <div className="flex flex-wrap items-center gap-2">
-                                        <PremiumDropdown label="Hàng hóa" items={meta.items} selectedItems={filters.item_ids} onSelect={id => toggleFilter('item_ids', id)} isActive={activeDropdown === 'Hàng hóa'} onToggle={setActiveDropdown} />
-                                        <PremiumDropdown label="Mục chi phí" items={meta.expenses} selectedItems={filters.expense_ids} onSelect={id => toggleFilter('expense_ids', id)} isActive={activeDropdown === 'Mục chi phí'} onToggle={setActiveDropdown} />
-                                        <PremiumDropdown label="Công việc" items={meta.jobs} selectedItems={filters.job_ids} onSelect={id => toggleFilter('job_ids', id)} isActive={activeDropdown === 'Công việc'} onToggle={setActiveDropdown} />
-                                        <PremiumDropdown label="Đối tượng" items={meta.pr_details} selectedItems={filters.pr_detail_ids} onSelect={id => toggleFilter('pr_detail_ids', id)} isActive={activeDropdown === 'Đối tượng'} onToggle={setActiveDropdown} />
-                                        <PremiumDropdown label="TK đích" items={meta.accounts} selectedItems={incomeAllocFilters.acc_des_ids} onSelect={id => toggleIncomeAllocFilter('acc_des_ids', id)} isActive={activeDropdown === 'TK đích'} onToggle={setActiveDropdown} align="right" />
-                                        <PremiumDropdown label="Loại CT" items={meta.tran_ids} selectedItems={filters.tran_ids} onSelect={id => toggleFilter('tran_ids', id)} isActive={activeDropdown === 'Loại CT'} onToggle={setActiveDropdown} align="right" />
-                                    </div>}
                                 </div>
                             </div>
                             <div className="flex-1 min-h-0 p-3 overflow-hidden bg-canvas flex flex-col relative">
@@ -5535,12 +5719,25 @@ window.showConnectionLost = function() {
                                         <div className="ds-slot"><PeriodDropdown period={period} setPeriod={setPeriod} from={filters.from_date} to={filters.to_date} isActive={activeDropdown === 'period'} onToggle={setActiveDropdown} /></div>
                                         <div className="ds-slot"><IOSDatePicker label="Từ ngày" value={filters.from_date} onChange={val => toggleFilter('from_date', val)} disabled={period.type !== 'custom'} /></div>
                                         <div className="ds-slot"><IOSDatePicker label="Đến ngày" value={filters.to_date} onChange={val => toggleFilter('to_date', val)} disabled={period.type !== 'custom'} /></div>
-                                        <div className="relative">
-    <Icon name="search" size={14} stroke={2} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-4 pointer-events-none"/>
-    <input type="text" value={voucherFilters.tran_no_search} onChange={e => setVoucherFilters(p => ({...p, tran_no_search: e.target.value}))} onKeyDown={e => { if (e.key === 'Enter') loadVoucherData(); }} placeholder="Số chứng từ" className={`ds-input pl-8 w-44 ${voucherFilters.tran_no_search ? 'is-on' : ''}`} />
-</div>
-                                        <div className="ds-slot"><PremiumDropdown label="Đơn vị" items={meta.orgs} selectedItems={filters.org_ids} onSelect={id => toggleFilter('org_ids', id)} isActive={activeDropdown === 'Đơn vị'} onToggle={setActiveDropdown} align="right" /></div>
-                                        <FilterToggleButton expanded={filtersExpanded} onToggle={() => setFiltersExpanded(v => !v)} count={voucherRow2Count} />
+                                        <FilterConfigurator tab="voucher" defaultOutside={["voucherFilters.tran_no_search", "filters.org_ids"]} onApply={() => loadVoucherData()} setActiveDropdown={setActiveDropdown} items={[
+                                            { key: 'voucherFilters.tran_no_search', label: 'Số chứng từ', active: !!(voucherFilters.tran_no_search || '').trim(), clear: () => setVoucherFilters(p => ({ ...p, tran_no_search: '' })),
+                                              node: <div className="relative">
+                                                <Icon name="search" size={14} stroke={2} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-4 pointer-events-none"/>
+                                                <input type="text" value={voucherFilters.tran_no_search} onChange={e => setVoucherFilters(p => ({...p, tran_no_search: e.target.value}))} onKeyDown={e => { if (e.key === 'Enter') loadVoucherData(); }} placeholder="Số chứng từ" className={`ds-input pl-8 w-44 ${voucherFilters.tran_no_search ? 'is-on' : ''}`} />
+                                                </div> },
+                                            { key: 'filters.org_ids', label: 'Đơn vị', active: filters.org_ids.length > 0, clear: () => setFilters(p => ({ ...p, org_ids: [] })),
+                                              node: <PremiumDropdown label="Đơn vị" items={meta.orgs} selectedItems={filters.org_ids} onSelect={id => toggleFilter('org_ids', id)} isActive={activeDropdown === 'Đơn vị'} onToggle={setActiveDropdown} align="right" /> },
+                                            { key: 'filters.tran_ids', label: 'Loại CT', active: filters.tran_ids.length > 0, clear: () => setFilters(p => ({ ...p, tran_ids: [] })),
+                                              node: <PremiumDropdown label="Loại CT" items={meta.tran_ids} selectedItems={filters.tran_ids} onSelect={id => toggleFilter('tran_ids', id)} isActive={activeDropdown === 'Loại CT'} onToggle={setActiveDropdown} /> },
+                                            { key: 'filters.acc_ids', label: 'Tài khoản', active: filters.acc_ids.length > 0, clear: () => setFilters(p => ({ ...p, acc_ids: [] })),
+                                              node: <PremiumDropdown label="Tài khoản" items={meta.accounts} selectedItems={filters.acc_ids} onSelect={id => toggleFilter('acc_ids', id)} isActive={activeDropdown === 'Tài khoản'} onToggle={setActiveDropdown} /> },
+                                            { key: 'filters.pr_detail_ids', label: 'Đối tượng', active: filters.pr_detail_ids.length > 0, clear: () => setFilters(p => ({ ...p, pr_detail_ids: [] })),
+                                              node: <PremiumDropdown label="Đối tượng" items={meta.pr_details} selectedItems={filters.pr_detail_ids} onSelect={id => toggleFilter('pr_detail_ids', id)} isActive={activeDropdown === 'Đối tượng'} onToggle={setActiveDropdown} /> },
+                                            { key: 'filters.expense_ids', label: 'Mục chi phí', active: filters.expense_ids.length > 0, clear: () => setFilters(p => ({ ...p, expense_ids: [] })),
+                                              node: <PremiumDropdown label="Mục chi phí" items={meta.expenses} selectedItems={filters.expense_ids} onSelect={id => toggleFilter('expense_ids', id)} isActive={activeDropdown === 'Mục chi phí'} onToggle={setActiveDropdown} /> },
+                                            { key: 'filters.job_ids', label: 'Công việc', active: filters.job_ids.length > 0, clear: () => setFilters(p => ({ ...p, job_ids: [] })),
+                                              node: <PremiumDropdown label="Công việc" items={meta.jobs} selectedItems={filters.job_ids} onSelect={id => toggleFilter('job_ids', id)} isActive={activeDropdown === 'Công việc'} onToggle={setActiveDropdown} /> },
+                                        ]} />
                                         <div className="ml-auto flex items-center gap-2">
                                             <PageSizeDropdown value={filters.page_size} onChange={newSize => { setFilters(p => ({ ...p, page_size: newSize, page: 1 })); }} />
                                             <span className="ds-meta"><b>{voucherPagination.total_rows?.toLocaleString()}</b> dòng</span>
@@ -5551,13 +5748,6 @@ window.showConnectionLost = function() {
                                             </button>
                                         </div>
                                     </div>
-                                    {filtersExpanded && <div className="flex flex-wrap items-center gap-2">
-                                        <PremiumDropdown label="Loại CT" items={meta.tran_ids} selectedItems={filters.tran_ids} onSelect={id => toggleFilter('tran_ids', id)} isActive={activeDropdown === 'Loại CT'} onToggle={setActiveDropdown} />
-                                        <PremiumDropdown label="Tài khoản" items={meta.accounts} selectedItems={filters.acc_ids} onSelect={id => toggleFilter('acc_ids', id)} isActive={activeDropdown === 'Tài khoản'} onToggle={setActiveDropdown} />
-                                        <PremiumDropdown label="Đối tượng" items={meta.pr_details} selectedItems={filters.pr_detail_ids} onSelect={id => toggleFilter('pr_detail_ids', id)} isActive={activeDropdown === 'Đối tượng'} onToggle={setActiveDropdown} />
-                                        <PremiumDropdown label="Mục chi phí" items={meta.expenses} selectedItems={filters.expense_ids} onSelect={id => toggleFilter('expense_ids', id)} isActive={activeDropdown === 'Mục chi phí'} onToggle={setActiveDropdown} />
-                                        <PremiumDropdown label="Công việc" items={meta.jobs} selectedItems={filters.job_ids} onSelect={id => toggleFilter('job_ids', id)} isActive={activeDropdown === 'Công việc'} onToggle={setActiveDropdown} />
-                                    </div>}
                                 </div>
                             </div>
                             <div className="flex-1 min-h-0 p-3 overflow-hidden bg-canvas flex flex-col relative">
@@ -5701,9 +5891,24 @@ window.showConnectionLost = function() {
                                         <div className="ds-slot"><PeriodDropdown period={period} setPeriod={setPeriod} from={filters.from_date} to={filters.to_date} isActive={activeDropdown === 'period'} onToggle={setActiveDropdown} /></div>
                                         <div className="ds-slot"><IOSDatePicker label="Từ ngày" value={filters.from_date} onChange={val => toggleFilter('from_date', val)} disabled={period.type !== 'custom'} /></div>
                                         <div className="ds-slot"><IOSDatePicker label="Đến ngày" value={filters.to_date} onChange={val => toggleFilter('to_date', val)} disabled={period.type !== 'custom'} /></div>
-                                        <div className="ds-slot"><PremiumDropdown label="Loại CT" items={meta.tran_ids} selectedItems={filters.tran_ids} onSelect={id => toggleFilter('tran_ids', id)} isActive={activeDropdown === 'Loại CT'} onToggle={setActiveDropdown} /></div>
-                                        <div className="ds-slot"><PremiumDropdown label="Đơn vị" items={meta.orgs} selectedItems={filters.org_ids} onSelect={id => toggleFilter('org_ids', id)} isActive={activeDropdown === 'Đơn vị'} onToggle={setActiveDropdown} align="right" /></div>
-                                        <FilterToggleButton expanded={filtersExpanded} onToggle={() => setFiltersExpanded(v => !v)} count={purchaseRow2Count} />
+                                        <FilterConfigurator tab="purchase" defaultOutside={["filters.tran_ids", "filters.org_ids"]} onApply={() => loadPurchaseData()} setActiveDropdown={setActiveDropdown} items={[
+                                            { key: 'filters.tran_ids', label: 'Loại CT', active: filters.tran_ids.length > 0, clear: () => setFilters(p => ({ ...p, tran_ids: [] })),
+                                              node: <PremiumDropdown label="Loại CT" items={meta.tran_ids} selectedItems={filters.tran_ids} onSelect={id => toggleFilter('tran_ids', id)} isActive={activeDropdown === 'Loại CT'} onToggle={setActiveDropdown} /> },
+                                            { key: 'filters.org_ids', label: 'Đơn vị', active: filters.org_ids.length > 0, clear: () => setFilters(p => ({ ...p, org_ids: [] })),
+                                              node: <PremiumDropdown label="Đơn vị" items={meta.orgs} selectedItems={filters.org_ids} onSelect={id => toggleFilter('org_ids', id)} isActive={activeDropdown === 'Đơn vị'} onToggle={setActiveDropdown} align="right" /> },
+                                            { key: 'filters.item_ids', label: 'Hàng hóa', active: filters.item_ids.length > 0, clear: () => setFilters(p => ({ ...p, item_ids: [] })),
+                                              node: <PremiumDropdown label="Hàng hóa" items={meta.items} selectedItems={filters.item_ids} onSelect={id => toggleFilter('item_ids', id)} isActive={activeDropdown === 'Hàng hóa'} onToggle={setActiveDropdown} /> },
+                                            { key: 'filters.expense_ids', label: 'Mục chi phí', active: filters.expense_ids.length > 0, clear: () => setFilters(p => ({ ...p, expense_ids: [] })),
+                                              node: <PremiumDropdown label="Mục chi phí" items={meta.expenses} selectedItems={filters.expense_ids} onSelect={id => toggleFilter('expense_ids', id)} isActive={activeDropdown === 'Mục chi phí'} onToggle={setActiveDropdown} /> },
+                                            { key: 'filters.job_ids', label: 'Công việc', active: filters.job_ids.length > 0, clear: () => setFilters(p => ({ ...p, job_ids: [] })),
+                                              node: <PremiumDropdown label="Công việc" items={meta.jobs} selectedItems={filters.job_ids} onSelect={id => toggleFilter('job_ids', id)} isActive={activeDropdown === 'Công việc'} onToggle={setActiveDropdown} /> },
+                                            { key: 'filters.pr_detail_ids', label: 'Đối tượng', active: filters.pr_detail_ids.length > 0, clear: () => setFilters(p => ({ ...p, pr_detail_ids: [] })),
+                                              node: <PremiumDropdown label="Đối tượng" items={meta.pr_details} selectedItems={filters.pr_detail_ids} onSelect={id => toggleFilter('pr_detail_ids', id)} isActive={activeDropdown === 'Đối tượng'} onToggle={setActiveDropdown} /> },
+                                            { key: 'purchaseFilters.wh_ids', label: 'Kho nhập', active: purchaseFilters.wh_ids.length > 0, clear: () => setPurchaseFilters(p => ({ ...p, wh_ids: [] })),
+                                              node: <PremiumDropdown label="Kho nhập" items={meta.warehouses} selectedItems={purchaseFilters.wh_ids} onSelect={id => togglePurchaseFilter('wh_ids', id)} isActive={activeDropdown === 'Kho nhập'} onToggle={setActiveDropdown} /> },
+                                            { key: 'purchaseFilters.tran_no_search', label: 'Số chứng từ', active: !!(purchaseFilters.tran_no_search || '').trim(), clear: () => setPurchaseFilters(p => ({ ...p, tran_no_search: '' })),
+                                              node: <input type="text" value={purchaseFilters.tran_no_search} onChange={e => setPurchaseFilters(p => ({...p, tran_no_search: e.target.value}))} placeholder="Số chứng từ" className="ds-input w-40" /> },
+                                        ]} />
                                         <div className="ml-auto flex items-center gap-2">
                                             <PageSizeDropdown 
                                                         value={filters.page_size} 
@@ -5719,14 +5924,6 @@ window.showConnectionLost = function() {
                                             </button>
                                         </div>
                                     </div>
-                                    {filtersExpanded && <div className="flex flex-wrap items-center gap-2">
-                                        <PremiumDropdown label="Hàng hóa" items={meta.items} selectedItems={filters.item_ids} onSelect={id => toggleFilter('item_ids', id)} isActive={activeDropdown === 'Hàng hóa'} onToggle={setActiveDropdown} />
-                                        <PremiumDropdown label="Mục chi phí" items={meta.expenses} selectedItems={filters.expense_ids} onSelect={id => toggleFilter('expense_ids', id)} isActive={activeDropdown === 'Mục chi phí'} onToggle={setActiveDropdown} />
-                                        <PremiumDropdown label="Công việc" items={meta.jobs} selectedItems={filters.job_ids} onSelect={id => toggleFilter('job_ids', id)} isActive={activeDropdown === 'Công việc'} onToggle={setActiveDropdown} />
-                                        <PremiumDropdown label="Đối tượng" items={meta.pr_details} selectedItems={filters.pr_detail_ids} onSelect={id => toggleFilter('pr_detail_ids', id)} isActive={activeDropdown === 'Đối tượng'} onToggle={setActiveDropdown} />
-                                        <PremiumDropdown label="Kho nhập" items={meta.warehouses} selectedItems={purchaseFilters.wh_ids} onSelect={id => togglePurchaseFilter('wh_ids', id)} isActive={activeDropdown === 'Kho nhập'} onToggle={setActiveDropdown} />
-                                        <input type="text" value={purchaseFilters.tran_no_search} onChange={e => setPurchaseFilters(p => ({...p, tran_no_search: e.target.value}))} placeholder="Số chứng từ" className="ds-input w-40" />
-                                    </div>}
                                 </div>
                             </div>
                             <div className="flex-1 min-h-0 p-3 overflow-hidden bg-canvas flex flex-col relative">
@@ -5891,9 +6088,28 @@ window.showConnectionLost = function() {
                                         <div className="ds-slot"><PeriodDropdown period={period} setPeriod={setPeriod} from={filters.from_date} to={filters.to_date} isActive={activeDropdown === 'period'} onToggle={setActiveDropdown} /></div>
                                         <div className="ds-slot"><IOSDatePicker label="Từ ngày" value={filters.from_date} onChange={val => toggleFilter('from_date', val)} disabled={period.type !== 'custom'} /></div>
                                         <div className="ds-slot"><IOSDatePicker label="Đến ngày" value={filters.to_date} onChange={val => toggleFilter('to_date', val)} disabled={period.type !== 'custom'} /></div>
-                                        <div className="ds-slot"><PremiumDropdown label="Loại CT" items={meta.tran_ids} selectedItems={filters.tran_ids} onSelect={id => toggleFilter('tran_ids', id)} isActive={activeDropdown === 'Loại CT'} onToggle={setActiveDropdown} /></div>
-                                        <div className="ds-slot"><PremiumDropdown label="Đơn vị" items={meta.orgs} selectedItems={filters.org_ids} onSelect={id => toggleFilter('org_ids', id)} isActive={activeDropdown === 'Đơn vị'} onToggle={setActiveDropdown} align="right" /></div>
-                                        <FilterToggleButton expanded={filtersExpanded} onToggle={() => setFiltersExpanded(v => !v)} count={warehouseRow2Count} />
+                                        <FilterConfigurator tab="warehouse" defaultOutside={["filters.tran_ids", "filters.org_ids"]} onApply={() => loadWarehouseData()} setActiveDropdown={setActiveDropdown} items={[
+                                            { key: 'filters.tran_ids', label: 'Loại CT', active: filters.tran_ids.length > 0, clear: () => setFilters(p => ({ ...p, tran_ids: [] })),
+                                              node: <PremiumDropdown label="Loại CT" items={meta.tran_ids} selectedItems={filters.tran_ids} onSelect={id => toggleFilter('tran_ids', id)} isActive={activeDropdown === 'Loại CT'} onToggle={setActiveDropdown} /> },
+                                            { key: 'filters.org_ids', label: 'Đơn vị', active: filters.org_ids.length > 0, clear: () => setFilters(p => ({ ...p, org_ids: [] })),
+                                              node: <PremiumDropdown label="Đơn vị" items={meta.orgs} selectedItems={filters.org_ids} onSelect={id => toggleFilter('org_ids', id)} isActive={activeDropdown === 'Đơn vị'} onToggle={setActiveDropdown} align="right" /> },
+                                            { key: 'warehouseFilters.issue_receive', label: 'Nhập / Xuất', active: !!warehouseFilters.issue_receive, clear: () => setWarehouseFilters(p => ({ ...p, issue_receive: '' })),
+                                              node: <IssueReceiveDropdown value={warehouseFilters.issue_receive} onChange={v => setWarehouseFilters(p => ({...p, issue_receive: v}))} isActive={activeDropdown === 'issueReceive'} onToggle={setActiveDropdown}/> },
+                                            { key: 'filters.item_ids', label: 'Hàng hóa', active: filters.item_ids.length > 0, clear: () => setFilters(p => ({ ...p, item_ids: [] })),
+                                              node: <PremiumDropdown label="Hàng hóa" items={meta.items} selectedItems={filters.item_ids} onSelect={id => toggleFilter('item_ids', id)} isActive={activeDropdown === 'Hàng hóa'} onToggle={setActiveDropdown} /> },
+                                            { key: 'filters.product_ids', label: 'Sản phẩm', active: filters.product_ids.length > 0, clear: () => setFilters(p => ({ ...p, product_ids: [] })),
+                                              node: <PremiumDropdown label="Sản phẩm" items={meta.products} selectedItems={filters.product_ids} onSelect={id => toggleFilter('product_ids', id)} isActive={activeDropdown === 'Sản phẩm'} onToggle={setActiveDropdown} /> },
+                                            { key: 'filters.expense_ids', label: 'Mục chi phí', active: filters.expense_ids.length > 0, clear: () => setFilters(p => ({ ...p, expense_ids: [] })),
+                                              node: <PremiumDropdown label="Mục chi phí" items={meta.expenses} selectedItems={filters.expense_ids} onSelect={id => toggleFilter('expense_ids', id)} isActive={activeDropdown === 'Mục chi phí'} onToggle={setActiveDropdown} /> },
+                                            { key: 'filters.job_ids', label: 'Công việc', active: filters.job_ids.length > 0, clear: () => setFilters(p => ({ ...p, job_ids: [] })),
+                                              node: <PremiumDropdown label="Công việc" items={meta.jobs} selectedItems={filters.job_ids} onSelect={id => toggleFilter('job_ids', id)} isActive={activeDropdown === 'Công việc'} onToggle={setActiveDropdown} /> },
+                                            { key: 'filters.pr_detail_ids', label: 'Đối tượng', active: filters.pr_detail_ids.length > 0, clear: () => setFilters(p => ({ ...p, pr_detail_ids: [] })),
+                                              node: <PremiumDropdown label="Đối tượng" items={meta.pr_details} selectedItems={filters.pr_detail_ids} onSelect={id => toggleFilter('pr_detail_ids', id)} isActive={activeDropdown === 'Đối tượng'} onToggle={setActiveDropdown} /> },
+                                            { key: 'warehouseFilters.wh_ids', label: 'Kho', active: warehouseFilters.wh_ids.length > 0, clear: () => setWarehouseFilters(p => ({ ...p, wh_ids: [] })),
+                                              node: <PremiumDropdown label="Kho" items={meta.warehouses} selectedItems={warehouseFilters.wh_ids} onSelect={id => toggleWarehouseFilter('wh_ids', id)} isActive={activeDropdown === 'Kho'} onToggle={setActiveDropdown} align="right" /> },
+                                            { key: 'warehouseFilters.tran_no_search', label: 'Số chứng từ', active: !!(warehouseFilters.tran_no_search || '').trim(), clear: () => setWarehouseFilters(p => ({ ...p, tran_no_search: '' })),
+                                              node: <input type="text" value={warehouseFilters.tran_no_search} onChange={e => setWarehouseFilters(p => ({...p, tran_no_search: e.target.value}))} placeholder="Số chứng từ" className="ds-input w-40" /> },
+                                        ]} />
                                         <div className="ml-auto flex items-center gap-2">
                                             <PageSizeDropdown 
                                                         value={filters.page_size} 
@@ -5909,16 +6125,6 @@ window.showConnectionLost = function() {
                                             </button>
                                         </div>
                                     </div>
-                                    {filtersExpanded && <div className="flex flex-wrap items-center gap-2">
-                                        <IssueReceiveDropdown value={warehouseFilters.issue_receive} onChange={v => setWarehouseFilters(p => ({...p, issue_receive: v}))} isActive={activeDropdown === 'issueReceive'} onToggle={setActiveDropdown}/>
-                                        <PremiumDropdown label="Hàng hóa" items={meta.items} selectedItems={filters.item_ids} onSelect={id => toggleFilter('item_ids', id)} isActive={activeDropdown === 'Hàng hóa'} onToggle={setActiveDropdown} />
-                                        <PremiumDropdown label="Sản phẩm" items={meta.products} selectedItems={filters.product_ids} onSelect={id => toggleFilter('product_ids', id)} isActive={activeDropdown === 'Sản phẩm'} onToggle={setActiveDropdown} />
-                                        <PremiumDropdown label="Mục chi phí" items={meta.expenses} selectedItems={filters.expense_ids} onSelect={id => toggleFilter('expense_ids', id)} isActive={activeDropdown === 'Mục chi phí'} onToggle={setActiveDropdown} />
-                                        <PremiumDropdown label="Công việc" items={meta.jobs} selectedItems={filters.job_ids} onSelect={id => toggleFilter('job_ids', id)} isActive={activeDropdown === 'Công việc'} onToggle={setActiveDropdown} />
-                                        <PremiumDropdown label="Đối tượng" items={meta.pr_details} selectedItems={filters.pr_detail_ids} onSelect={id => toggleFilter('pr_detail_ids', id)} isActive={activeDropdown === 'Đối tượng'} onToggle={setActiveDropdown} />
-                                        <PremiumDropdown label="Kho" items={meta.warehouses} selectedItems={warehouseFilters.wh_ids} onSelect={id => toggleWarehouseFilter('wh_ids', id)} isActive={activeDropdown === 'Kho'} onToggle={setActiveDropdown} align="right" />
-                                        <input type="text" value={warehouseFilters.tran_no_search} onChange={e => setWarehouseFilters(p => ({...p, tran_no_search: e.target.value}))} placeholder="Số chứng từ" className="ds-input w-40" />
-                                    </div>}
                                 </div>
                             </div>
                             <div className="flex-1 min-h-0 p-3 overflow-hidden bg-canvas flex flex-col relative">
@@ -6077,8 +6283,16 @@ window.showConnectionLost = function() {
                                         <div className="ds-slot"><PeriodDropdown period={period} setPeriod={setPeriod} from={filters.from_date} to={filters.to_date} isActive={activeDropdown === 'period'} onToggle={setActiveDropdown} /></div>
                                         <div className="ds-slot"><IOSDatePicker label="Từ ngày" value={filters.from_date} onChange={val => toggleFilter('from_date', val)} disabled={period.type !== 'custom'} /></div>
                                         <div className="ds-slot"><IOSDatePicker label="Đến ngày" value={filters.to_date} onChange={val => toggleFilter('to_date', val)} disabled={period.type !== 'custom'} /></div>
-                                        <div className="ds-slot"><PremiumDropdown label="Đơn vị" items={meta.orgs} selectedItems={filters.org_ids} onSelect={id => toggleFilter('org_ids', id)} isActive={activeDropdown === 'Đơn vị'} onToggle={setActiveDropdown} /></div>
-                                        <FilterToggleButton expanded={filtersExpanded} onToggle={() => setFiltersExpanded(v => !v)} count={warehouseBalanceRow2Count} />
+                                        <FilterConfigurator tab="warehouse_balance" defaultOutside={["filters.org_ids"]} onApply={() => loadWarehouseBalanceData()} setActiveDropdown={setActiveDropdown} items={[
+                                            { key: 'filters.org_ids', label: 'Đơn vị', active: filters.org_ids.length > 0, clear: () => setFilters(p => ({ ...p, org_ids: [] })),
+                                              node: <PremiumDropdown label="Đơn vị" items={meta.orgs} selectedItems={filters.org_ids} onSelect={id => toggleFilter('org_ids', id)} isActive={activeDropdown === 'Đơn vị'} onToggle={setActiveDropdown} /> },
+                                            { key: 'warehouseBalanceFilters.wh_ids', label: 'Kho', active: warehouseBalanceFilters.wh_ids.length > 0, clear: () => setWarehouseBalanceFilters(p => ({ ...p, wh_ids: [] })),
+                                              node: <PremiumDropdown label="Kho" items={meta.warehouses} selectedItems={warehouseBalanceFilters.wh_ids} onSelect={id => toggleWarehouseBalanceFilter('wh_ids', id)} isActive={activeDropdown === 'Kho'} onToggle={setActiveDropdown} /> },
+                                            { key: 'filters.item_ids', label: 'Hàng hóa', active: filters.item_ids.length > 0, clear: () => setFilters(p => ({ ...p, item_ids: [] })),
+                                              node: <PremiumDropdown label="Hàng hóa" items={meta.items} selectedItems={filters.item_ids} onSelect={id => toggleFilter('item_ids', id)} isActive={activeDropdown === 'Hàng hóa'} onToggle={setActiveDropdown} /> },
+                                            { key: 'filters.acc_ids', label: 'Tài khoản', active: filters.acc_ids.length > 0, clear: () => setFilters(p => ({ ...p, acc_ids: [] })),
+                                              node: <PremiumDropdown label="Tài khoản" items={meta.accounts} selectedItems={filters.acc_ids} onSelect={id => toggleFilter('acc_ids', id)} isActive={activeDropdown === 'Tài khoản'} onToggle={setActiveDropdown} align="right" /> },
+                                        ]} />
                                         <div className="ml-auto flex items-center gap-2">
                                             <PageSizeDropdown
                                                         value={filters.page_size}
@@ -6092,11 +6306,6 @@ window.showConnectionLost = function() {
                                             </button>
                                         </div>
                                     </div>
-                                    {filtersExpanded && <div className="flex flex-wrap items-center gap-2">
-                                        <PremiumDropdown label="Kho" items={meta.warehouses} selectedItems={warehouseBalanceFilters.wh_ids} onSelect={id => toggleWarehouseBalanceFilter('wh_ids', id)} isActive={activeDropdown === 'Kho'} onToggle={setActiveDropdown} />
-                                        <PremiumDropdown label="Hàng hóa" items={meta.items} selectedItems={filters.item_ids} onSelect={id => toggleFilter('item_ids', id)} isActive={activeDropdown === 'Hàng hóa'} onToggle={setActiveDropdown} />
-                                        <PremiumDropdown label="Tài khoản" items={meta.accounts} selectedItems={filters.acc_ids} onSelect={id => toggleFilter('acc_ids', id)} isActive={activeDropdown === 'Tài khoản'} onToggle={setActiveDropdown} align="right" />
-                                    </div>}
                                 </div>
                             </div>
                             <div className="flex-1 min-h-0 p-3 overflow-hidden bg-canvas flex flex-col relative">
@@ -6295,7 +6504,7 @@ window.showConnectionLost = function() {
                     <AutoUpdateModal isUpdating={autoUpdate.isUpdating} progress={autoUpdate.progress} onClose={() => autoUpdate.setIsUpdating(false)} />
                     </div>
                     </div>
-                    <AppStatusBar meta={meta} filters={filters} appVersion={appVersion} />
+                    <AppStatusBar meta={meta} filters={filters} appVersion={appVersion} timing={activeTab === 'ledger' ? queryTiming : null} />
                 </div>
             );
         };
