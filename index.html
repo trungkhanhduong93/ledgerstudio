@@ -378,8 +378,23 @@ window.showConnectionLost = function() {
         .ds-menuitem small { display: block; margin-top: 1px; font-size: 11.5px; color: var(--ds-ink-3); }
         .ds-fmt { flex: none; display: grid; place-items: center; width: 38px; height: 24px; border-radius: 6px; background: var(--ds-tint); font-size: 10.5px; font-weight: 600; letter-spacing: .02em; color: var(--ds-ink-2); }
         .ds-fmt.is-ok { background: var(--ds-ok-soft); color: var(--ds-ok-ink); }
-        .ds-updbar { display: flex; align-items: center; gap: 10px; flex: none; min-height: 40px; padding: 4px 10px 4px 16px; background: var(--ds-brand-soft); border-bottom: 1px solid var(--ds-brand-line); font-size: 12.5px; color: var(--ds-ink); }
-        .ds-updbar .ds-tag { background: var(--ds-brand); color: #fff; font-weight: 500; }
+        .ds-upd-force { max-width: 400px; text-align: center; }
+        .ds-upd-hero { padding: 28px 24px 0; }
+        .ds-upd-badge { width: 56px; height: 56px; margin: 0 auto 16px; display: grid; place-items: center; border-radius: 50%; background: var(--ds-brand-soft); color: var(--ds-brand); animation: dsUpPulse 2s ease-in-out infinite; }
+        @keyframes dsUpPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(0,104,172,.18); } 50% { box-shadow: 0 0 0 10px rgba(0,104,172,0); } }
+        .ds-upd-hero h2 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -.01em; color: var(--ds-ink); }
+        .ds-upd-ver { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 10px 0 0; font-size: 14px; font-weight: 500; }
+        .ds-upd-old { color: var(--ds-ink-3); text-decoration: line-through; text-decoration-color: var(--ds-ink-4); }
+        .ds-upd-ver svg { color: var(--ds-brand); }
+        .ds-upd-new { color: var(--ds-brand); font-weight: 600; }
+        .ds-upd-body { text-align: left; }
+        .ds-upd-meta { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--ds-line-soft); border-radius: 10px; background: var(--ds-wash); }
+        .ds-upd-mrow { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 3px 0; font-size: 12.5px; }
+        .ds-upd-mk { color: var(--ds-ink-3); }
+        .ds-upd-mv { font-weight: 500; color: var(--ds-ink); font-variant-numeric: tabular-nums; }
+        .ds-upd-foot { justify-content: stretch; }
+        .ds-upd-go { width: 100%; justify-content: center; height: 38px; font-size: 13.5px; font-weight: 600; }
+        .ds-login-blocked { pointer-events: none; opacity: .45; filter: grayscale(.3); transition: opacity .3s, filter .3s; }
         @media (prefers-reduced-motion: reduce) { .ds-scrim, .ds-dialog { animation: none; } .ds-progress.is-busy > i { animation-duration: 3s; } }
 
         /* ===== MÀN ĐĂNG NHẬP (Đợt 6, 27/09/2026): trái giấy sổ cái + sóc IACC, phải form =====
@@ -1264,14 +1279,15 @@ window.showConnectionLost = function() {
         // ==============================================================================
         const useAutoUpdate = () => {
             const [updateInfo, setUpdateInfo] = React.useState(null);
-            const [dismissed, setDismissed] = React.useState(false);
             const [isUpdating, setIsUpdating] = React.useState(false);
             const [progress, setProgress] = React.useState({ progress: 0, status: 'idle', downloaded_bytes: 0, total_bytes: 0, error_message: '' });
             const pollRef = React.useRef(null);
 
+            // Force update: có bản mới thì chặn đăng nhập, không cho bỏ qua
+            const hasForceUpdate = !!(updateInfo && updateInfo.has_update);
+
             React.useEffect(() => {
                 let alive = true;
-                // Kiểm tra ngầm 1 giây sau khi mở app; lỗi mạng / GitHub chặn thì im lặng
                 const timer = setTimeout(() => {
                     fetch('/api/check_update')
                         .then(r => r.json())
@@ -1303,7 +1319,6 @@ window.showConnectionLost = function() {
                                 clearInterval(pollRef.current);
                             }
                         } catch (e) {
-                            // Server cũ đã thoát để nhường bản mới → coi như xong, đợi bản mới lên rồi tải lại trang
                             clearInterval(pollRef.current);
                             setProgress(p => ({ ...p, status: 'ready', progress: 100 }));
                             setTimeout(() => window.location.reload(), 3500);
@@ -1314,22 +1329,41 @@ window.showConnectionLost = function() {
                 }
             };
 
-            return { updateInfo, dismissed, setDismissed, isUpdating, setIsUpdating, progress, startUpdate };
+            return { updateInfo, hasForceUpdate, isUpdating, setIsUpdating, progress, startUpdate };
         };
 
-        const AutoUpdateBanner = ({ updateInfo, onStartUpdate, onDismiss }) => {
+        const ForceUpdateModal = ({ updateInfo, onStartUpdate }) => {
             if (!updateInfo || !updateInfo.has_update) return null;
-            const sizeMb = updateInfo.file_size ? (updateInfo.file_size / (1024 * 1024)).toFixed(1) + ' MB' : '';
+            const sizeMb = updateInfo.file_size ? (updateInfo.file_size / (1024 * 1024)).toFixed(1) : '';
             return (
-                <div className="ds-updbar">
-                    <span className="ds-tag">Bản mới</span>
-                    <span className="min-w-0 truncate">Đã có phiên bản <b className="font-semibold">{updateInfo.latest_version}</b>
-                        {sizeMb && <span className="text-ink-3"> ({sizeMb})</span>}
-                        <span className="hidden md:inline text-ink-3"> — máy đang dùng v{updateInfo.current_version}</span>
-                    </span>
-                    <div className="ml-auto flex items-center gap-1 shrink-0">
-                        <button onClick={onStartUpdate} className="ds-btn ds-btn-pri"><Icon name="download" size={14} stroke={2} /> Cập nhật ngay</button>
-                        <button onClick={onDismiss} title="Bỏ qua lần này" className="ds-iconbtn"><Icon name="x" size={15} stroke={2} /></button>
+                <div className="ds-scrim z-[99999]">
+                    <div className="ds-dialog ds-upd-force" role="dialog" aria-modal="true">
+                        <div className="ds-upd-hero">
+                            <div className="ds-upd-badge">
+                                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            </div>
+                            <h2>Phiên bản mới đã sẵn sàng</h2>
+                            <p className="ds-upd-ver">
+                                <span className="ds-upd-old">v{updateInfo.current_version}</span>
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                                <span className="ds-upd-new">{updateInfo.latest_version}</span>
+                            </p>
+                        </div>
+                        <div className="ds-dlg-body ds-upd-body">
+                            <div className="ds-note is-info">
+                                <Icon name="alert-circle" size={15} stroke={2} />
+                                <span>Vui lòng cập nhật để tiếp tục sử dụng ứng dụng. Phiên bản hiện tại không còn được hỗ trợ.</span>
+                            </div>
+                            {(sizeMb || updateInfo.release_name) && (
+                                <div className="ds-upd-meta">
+                                    {updateInfo.release_name && <div className="ds-upd-mrow"><span className="ds-upd-mk">Bản phát hành</span><span className="ds-upd-mv">{updateInfo.release_name}</span></div>}
+                                    {sizeMb && <div className="ds-upd-mrow"><span className="ds-upd-mk">Dung lượng tải</span><span className="ds-upd-mv">{sizeMb} MB</span></div>}
+                                </div>
+                            )}
+                        </div>
+                        <div className="ds-dlg-foot ds-upd-foot">
+                            <button onClick={onStartUpdate} className="ds-btn ds-btn-pri ds-upd-go"><Icon name="download" size={16} stroke={2} /> Cập nhật ngay</button>
+                        </div>
                     </div>
                 </div>
             );
@@ -5145,10 +5179,7 @@ window.showConnectionLost = function() {
                         </div>
 
                         {/* Phải: form kết nối — logic như cũ (handleLogin, loginData) */}
-                        <div className="ds-login-side">
-                            {!autoUpdate.dismissed && autoUpdate.updateInfo && (
-                                <AutoUpdateBanner updateInfo={autoUpdate.updateInfo} onStartUpdate={autoUpdate.startUpdate} onDismiss={() => autoUpdate.setDismissed(true)} />
-                            )}
+                        <div className={`ds-login-side${autoUpdate.hasForceUpdate ? ' ds-login-blocked' : ''}`}>
                             <div className="ds-login-form">
                                 <div className="ds-login-logo">
                                     <svg viewBox="0 0 200 200" width="44" height="44" aria-hidden="true">
@@ -5214,6 +5245,7 @@ window.showConnectionLost = function() {
                                 </div>
                             </div>
                         )}
+                    {!autoUpdate.isUpdating && <ForceUpdateModal updateInfo={autoUpdate.updateInfo} onStartUpdate={autoUpdate.startUpdate} />}
                     <AutoUpdateModal isUpdating={autoUpdate.isUpdating} progress={autoUpdate.progress} onClose={() => autoUpdate.setIsUpdating(false)} />
                 </div>
                 );
@@ -5224,9 +5256,7 @@ window.showConnectionLost = function() {
             const isWarehouseGroupedOrSearched = groupByWarehouse.length > 0 || Object.values(warehouseColSearch).some(val => (val || '').trim() !== '');
             return (
                 <div className="h-screen flex flex-col">
-                    {!autoUpdate.dismissed && (
-                        <AutoUpdateBanner updateInfo={autoUpdate.updateInfo} onStartUpdate={autoUpdate.startUpdate} onDismiss={() => autoUpdate.setDismissed(true)} />
-                    )}
+                    {!autoUpdate.isUpdating && <ForceUpdateModal updateInfo={autoUpdate.updateInfo} onStartUpdate={autoUpdate.startUpdate} />}
                     <div className="app-shell flex flex-1 min-h-0">
                     <AppSidebar collapsed={sidebarCollapsed} onToggleCollapsed={toggleSidebar} activeTab={activeTab} reportType={reportType}
                         onPickTab={setActiveTab} onPickReport={pickReport} refreshing={refreshing} onRefresh={refreshMeta} onLogout={handleLogout} />
