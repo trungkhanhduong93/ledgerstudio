@@ -4649,14 +4649,8 @@ window.showConnectionLost = function() {
             };
 
             useEffect(() => {
-                if (isLoggedIn && activeTab === 'pr_detail') loadPrDetailData(1, prDetailPageSize);
+                if (isLoggedIn && activeTab === 'pr_detail' && prDetailData.length > 0) loadPrDetailData(1, prDetailPageSize);
             }, [prDetailSort]);
-
-            useEffect(() => {
-                if (isLoggedIn && activeTab === 'pr_detail' && prDetailData.length === 0 && !prDetailLoading) {
-                    loadPrDetailData(1, prDetailPageSize);
-                }
-            }, [isLoggedIn, activeTab]);
 
             // ============ EXCEL EXPORT ============
             const LEDGER_EXPORT_COLS = [
@@ -4769,12 +4763,25 @@ window.showConnectionLost = function() {
                 ['ACTIVE','Active'],['COMMENTS','Ghi chú']
             ];
 
+            const PR_DETAIL_TYPE_MAP = {
+                '00': 'Khách hàng',
+                '01': 'Nhà cung cấp',
+                '02': 'Đại lý',
+                '03': 'Phòng ban/Bộ phận',
+                '04': 'Nhân viên',
+                '05': 'Khác',
+                '06': 'Khách',
+                '07': 'Đối tác',
+                '08': 'Cục thuế'
+            };
+
             const PR_DETAIL_EXPORT_COLS = [
                 ['PR_DETAIL_ID','Mã đối tượng'],
                 ['PR_DETAIL_NAME','Tên đối tượng'],
                 ['PR_DETAIL_CLASS_ID','Mã nhóm'],
                 ['PR_DETAIL_CLASS_NAME','Tên nhóm đối tượng'],
-                ['PR_DETAIL_TYPE_ID','Loại đối tượng'],
+                ['PR_DETAIL_TYPE_ID','Mã loại ĐT'],
+                ['PR_DETAIL_TYPE_NAME','Tên loại đối tượng'],
                 ['TAX_FILE_NUMBER','Mã số thuế'],
                 ['PHONE','Điện thoại'],
                 ['EMAIL','Email'],
@@ -6663,7 +6670,7 @@ window.showConnectionLost = function() {
                                                     <SortableHeader field="BANK_ACCOUNT"        sort={prDetailSort} onSort={f => setPrDetailSort(s => cycleSort(s, f))} className="border-r w-36 px-2">Số tài khoản NH</SortableHeader>
                                                     <SortableHeader field="BANK_BRANCH"         sort={prDetailSort} onSort={f => setPrDetailSort(s => cycleSort(s, f))} className="border-r w-40 px-3" align="left">Chi nhánh NH</SortableHeader>
                                                     <SortableHeader field="BANK_ACCOUNT_HOLDER" sort={prDetailSort} onSort={f => setPrDetailSort(s => cycleSort(s, f))} className="border-r w-44 px-3" align="left">Chủ tài khoản</SortableHeader>
-                                                    <SortableHeader field="PR_DETAIL_TYPE_ID"   sort={prDetailSort} onSort={f => setPrDetailSort(s => cycleSort(s, f))} className="border-r w-20">Loại ĐT</SortableHeader>
+                                                    <SortableHeader field="PR_DETAIL_TYPE_ID"   sort={prDetailSort} onSort={f => setPrDetailSort(s => cycleSort(s, f))} className="border-r w-40 px-2" align="left">Loại đối tượng</SortableHeader>
                                                     <SortableHeader field="ACTIVE"              sort={prDetailSort} onSort={f => setPrDetailSort(s => cycleSort(s, f))} className="border-r w-24">Trạng thái</SortableHeader>
                                                     <SortableHeader field="USER_ID"             sort={prDetailSort} onSort={f => setPrDetailSort(s => cycleSort(s, f))} className="w-24">Người tạo</SortableHeader>
                                                 </tr>
@@ -6681,42 +6688,53 @@ window.showConnectionLost = function() {
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                <VirtualRows data={prDetailFlatData} rowHeight={28} scrollRef={prDetailScrollRef} renderRow={(row, i) => (
-                                                    <tr key={i} className="border-b hover:bg-indigo-50/30 text-center">
-                                                        <td className="border-r text-slate-300 font-mono">{i + 1}</td>
-                                                        <td className="border-r px-3 text-left font-mono font-medium text-brand">{row.PR_DETAIL_ID}</td>
-                                                        <td className="border-r px-3 text-left font-medium">{row.PR_DETAIL_NAME}</td>
-                                                        <td className="border-r px-3 text-left">
-                                                            {(row.PR_DETAIL_CLASS_NAME || row.PR_DETAIL_CLASS_ID) ? (
-                                                                <span className="inline-block px-1.5 py-0.5 rounded text-[11px] bg-slate-100 text-ink-2">
-                                                                    {row.PR_DETAIL_CLASS_NAME || row.PR_DETAIL_CLASS_ID}
-                                                                </span>
-                                                            ) : ''}
+                                                {prDetailFlatData.length === 0 ? (
+                                                    <tr>
+                                                        <td colSpan={16} className="text-center py-12 text-ink-3">
+                                                            {prDetailLoading ? 'Đang truy vấn dữ liệu...' : 'Chưa có dữ liệu. Vui lòng nhấn nút "Truy vấn" để tải danh mục đối tượng.'}
                                                         </td>
-                                                        <td className="border-r px-2 font-mono">{row.TAX_FILE_NUMBER}</td>
-                                                        <td className="border-r px-2 font-mono">{row.PHONE}</td>
-                                                        <td className="border-r px-3 text-left">{row.EMAIL}</td>
-                                                        <td className="border-r px-3 text-left truncate max-w-[280px]" title={row.ADDRESS}>{row.ADDRESS}</td>
-                                                        <td className="border-r font-mono">{row.PR_ACCOUNT_ID}</td>
-                                                        <td className="border-r px-3 text-left">{row.BANK_NAME}</td>
-                                                        <td className="border-r px-2 font-mono">{row.BANK_ACCOUNT}</td>
-                                                        <td className="border-r px-3 text-left">{row.BANK_BRANCH}</td>
-                                                        <td className="border-r px-3 text-left">{row.BANK_ACCOUNT_HOLDER}</td>
-                                                        <td className="border-r font-mono text-ink-3">{row.PR_DETAIL_TYPE_ID}</td>
-                                                        <td className="border-r text-center">
-                                                            {Number(row.ACTIVE) === 1 ? (
-                                                                <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 text-[11px] font-medium">
-                                                                    <Icon name="check" size={10} stroke={2.5}/> Đang dùng
-                                                                </span>
-                                                            ) : (
-                                                                <span className="inline-block text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-200 text-[11px]">
-                                                                    Ngừng
-                                                                </span>
-                                                            )}
-                                                        </td>
-                                                        <td className="text-ink-3">{row.USER_ID}</td>
                                                     </tr>
-                                                )} />
+                                                ) : (
+                                                    <VirtualRows data={prDetailFlatData} rowHeight={28} scrollRef={prDetailScrollRef} renderRow={(row, i) => (
+                                                        <tr key={i} className="border-b hover:bg-indigo-50/30 text-center">
+                                                            <td className="border-r text-slate-300 font-mono">{i + 1}</td>
+                                                            <td className="border-r px-3 text-left font-mono font-medium text-brand">{row.PR_DETAIL_ID}</td>
+                                                            <td className="border-r px-3 text-left font-medium">{row.PR_DETAIL_NAME}</td>
+                                                            <td className="border-r px-3 text-left">
+                                                                {(row.PR_DETAIL_CLASS_NAME || row.PR_DETAIL_CLASS_ID) ? (
+                                                                    <span className="inline-block px-1.5 py-0.5 rounded text-[11px] bg-slate-100 text-ink-2">
+                                                                        {row.PR_DETAIL_CLASS_NAME || row.PR_DETAIL_CLASS_ID}
+                                                                    </span>
+                                                                ) : ''}
+                                                            </td>
+                                                            <td className="border-r px-2 font-mono">{row.TAX_FILE_NUMBER}</td>
+                                                            <td className="border-r px-2 font-mono">{row.PHONE}</td>
+                                                            <td className="border-r px-3 text-left">{row.EMAIL}</td>
+                                                            <td className="border-r px-3 text-left truncate max-w-[280px]" title={row.ADDRESS}>{row.ADDRESS}</td>
+                                                            <td className="border-r font-mono">{row.PR_ACCOUNT_ID}</td>
+                                                            <td className="border-r px-3 text-left">{row.BANK_NAME}</td>
+                                                            <td className="border-r px-2 font-mono">{row.BANK_ACCOUNT}</td>
+                                                            <td className="border-r px-3 text-left">{row.BANK_BRANCH}</td>
+                                                            <td className="border-r px-3 text-left">{row.BANK_ACCOUNT_HOLDER}</td>
+                                                            <td className="border-r px-2 text-left whitespace-nowrap">
+                                                                {row.PR_DETAIL_TYPE_ID ? (
+                                                                    <span>
+                                                                        <span className="font-mono text-ink-3 mr-1.5">{row.PR_DETAIL_TYPE_ID}</span>
+                                                                        <span>{row.PR_DETAIL_TYPE_NAME || PR_DETAIL_TYPE_MAP[row.PR_DETAIL_TYPE_ID] || ''}</span>
+                                                                    </span>
+                                                                ) : ''}
+                                                            </td>
+                                                            <td className="border-r text-center whitespace-nowrap px-2">
+                                                                {Number(row.ACTIVE) === 1 ? (
+                                                                    <span className="text-emerald-600 font-bold">Đang dùng</span>
+                                                                ) : (
+                                                                    <span className="text-slate-400">Ngừng</span>
+                                                                )}
+                                                            </td>
+                                                            <td className="text-ink-3">{row.USER_ID}</td>
+                                                        </tr>
+                                                    )} />
+                                                )}
                                             </tbody>
                                             <tfoot className="sticky-footer">
                                                 <tr className="text-slate-800 font-semibold text-[12px] bg-slate-50/95">

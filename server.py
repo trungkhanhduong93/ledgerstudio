@@ -2431,6 +2431,18 @@ PR_DETAIL_BASE_COLUMNS = [
     "PRICE_LEVEL_ID", "PROVINCE_ID", "PAYMENT_TERM_ID", "BANK_CARD_NO"
 ]
 
+PR_DETAIL_TYPE_MAP = {
+    "00": "Khách hàng",
+    "01": "Nhà cung cấp",
+    "02": "Đại lý",
+    "03": "Phòng ban/Bộ phận",
+    "04": "Nhân viên",
+    "05": "Khác",
+    "06": "Khách",
+    "07": "Đối tác",
+    "08": "Cục thuế"
+}
+
 PR_DETAIL_SORT_WHITELIST = {col: f"P.{col}" for col in PR_DETAIL_BASE_COLUMNS}
 PR_DETAIL_SORT_WHITELIST["PR_DETAIL_CLASS_NAME"] = "C.PR_DETAIL_CLASS_NAME"
 
@@ -2439,7 +2451,8 @@ PR_DETAIL_CSV_COLS = [
     ("PR_DETAIL_NAME", "Tên đối tượng"),
     ("PR_DETAIL_CLASS_ID", "Mã nhóm"),
     ("PR_DETAIL_CLASS_NAME", "Tên nhóm đối tượng"),
-    ("PR_DETAIL_TYPE_ID", "Loại đối tượng"),
+    ("PR_DETAIL_TYPE_ID", "Mã loại ĐT"),
+    ("PR_DETAIL_TYPE_NAME", "Tên loại đối tượng"),
     ("TAX_FILE_NUMBER", "Mã số thuế"),
     ("PHONE", "Điện thoại"),
     ("EMAIL", "Email"),
@@ -2594,6 +2607,8 @@ def get_pr_detail():
                       "PR_ACCOUNT_ID", "BANK_NAME", "BANK_ACCOUNT", "BANK_BRANCH", "BANK_ACCOUNT_HOLDER", "USER_ID"):
                 if k in r and r[k] is not None:
                     r[k] = str(r[k]).strip()
+            tid = str(r.get("PR_DETAIL_TYPE_ID") or "").strip()
+            r["PR_DETAIL_TYPE_NAME"] = PR_DETAIL_TYPE_MAP.get(tid, "")
             rows.append(r)
 
         return jsonify({
@@ -2648,6 +2663,8 @@ def get_pr_detail_stream_csv():
 
         def transform(raw, sql_cols):
             d = dict(zip(sql_cols, raw))
+            tid = str(d.get("PR_DETAIL_TYPE_ID") or "").strip()
+            d["PR_DETAIL_TYPE_NAME"] = PR_DETAIL_TYPE_MAP.get(tid, "")
             if "ACTIVE" in d:
                 d["ACTIVE"] = "Đang dùng" if d["ACTIVE"] == 1 else "Ngừng"
             return [d.get(key) for key, _ in PR_DETAIL_CSV_COLS]
