@@ -7,7 +7,7 @@
 > Remote cũ từng trỏ nhầm repo **LedgerReport** (gỡ 16/08/2026): push nhầm là đè code Studio lên `main` của Report.
 > Repo công khai → **cấm commit mật khẩu / IP server DB / file dữ liệu khách** (`BaoCaoMau/` đã `.gitignore`).
 > Build vẫn chạy **`BuildEXE-LedgerStudio.bat`**, EXE nằm trong `dist` (không lên git). Phát hành qua **GitHub Releases** — app từ v1.8.3 tự cập nhật (mục 5, Bước 5).
-> **Cập nhật gần nhất:** 27/09/2026 (v1.9.3: tốc độ sổ cái — Bẫy 20, bộ lọc nâng cao — Bẫy 21 · v1.9.2: màn đăng nhập — Bẫy 19 · v1.9.1: hộp thoại — Bẫy 18 · v1.9.0: khung báo cáo + zoom — Bẫy 17 · v1.8.9: bảng dữ liệu + cuộn mượt — Bẫy 16 · v1.8.8: thanh lọc chip · v1.8.7: khung + DataStudio — Bẫy 15 · v1.8.6: dịch sẵn — Bẫy 14)
+> **Cập nhật gần nhất:** 27/09/2026 (v1.9.4: kéo cuộn mượt — Bẫy 16, tiêu đề bảng lọt chữ — Bẫy 22 · v1.9.3: tốc độ sổ cái — Bẫy 20, bộ lọc nâng cao — Bẫy 21 · v1.9.2: màn đăng nhập — Bẫy 19 · v1.9.1: hộp thoại — Bẫy 18 · v1.9.0: khung báo cáo + zoom — Bẫy 17 · v1.8.9: bảng dữ liệu + cuộn mượt — Bẫy 16 · v1.8.8: thanh lọc chip · v1.8.7: khung + DataStudio — Bẫy 15 · v1.8.6: dịch sẵn — Bẫy 14)
 
 ---
 
@@ -203,7 +203,7 @@ Tất cả các báo cáo hiển thị dưới dạng tờ **A4/A4 Ngang (`.repo
 - Từ v1.8.8 thanh lọc dùng chip `ds-chip` (nhãn trong chip), không còn `.label-text` phía trên; `IOSDatePicker` ẩn khi ngoài kỳ Tùy ý; dropdown "Mẫu báo cáo" đã gỡ. Chi tiết CLAUDE.md mục 3.0.
 
 ### Bẫy 16: Bảng ảo (v1.8.9)
-- `useVirtualScroll` chỉ `setScrollTop` khi cuộn đủ 10 dòng (trước: mỗi pixel → cả App vẽ lại, CPU yếu 599/600 khung giật). Listener cuộn gắn lại sau mỗi render nếu khung cuộn đổi (trước: deps `[containerRef.current]` gắn hụt). Đừng giảm overscan dưới ~20. `table-layout: fixed` đã đo là CHẬM hơn. Chi tiết CLAUDE.md Bẫy 16.
+- `useVirtualScroll` chỉ `setScrollTop` khi cuộn đủ 10 dòng (trước: mỗi pixel → cả App vẽ lại, CPU yếu 599/600 khung giật). Listener cuộn gắn lại sau mỗi render nếu khung cuộn đổi (trước: deps `[containerRef.current]` gắn hụt). Đừng giảm overscan dưới ~20. `table-layout: fixed` đã đo là CHẬM hơn. v1.9.4: `VirtualRows` (hook gọi trong component con, không trong App) + chế độ kéo nhanh (overscan 8, `flushSync`, key theo vị trí để dùng lại `<tr>`) → kéo thanh cuộn 89 → 16 ms/khung. Chi tiết CLAUDE.md Bẫy 16.
 
 ### Bẫy 17: Zoom tờ báo cáo (v1.9.0)
 - Thanh dưới khu báo cáo `ReportBar` zoom bằng `transform: scale` trên `.report-paper` + khung giữ chỗ `.ds-papersizer` (đặt qua ref). KHÔNG dùng CSS `zoom`: BC012 10.000 dòng mất 4,3–5 s mỗi lần bấm (scale 0,8–1,1 s). Đừng đặt phần tử `position: fixed` trong tờ giấy (transform làm nó trôi theo tờ). In tự gỡ scale. Chi tiết CLAUDE.md Bẫy 17.
@@ -219,6 +219,9 @@ Tất cả các báo cáo hiển thị dưới dạng tờ **A4/A4 Ngang (`.repo
 
 ### Bẫy 21: Bộ lọc nâng cao (v1.9.3)
 - Panel "Bộ lọc khác" = `FilterConfigurator` (cấp trên cùng) nhận `items` {key, label, active, clear, node}; tối đa 4 ô ra ngoài, nhớ theo tab `localStorage['ds_filters_<tab>']`; kéo đổi thứ tự dùng ref. Thêm ô lọc = thêm phần tử vào `items` của tab. Chi tiết CLAUDE.md Bẫy 21.
+
+### Bẫy 22: Tiêu đề bảng lọt chữ khi cuộn (v1.9.4)
+- `thead` dính + `border-collapse: collapse` → Chrome vẽ sai, chữ dòng dưới lọt lên hàng ô tìm. Sửa: `table.ds-grid { border-collapse: separate; border-spacing: 0 }`; chế độ tách bỏ qua viền trên `<tr>/<tfoot>` → vạch ngang đặt lên `td`. Dropdown lọc: cột mã đo bề rộng mã dài nhất (`--ds-code-w`). Chi tiết CLAUDE.md Bẫy 22.
 
 ---
 

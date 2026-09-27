@@ -2,7 +2,7 @@
 
 > Toàn bộ những gì đã làm với **LedgerStudio**, và **vì sao**. Đọc file này trước khi sửa tiếp.
 > Kiến trúc và ma trận báo cáo: [CLAUDE.md](CLAUDE.md).
-> Phiên gần nhất: **27/09/2026** · EXE build mới nhất: **iPOS_Ledger_Studio v1.9.3** — tên hiển thị DataStudio · bản phát hành: v1.9.3
+> Phiên gần nhất: **27/09/2026** · EXE build mới nhất: **iPOS_Ledger_Studio v1.9.4** (chưa phát hành) — tên hiển thị DataStudio · bản phát hành: v1.9.3
 
 ---
 
@@ -760,3 +760,33 @@ latest=v1.9.3` → bấm "Cập nhật ngay" trên giao diện v1.9.2 (puppeteer
 
 **Commit lỗi (PowerShell 5.1):** `git commit -m @'…'@` có dấu `"` trong message → PowerShell tách thành nhiều đối số, git báo
 `pathspec … did not match`, KHÔNG commit. Viết message ra file rồi `git commit -F <file>`.
+
+## 22. v1.9.4 (chưa phát hành): kéo thanh cuộn mượt + tiêu đề bảng lọt chữ + cột mã dropdown *(27/09/2026)*
+
+**Trum báo (sau khi dùng 1.9.3):** (1) cuộn thấy khe hở giữa hàng tiêu đề và hàng lọc của bảng; (2) truy vấn nhanh hơn rồi nhưng
+lướt nhiều dòng giật, nhất là kéo thanh cuộn — không theo kịp chuột; (3) dropdown "Loại CT" không thẳng cột mã / tên.
+
+**Nguyên nhân + sửa:** CLAUDE.md Bẫy 16 (mục kéo thanh cuộn) và Bẫy 22.
+- (1) Chrome vẽ sai `thead` dính khi bảng dùng viền gộp → chữ dòng dưới lọt lên hàng ô tìm. Chuyển 7 bảng sang viền tách.
+- (2) Mỗi khung hình kéo thanh cuộn vẽ lại ~130 dòng × 34 cột + cả App, và vẽ sau khi khung hình đã hiện. Tách `VirtualRows`,
+  chế độ kéo nhanh (overscan 8 + `flushSync` + dùng lại `<tr>`), giữ sẵn `Intl.NumberFormat`.
+- (3) Ô mã chỉ có `min-width: 34px` → đo mã dài nhất, đặt chung bề rộng.
+
+### 22.1 Verify (API giả, headless, 1366×768)
+
+| Kiểm | Trước (1.9.3) | Sau |
+|---|---|---|
+| Kéo 10.000 dòng 1.500 px/khung, CPU ×1 (`drag.js`) | 89 ms/khung, 10–12 khung hở | 16 ms/khung, 0 khung hở |
+| Như trên, 6.000 px/khung | 134 ms, 104/104 khung hở | 15 ms, 0 |
+| CPU ×4, 1.500 / 6.000 px/khung | 286 / 336 ms | 78 / 68 ms |
+| Mỗi khung khi kéo: dòng đầu nhìn thấy đúng số thứ tự + Số CT, dãy liên tục (`verify8.js`) | 218/221 khung không có dòng | 221/221 đúng; dừng 150 ms → về 121 dòng |
+| Cuộn con lăn 600 × 20 px (`wheel8.js`) CPU ×1 / ×4: JS | 268 / 1.020 ms, giật ×4: 72/600 | 168 / 638 ms, giật ×4: 24/600 |
+| Chụp đầu bảng khi cuộn 333 px (`gap2.js`, `verify8.js`) | chữ dòng 11 lọt lên hàng ô tìm | kín |
+| 7 bảng chưa cuộn (`tables8.js`): toạ độ cột, cao dòng/tiêu đề, chữ 25 dòng | — | trùng (cột cuối tab tiền −0,5 px, chân bảng +0,5 px) |
+| Dropdown Loại CT 8 mã dài ngắn (PC … PXKDC): vị trí chữ tên | 2 vị trí | 1 vị trí, không mã nào bị cắt; gõ tìm vẫn thẳng |
+| Tải / sắp xếp / tìm theo cột / gom nhóm / thu nhóm (`verify3d.js`) + URL API | — | khớp 5/5, API trùng |
+| Kéo nhanh khi gom nhóm theo TK (`dgroup8.js`) | — | về đầu giống trước khi kéo, thu nhóm đúng, không lỗi |
+| Panel lọc nâng cao (`verify7.js`), bản nguồn CDN (`verify8.js after`) | — | đạt như cũ; bản nguồn đạt cả 3 mục |
+| EXE 1.9.4: `/api/version`, app.js phục vụ = build_web (SHA-256), có `VirtualRows`/`flushSync`/`--ds-code-w`, `/api/ledger` chưa đăng nhập 401 | — | đạt |
+
+Viền tách không làm nhanh/chậm hơn (đo riêng: trong mức nhiễu). Chưa đo trên máy Trum với dữ liệu thật.

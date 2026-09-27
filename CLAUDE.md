@@ -8,7 +8,7 @@
 > Remote cũ từng trỏ nhầm repo **LedgerReport** (gỡ 16/08/2026): push nhầm là đè code Studio lên `main` của Report.
 > Repo công khai → **cấm commit mật khẩu / IP server DB / file dữ liệu khách** (`BaoCaoMau/` đã `.gitignore`).
 > Build vẫn chạy **`BuildEXE-LedgerStudio.bat`**, EXE nằm trong `dist` (không lên git). Phát hành qua **GitHub Releases** — app từ v1.8.3 tự cập nhật (mục 5, Bước 5).
-> **Cập nhật gần nhất:** 27/09/2026 (**v1.9.3 đã phát hành** — Release mới nhất; test cập nhật thật từ v1.9.2 · v1.9.3: tốc độ tab sổ cái — Bẫy 20; bộ lọc nâng cao — Bẫy 21 · v1.9.2: màn đăng nhập — mục 3.1, Bẫy 19 · v1.9.1: hộp thoại — mục 3.0, Bẫy 18 · v1.9.0: khung báo cáo + zoom — mục 3.0, Bẫy 17 · v1.8.9: bảng dữ liệu + cuộn mượt — mục 3.0, Bẫy 16 · v1.8.8: thanh lọc chip · v1.8.7: khung + tên DataStudio — Bẫy 15 · v1.8.6: giao diện dịch sẵn — Bẫy 14)
+> **Cập nhật gần nhất:** 27/09/2026 (v1.9.4 CHƯA phát hành: kéo thanh cuộn mượt — Bẫy 16; tiêu đề bảng lọt chữ + cột mã dropdown — Bẫy 22 · **v1.9.3 đã phát hành** — Release mới nhất; test cập nhật thật từ v1.9.2 · v1.9.3: tốc độ tab sổ cái — Bẫy 20; bộ lọc nâng cao — Bẫy 21 · v1.9.2: màn đăng nhập — mục 3.1, Bẫy 19 · v1.9.1: hộp thoại — mục 3.0, Bẫy 18 · v1.9.0: khung báo cáo + zoom — mục 3.0, Bẫy 17 · v1.8.9: bảng dữ liệu + cuộn mượt — mục 3.0, Bẫy 16 · v1.8.8: thanh lọc chip · v1.8.7: khung + tên DataStudio — Bẫy 15 · v1.8.6: giao diện dịch sẵn — Bẫy 14)
 
 ---
 
@@ -225,6 +225,11 @@ Tất cả các báo cáo hiển thị dưới dạng tờ **A4/A4 Ngang (`.repo
 - Nay chỉ đổi state khi cuộn đủ **10 dòng** (`setScrollTop(prev => …)` trả `prev` = React bỏ qua); overscan 50 dòng mỗi phía nên màn hình luôn phủ kín (kiểm 932 khung: 0 lần hở). JS còn 0,65 s, CPU ×4 còn 12,4 s. **Đừng giảm overscan xuống dưới ~20 dòng** nếu giữ bước 10 dòng.
 - Listener cuộn trước đây gắn trong `useEffect(…, [containerRef.current])` — deps đọc lúc RENDER, khung vừa mount thì ref còn null → chỉ gắn ở lần vẽ lại SAU; không có lần đó (hoặc khung gắn lại) là bảng đứng im, trắng dưới đáy (bắt được 1/4 lần chạy thử, không tái hiện được có chủ đích). Nay effect chạy sau mỗi render, so phần tử trong `boundRef`, khác thì gỡ cũ gắn mới.
 - `table-layout: fixed`, bỏ blur đầu bảng, `content-visibility` cho dòng: đã đo — **không** nhanh hơn (fixed còn chậm hơn ~20%). Đừng thử lại.
+- **Kéo thanh cuộn (sửa v1.9.4):** mỗi sự kiện nhảy qua cả khối ~130 dòng đã vẽ → mỗi khung hình vẽ lại toàn bộ. Đo 10.000 dòng, API giả, kéo 1.500 px/khung: 89 ms/khung (CPU ×4: 286 ms), và React vẽ SAU khi khung hình đã hiện → 218/221 khung trắng. Sửa 3 lớp:
+  1. **`VirtualRows`** (component dùng chung 7 bảng, cấp trên cùng) gọi `useVirtualScroll` bên trong → cuộn chỉ vẽ lại các dòng, KHÔNG vẽ lại App. Hook không còn gọi trong App. Thêm bảng ảo mới: `<tbody><VirtualRows data rowHeight scrollRef renderRow={(row, i) => <tr key=…/>} /></tbody>`, `i` là chỉ số tuyệt đối.
+  2. **Chế độ nhanh:** 1 sự kiện nhảy > `VS_FAST_JUMP` (20) dòng → overscan `VS_OVERSCAN_FAST` (8) thay vì 50, vẽ bằng `ReactDOM.flushSync` ngay trong sự kiện cuộn (vẽ kịp trước khi khung hình hiện), ngừng 150 ms → về 50. Cuộn con lăn / bàn phím (< 20 dòng/lần) vẫn đi đường cũ (bước 10 dòng).
+  3. **Dùng lại `<tr>` khi kéo nhanh:** `VirtualRows` đè key thành vị trí trong khối (`'f' + i`, `React.cloneElement`) → React giữ các hàng đã có, chỉ thay chữ; không tạo/huỷ ~1.000 ô mỗi khung hình (tính style gần như về 0). Hết kéo → về key của `renderRow` (vẽ lại 1 lần).
+  Kết quả: 16 ms/khung (CPU ×4: 78 ms), 0 khung trắng, dòng hiện đúng dữ liệu ở mọi khung. `fmtNum`/`fmtInt` giữ sẵn `Intl.NumberFormat` (cùng chuỗi với `toLocaleString`). Script đo: NHAT_KY mục 22.
 
 ### Bẫy 15: CSS in (`@media print`) ẩn theo VỊ TRÍ phần tử — đổi khung là in ra trang trắng
 - Luật cũ `#root > div > div:first-child { display:none }` nhắm thanh đen trên cùng. Khung mới đặt `.app-shell` (chứa toàn bộ app) làm con đầu → luật đó ẩn sạch báo cáo khi bấm PDF.
@@ -264,6 +269,13 @@ Tất cả các báo cáo hiển thị dưới dạng tờ **A4/A4 Ngang (`.repo
 - Cấu hình nhớ theo tab: `localStorage['ds_filters_<tab>'] = { order, outside }`; mở/thu phần cấu hình: `ds_filters_cfg_open`. Tối đa `FILTER_OUT_MAX = 4` ô ra ngoài (ô thứ 5 khoá công tắc). "Xoá tất cả" chỉ xoá các ô đang nằm trong panel. "Lọc" = đóng panel + gọi đúng hàm Truy vấn của tab (sổ cái: đếm lại tổng).
 - Panel `position: fixed` tính theo nút (không bị khung cha cắt), popup của ô lọc trong lưới được tràn ra ngoài panel; cột thứ 3 của lưới ép popup canh phải (CSS `.ds-afp-grid > :nth-child(3n) .ds-pop`).
 - Kéo đổi thứ tự dùng `dragRef` (ref), không dùng state: `dragover` tới liền sau `dragstart`, state chưa kịp cập nhật → kéo không ăn. DataTransfer chỉ set kiểu riêng `application/x-ds-filter` — KHÔNG set `text/plain`, không thì thả nhầm vào vùng "Gom nhóm" của bảng sẽ thêm cột rác.
+
+### Bẫy 22: Tiêu đề bảng dính bị lọt chữ khi cuộn — viền gộp (`border-collapse`) (sửa v1.9.4)
+- **Triệu chứng:** cuộn bảng dữ liệu thì chữ của dòng bên dưới hiện lên dải trên cùng của hàng ô tìm theo cột (khe giữa hàng tiêu đề và hàng tìm). Hit-test (`elementFromPoint`) vẫn báo TH nằm trên — lỗi VẼ của Chrome với `thead` dính + viền gộp, không phải lỗi bố cục.
+- Đã thử, KHÔNG hết: nền cho `thead`, nền cho `tr`, cho từng `th` dính riêng (`top` hàng 2 = 34px). Chỉ `border-collapse: separate` hết.
+- **Cách sửa:** `table.ds-grid { border-collapse: separate; border-spacing: 0 }` (bộ chọn `table.` để thắng class Tailwind `border-collapse`). Chế độ tách **bỏ qua viền đặt trên `<tr>`, `<thead>`, `<tfoot>`** → vạch ngang dòng chuyển thành `.ds-grid tbody td { border-bottom }`, viền trên chân bảng thành `.ds-grid tfoot td { border-top }` (thay viền của `.sticky-footer`). Thêm viền mới cho bảng dữ liệu thì đặt lên ô, không đặt lên hàng.
+- So 7 bảng với v1.9.3: cùng toạ độ cột (lệch 0,5 px ở cột cuối tab tiền), cùng chiều cao dòng/tiêu đề, chân bảng +0,5 px, chữ trùng. Không nhanh/chậm hơn (đã đo).
+- Dropdown lọc (`PremiumDropdown`): cột mã thẳng hàng nhờ đo mã dài nhất đang hiện (`offsetWidth`, không dùng `getBoundingClientRect` vì popup có animation scale) → biến `--ds-code-w` trên khung danh sách; trước chỉ `min-width: 34px`.
 
 ---
 
