@@ -2,7 +2,7 @@
 
 > Toàn bộ những gì đã làm với **LedgerStudio**, và **vì sao**. Đọc file này trước khi sửa tiếp.
 > Kiến trúc và ma trận báo cáo: [CLAUDE.md](CLAUDE.md).
-> Phiên gần nhất: **27/09/2026** · EXE build mới nhất: **iPOS_Ledger_Studio v1.9.4** (chưa phát hành) — tên hiển thị DataStudio · bản phát hành: v1.9.3
+> Phiên gần nhất: **27/09/2026** · EXE build mới nhất: **iPOS_Ledger_Studio v1.9.4** — tên hiển thị DataStudio · bản phát hành: v1.9.4
 
 ---
 
@@ -761,7 +761,7 @@ latest=v1.9.3` → bấm "Cập nhật ngay" trên giao diện v1.9.2 (puppeteer
 **Commit lỗi (PowerShell 5.1):** `git commit -m @'…'@` có dấu `"` trong message → PowerShell tách thành nhiều đối số, git báo
 `pathspec … did not match`, KHÔNG commit. Viết message ra file rồi `git commit -F <file>`.
 
-## 22. v1.9.4 (chưa phát hành): kéo thanh cuộn mượt + tiêu đề bảng lọt chữ + cột mã dropdown *(27/09/2026)*
+## 22. v1.9.4: kéo thanh cuộn mượt + tiêu đề bảng lọt chữ + cột mã dropdown *(27/09/2026)*
 
 **Trum báo (sau khi dùng 1.9.3):** (1) cuộn thấy khe hở giữa hàng tiêu đề và hàng lọc của bảng; (2) truy vấn nhanh hơn rồi nhưng
 lướt nhiều dòng giật, nhất là kéo thanh cuộn — không theo kịp chuột; (3) dropdown "Loại CT" không thẳng cột mã / tên.
@@ -790,3 +790,16 @@ lướt nhiều dòng giật, nhất là kéo thanh cuộn — không theo kịp
 | EXE 1.9.4: `/api/version`, app.js phục vụ = build_web (SHA-256), có `VirtualRows`/`flushSync`/`--ds-code-w`, `/api/ledger` chưa đăng nhập 401 | — | đạt |
 
 Viền tách không làm nhanh/chậm hơn (đo riêng: trong mức nhiễu). Chưa đo trên máy Trum với dữ liệu thật.
+
+### 22.2 Phát hành + test cập nhật thật từ v1.9.3
+
+**QA trước push:** 🟢 — diff đúng phạm vi 3 lỗi Trum báo, không secret/debug. Trước khi commit sửa ngày ghi nhầm "28/09/2026" trong
+4 comment → build lại EXE (đặt tạm `version.txt` = 1.9.3 để `build_exe.py` tăng đúng lên 1.9.4, không đốt 1.9.5); chạy lại
+`verify8.js` trên bản build cuối (dropdown 1 vị trí, kéo 221/221 khung đúng) + EXE phục vụ đúng app.js, `/api/ledger` 401.
+
+**Phát hành:** commit `71e8295` push `main` → `gh release create v1.9.4`, asset `iPOS_Ledger_Studio.exe` 16.532.666 byte + `.zip`
+tạo lại từ EXE mới. API công khai `releases/latest` trả `v1.9.4`, digest exe/zip = SHA-256 file local.
+
+**Test cập nhật thật:** EXE release v1.9.3 (SHA khớp asset) → `check_update`: có v1.9.4 → bấm "Cập nhật ngay" trên giao diện
+v1.9.3 → tải 100% trong 8 s → bản 1.9.4 lên sau 16 s kể từ lúc bấm → thư mục còn 1 file, SHA = asset v1.9.4, hết báo bản mới,
+`/api/ledger` chưa đăng nhập 401. Đã tắt EXE test + cửa sổ app.

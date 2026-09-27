@@ -8,7 +8,7 @@
 > Remote cũ từng trỏ nhầm repo **LedgerReport** (gỡ 16/08/2026): push nhầm là đè code Studio lên `main` của Report.
 > Repo công khai → **cấm commit mật khẩu / IP server DB / file dữ liệu khách** (`BaoCaoMau/` đã `.gitignore`).
 > Build vẫn chạy **`BuildEXE-LedgerStudio.bat`**, EXE nằm trong `dist` (không lên git). Phát hành qua **GitHub Releases** — app từ v1.8.3 tự cập nhật (mục 5, Bước 5).
-> **Cập nhật gần nhất:** 27/09/2026 (v1.9.4 CHƯA phát hành: kéo thanh cuộn mượt — Bẫy 16; tiêu đề bảng lọt chữ + cột mã dropdown — Bẫy 22 · **v1.9.3 đã phát hành** — Release mới nhất; test cập nhật thật từ v1.9.2 · v1.9.3: tốc độ tab sổ cái — Bẫy 20; bộ lọc nâng cao — Bẫy 21 · v1.9.2: màn đăng nhập — mục 3.1, Bẫy 19 · v1.9.1: hộp thoại — mục 3.0, Bẫy 18 · v1.9.0: khung báo cáo + zoom — mục 3.0, Bẫy 17 · v1.8.9: bảng dữ liệu + cuộn mượt — mục 3.0, Bẫy 16 · v1.8.8: thanh lọc chip · v1.8.7: khung + tên DataStudio — Bẫy 15 · v1.8.6: giao diện dịch sẵn — Bẫy 14)
+> **Cập nhật gần nhất:** 27/09/2026 (**v1.9.4 đã phát hành** — Release mới nhất; test cập nhật thật từ v1.9.3 · v1.9.4: kéo thanh cuộn mượt — Bẫy 16; tiêu đề bảng lọt chữ + cột mã dropdown — Bẫy 22 · v1.9.3: tốc độ tab sổ cái — Bẫy 20; bộ lọc nâng cao — Bẫy 21 · v1.9.2: màn đăng nhập — mục 3.1, Bẫy 19 · v1.9.1: hộp thoại — mục 3.0, Bẫy 18 · v1.9.0: khung báo cáo + zoom — mục 3.0, Bẫy 17 · v1.8.9: bảng dữ liệu + cuộn mượt — mục 3.0, Bẫy 16 · v1.8.8: thanh lọc chip · v1.8.7: khung + tên DataStudio — Bẫy 15 · v1.8.6: giao diện dịch sẵn — Bẫy 14)
 
 ---
 
