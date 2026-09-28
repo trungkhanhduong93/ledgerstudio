@@ -2,7 +2,7 @@
 
 > Toàn bộ những gì đã làm với **LedgerStudio**, và **vì sao**. Đọc file này trước khi sửa tiếp.
 > Kiến trúc và ma trận báo cáo: [CLAUDE.md](CLAUDE.md).
-> Phiên gần nhất: **28/09/2026** · EXE build mới nhất: **iPOS_Ledger_Studio v1.10.1** (mục 25) — tên hiển thị DataStudio · v1.9.6–1.9.9 do Gemini làm, ghi ở GEMINI.md
+> Phiên gần nhất: **28/09/2026** · EXE build mới nhất: **iPOS_Ledger_Studio v1.10.1** (đã phát hành 28/09, mục 25) — tên hiển thị DataStudio · v1.9.6–1.9.9 do Gemini làm, ghi ở GEMINI.md
 
 ---
 
@@ -917,3 +917,12 @@ hiện; DT chờ phân bổ thêm hàng ô lọc (đầu bảng 34 → 69 px); p
 - Lần build đầu báo SUCCESS mà EXE không đổi: Trum đang mở `dist\iPOS_Ledger_Studio.exe` (Bẫy 10) nhưng `version.txt` đã nhảy 1.10.1
   → trả `version.txt`/`version_info.txt` về 1.10.0, Trum đồng ý tắt app, build lại ra đúng 1.10.1.
 - `/icon.svg` 404 ở lần tải đầu (cả v1.10.0): index.html trỏ `/icon.svg` mà `build_web` không có — có sẵn, chưa sửa.
+
+**QA trước push (pre-push-qa):** 🟡 — không lỗi chặn; vàng vì chưa chạy DB thật của khách. `origin/main` vẫn `3155e8d`; code sửa
+(index.html 16:21, server.py 16:28) trước lúc build EXE 16:45; 273 dòng thêm: không secret, không log debug/TODO.
+
+**Phát hành (Trum bảo "phát hành luôn"):** commit `11449f2` push `main` → `gh release create v1.10.1` (exe 16.552.768 byte + zip tạo
+lại). API công khai trả `v1.10.1`, digest exe = SHA-256 file build `ff275d11…dcd2d`.
+
+**Test cập nhật thật:** EXE release v1.10.0 (SHA = asset) ở thư mục tạm → hộp bắt buộc cập nhật "v1.10.0 → v1.10.1" → bấm → 1.10.1
+lên sau 4,7 s, thư mục còn 1 file, SHA = asset, bản mới `has_update=False`. Đã tắt EXE test + 9 tiến trình Chrome.
