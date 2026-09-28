@@ -2,7 +2,7 @@
 
 > Toàn bộ những gì đã làm với **LedgerStudio**, và **vì sao**. Đọc file này trước khi sửa tiếp.
 > Kiến trúc và ma trận báo cáo: [CLAUDE.md](CLAUDE.md).
-> Phiên gần nhất: **28/09/2026** · EXE build mới nhất: **iPOS_Ledger_Studio v1.10.2** (mục 26) — tên hiển thị DataStudio · v1.9.6–1.9.9 do Gemini làm, ghi ở GEMINI.md
+> Phiên gần nhất: **28/09/2026** · EXE build mới nhất: **iPOS_Ledger_Studio v1.10.2** (đã phát hành 28/09, mục 26) — tên hiển thị DataStudio · v1.9.6–1.9.9 do Gemini làm, ghi ở GEMINI.md
 
 ---
 
@@ -955,3 +955,13 @@ bắt đầu bằng; dòng lọc cột: **mọi cột mã + tài khoản** bắt
 
 - So tập dòng phải bỏ trường `RowNum` (số thứ tự do câu phân trang ROW_NUMBER sinh ra, đổi theo bộ lọc).
 - Còn lệch lý thuyết, chưa gặp trong dữ liệu: số âm đúng .5 (JS `Math.round(-1.5)` = -1, SQL `ROUND` = -2); giá trị nhị phân sát ranh .xx5.
+
+**QA trước push (pre-push-qa):** 🟡 — không lỗi chặn; vàng vì chưa chạy DB thật của khách. `origin/main` vẫn `c19f636`; code sửa
+(index.html 17:23, server.py 17:26) trước lúc build 17:29; 293 dòng thêm: không secret (15 chỗ khớp mẫu "host,port" đều là số ví dụ
+dạng 1,450), không log debug/TODO.
+
+**Phát hành (Trum bảo "phát luôn"):** commit `df1ea8a` → `gh release create v1.10.2` (exe 16.556.895 byte + zip tạo lại). API công khai
+trả `v1.10.2`, digest exe = SHA-256 file build `85205943…c382b`.
+
+**Test cập nhật thật:** EXE v1.10.1 (SHA = asset) → hộp bắt buộc cập nhật → bấm → 1.10.2 lên sau 9,4 s, còn 1 file, SHA = asset, bản mới
+`has_update=False`. Đã tắt EXE test + Chrome.
