@@ -2754,6 +2754,11 @@ SALE_SORT_WHITELIST["ORGANIZATION_NAME"] = "O.ORGANIZATION_NAME"
 SALE_SORT_WHITELIST["EXPENSE_NAME"]      = "E.EXPENSE_NAME"
 
 
+def _like_literal(v):
+    """Chữ người dùng gõ vào LIKE: % _ [ là chữ thường, không phải ký tự đại diện (khớp đúng cách lọc trên trang)."""
+    return v.replace("[", "[[]").replace("%", "[%]").replace("_", "[_]")
+
+
 def _build_sale_where(request_args):
     """WHERE + params cho dbo.SALE_VIEW. Dùng alias S. Trả (where_sql, params)."""
     f_date = request_args.get("from_date", "01/01/2026")
@@ -2819,6 +2824,47 @@ def _build_sale_where(request_args):
         if val:
             clauses.append(f"{field} LIKE ?")
             params.append(f"%{val}%")
+
+    # Ô lọc cột v1.10.1 — HTTT, nguồn đơn, ghi chú: cột phụ của SALE_VIEW, chỉ lọc khi DB có cột đó (Bẫy 5). DB không có →
+    # màn hình để trống cả cột → không dòng nào khớp → 1=0. Tên HTTT/nguồn không nằm trong SALE_VIEW (map ở Python từ
+    # DM_PAYMENT_METHOD / DM_EXTRA_2) → dò tên trong danh mục ra danh sách mã rồi IN, khớp đúng chữ đang hiện trên màn hình.
+    dim_search = [(col, request_args.get(a_id, "").strip(), request_args.get(a_name, "").strip(), map_key)
+                  for col, a_id, a_name, map_key in (("PAYMENT_METHOD_ID", "s_pay_id", "s_pay_name", "pay"),
+                                                     ("EXTRA_ID_2", "s_src_id", "s_src_name", "extra2"))]
+    comments = request_args.get("s_comments", "").strip()
+    if comments or any(v_id or v_name for _, v_id, v_name, _ in dim_search):
+        dim = _sale_dim_info()
+        for col, v_id, v_name, map_key in dim_search:
+            if not (v_id or v_name):
+                continue
+            if col not in dim["cols"]:
+                clauses.append("1=0")
+                continue
+            expr = f"CAST(S.{col} AS NVARCHAR(100))"
+            if v_id:
+                clauses.append(f"{expr} LIKE ?")
+                params.append(f"{_like_literal(v_id)}%")
+            if v_name:
+                q = v_name.lower()
+                ids = [k for k, name in dim[map_key].items() if k and q in (name or '').lower()]
+                if not ids:
+                    clauses.append("1=0")
+                elif len(ids) <= 1000:   # quá nhiều mã (hiếm) → bỏ lọc server, vẫn lọc trên trang
+                    clauses.append(f"{expr} IN ({','.join('?' * len(ids))})")
+                    params.extend(ids)
+        if comments:
+            if "COMMENTS" in dim["cols"]:
+                clauses.append("S.COMMENTS LIKE ?")
+                params.append(f"%{_like_literal(comments)}%")
+            else:
+                clauses.append("1=0")
+
+    # Ô "Trả": '1' = chỉ hàng trả lại; giá trị khác (gõ chữ không khớp "trả") → không dòng nào
+    s_ret = request_args.get("s_return", "").strip()
+    if s_ret == "1":
+        clauses.append("ISNULL(S.IS_RETURN,0) = 1")
+    elif s_ret:
+        clauses.append("1=0")
 
     # Search ngày VAT_TRAN_DATE — dd/mm/yyyy
     vd = request_args.get("s_vat_date", "").strip()

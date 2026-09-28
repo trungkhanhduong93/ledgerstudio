@@ -2,7 +2,7 @@
 
 > Toàn bộ những gì đã làm với **LedgerStudio**, và **vì sao**. Đọc file này trước khi sửa tiếp.
 > Kiến trúc và ma trận báo cáo: [CLAUDE.md](CLAUDE.md).
-> Phiên gần nhất: **28/09/2026** · EXE build mới nhất: **iPOS_Ledger_Studio v1.10.0** (đã phát hành 28/09, mục 24) — tên hiển thị DataStudio · v1.9.6–1.9.9 do Gemini làm, ghi ở GEMINI.md
+> Phiên gần nhất: **28/09/2026** · EXE build mới nhất: **iPOS_Ledger_Studio v1.10.1** (mục 25) — tên hiển thị DataStudio · v1.9.6–1.9.9 do Gemini làm, ghi ở GEMINI.md
 
 ---
 
@@ -886,3 +886,34 @@ Studio)", target SHA đầy đủ), asset `iPOS_Ledger_Studio.exe` 16.550.684 by
 `latest=v1.10.0` (so bộ số: 1.10.0 > 1.9.9) → hộp bắt buộc cập nhật hiện "v1.9.9 → v1.10.0 · DataStudio v1.10.0 · 15.8 MB" → bấm
 "Cập nhật ngay" (puppeteer) → tải 100% trong ~3 s → server cũ thoát → 1.10.0 lên sau 6,3 s kể từ lúc bấm → thư mục còn 1 file,
 SHA = asset v1.10.0, bản mới `has_update=False`. Đã tắt EXE test + 9 tiến trình Chrome của cửa sổ app, cổng 5050 đã nhả.
+
+## 25. v1.10.1: ô tìm theo cột cho mọi cột chữ/mã + tooltip ghi ô lọc tới đâu *(28/09/2026)*
+
+**Yêu cầu Trum (kèm ảnh tab bán hàng):** trừ cột tiền, các cột còn lại chưa có ô lọc thì thêm, ở mọi màn danh sách. Trum chốt:
+6 cột bán hàng (Trả, Mã HTTT, Hình thức TT, Mã nguồn, Nguồn đơn, Ghi chú) bấm Truy vấn thì lọc SQL cả kỳ; tab khác chỉ lọc các dòng
+đang tải (như ô cùng tab); **thêm tooltip ghi chú**; không thêm ô cho cột số (số lượng, thuế %, tỷ lệ); cột cờ khớp theo chữ đang
+hiện; DT chờ phân bổ thêm hàng ô lọc (đầu bảng 34 → 69 px); phát hành luôn.
+
+**Đã sửa:**
+- `index.html`: `search: 1` (chỉ lọc trang) / `search: 2` (Truy vấn lọc SQL) cho mọi cột; `sv` (chữ để lọc cột cờ), `sh` (gợi ý);
+  tooltip `colSearchTitle`; `gridSearchText` + `grid.byId`. Thêm ô: bán hàng 6, DT chờ phân bổ 19 (state `incomeAllocColSearch`,
+  `incomeAllocFlatData`, ẩn cột xoá chữ lọc), kho 1 (N/X), tồn kho 4 (Ngày, ĐVT, ĐVT nguyên, Đã duyệt), danh mục 1 (Trạng thái).
+  `buildSaleQuery` gửi `s_pay_id`, `s_pay_name`, `s_src_id`, `s_src_name`, `s_comments` (≥ 2 ký tự), `s_return`. Menu xuất ghi số
+  cột đang hiện trên bảng (trước đếm khoá xuất: Danh mục đối tượng 16 thay vì 15).
+- `server.py` `_build_sale_where`: 6 tham số trên (Bẫy 23) + `_like_literal`.
+- Rà lại toàn bộ ô cũ để tooltip nói đúng: 5 ô gửi tham số mà server không đọc (tab tiền: Tên đơn vị, Đối tượng, Đối tượng đối ứng;
+  nhập kho + kho: Ngày CT) → ghi "chỉ lọc trang". Chưa sửa cho chúng lọc SQL (ngoài yêu cầu).
+
+**Verify:**
+
+| Mức | Nội dung | Kết quả |
+|---|---|---|
+| M1 | `ast.parse` server.py · `webbuild/build.js` | đạt; app.js 462.932 → 466.564 byte |
+| M3 giao diện | `search.js` (puppeteer, API giả, bản dịch sẵn) 8 tab: cột nào có ô, tooltip từng loại, lọc đúng dòng, cột cờ, tham số gửi khi Truy vấn/xuất, ẩn cột đang lọc, menu xuất; hàng tiêu đề so v1.10.0 (dựng lại từ commit, app.js trùng SHA-1 bản phát hành) | **86/86**; tiêu đề trùng vị trí/rộng/cao 8 tab, đầu bảng giữ 69 px (trừ DT chờ phân bổ 34 → 69) |
+| M3 bố cục cột | `behave.js` 42 ca của v1.10.0 | 42/42 |
+| M3 SQL thật | TRUNGDEMO (CHỈ SELECT) 2018–2026, 3.011 dòng bán hàng: mỗi tham số so với tự lọc bản không lọc theo luật màn hình | **24/24** (mã, tên HTTT/nguồn, ghi chú, trả, chữ không có, dấu `'`, `_` `%` là chữ, kết hợp, xuất CSV cùng lọc = 193 dòng như màn hình) |
+| M3 EXE | `build_exe.py` → 1.10.1, 16.552.768 byte | `/api/version` 1.10.1, app.js trùng SHA-1 `build_web`, `/api/ledger` chưa đăng nhập 401 |
+
+- Lần build đầu báo SUCCESS mà EXE không đổi: Trum đang mở `dist\iPOS_Ledger_Studio.exe` (Bẫy 10) nhưng `version.txt` đã nhảy 1.10.1
+  → trả `version.txt`/`version_info.txt` về 1.10.0, Trum đồng ý tắt app, build lại ra đúng 1.10.1.
+- `/icon.svg` 404 ở lần tải đầu (cả v1.10.0): index.html trỏ `/icon.svg` mà `build_web` không có — có sẵn, chưa sửa.
