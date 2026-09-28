@@ -489,6 +489,23 @@ window.showConnectionLost = function() {
         .ds-upd-mk { color: var(--ds-ink-3); }
         .ds-upd-mv { font-weight: 500; color: var(--ds-ink); font-variant-numeric: tabular-nums; }
         .ds-upd-foot { justify-content: stretch; }
+        /* "Nội dung cập nhật" trong hộp bắt buộc cập nhật (v1.10.5) */
+        .ds-upd-force.has-log { max-width: 500px; }
+        .ds-upd-steps { margin: 6px 0 0; font-size: 12px; color: var(--ds-ink-3); }
+        .ds-upd-logh { margin: 14px 0 6px; font-size: 11.5px; font-weight: 600; letter-spacing: .02em; color: var(--ds-ink-3); }
+        .ds-upd-log { max-height: min(300px, calc(100vh - 430px)); min-height: 120px; overflow-y: auto; overscroll-behavior: contain; padding: 2px 14px; border: 1px solid var(--ds-line-soft); border-radius: 10px; background: var(--ds-wash); }
+        .ds-upd-log:focus-visible { outline: 2px solid var(--ds-brand); outline-offset: 1px; }
+        .ds-upd-rel { padding: 10px 0; }
+        .ds-upd-rel + .ds-upd-rel { border-top: 1px dashed var(--ds-line); }
+        .ds-upd-rel header { display: flex; align-items: baseline; gap: 8px; }
+        .ds-upd-rel header b { font-size: 13px; font-weight: 600; color: var(--ds-brand); font-variant-numeric: tabular-nums; }
+        .ds-upd-rel header span { font-size: 11.5px; color: var(--ds-ink-4); font-variant-numeric: tabular-nums; }
+        .ds-upd-reltitle { margin: 2px 0 0; font-size: 12.5px; font-weight: 500; color: var(--ds-ink); }
+        .ds-upd-rel ul { margin: 6px 0 0; padding-left: 16px; list-style: disc; }
+        .ds-upd-rel li { margin: 3px 0; font-size: 12.5px; line-height: 18px; color: var(--ds-ink-2); }
+        .ds-upd-rel li::marker { color: var(--ds-ink-4); }
+        .ds-upd-more { margin: 4px 0 0; font-size: 12px; color: var(--ds-ink-3); }
+        .ds-upd-older { padding: 8px 0 10px; border-top: 1px dashed var(--ds-line); }
         .ds-upd-go { width: 100%; justify-content: center; height: 38px; font-size: 13.5px; font-weight: 600; }
         .ds-login-blocked { pointer-events: none; opacity: .45; filter: grayscale(.3); transition: opacity .3s, filter .3s; }
         @media (prefers-reduced-motion: reduce) { .ds-scrim, .ds-dialog { animation: none; } .ds-progress.is-busy > i { animation-duration: 3s; } }
@@ -1944,12 +1961,21 @@ window.showConnectionLost = function() {
             return { updateInfo, hasForceUpdate, isUpdating, setIsUpdating, progress, startUpdate };
         };
 
+        // Ngày phát hành (ISO, UTC) → dd/mm/yyyy giờ máy
+        const fmtRelDate = s => { const d = new Date(s || ''); return isNaN(d) ? '' : d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }); };
+        // Hộp bắt buộc cập nhật. Từ v1.10.5 kèm "Nội dung cập nhật": server (/api/check_update → changes) liệt kê từng bản
+        // nằm giữa bản đang cài và bản mới nhất, mỗi bản vài gạch đầu dòng rút từ ghi chú release. Không có changes
+        // (mạng lỗi, server cũ) → hộp như trước. LƯU Ý: hộp này là code của bản ĐANG CÀI — máy còn bản cũ thấy hộp cũ.
         const ForceUpdateModal = ({ updateInfo, onStartUpdate }) => {
             if (!updateInfo || !updateInfo.has_update) return null;
             const sizeMb = updateInfo.file_size ? (updateInfo.file_size / (1024 * 1024)).toFixed(1) : '';
+            const changes = Array.isArray(updateInfo.changes) ? updateInfo.changes : [];
+            const olderMore = updateInfo.changes_more || 0;
+            const steps = changes.length + olderMore;
+            const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
             return (
                 <div className="ds-scrim z-[99999]">
-                    <div className="ds-dialog ds-upd-force" role="dialog" aria-modal="true">
+                    <div className={`ds-dialog ds-upd-force ${changes.length ? 'has-log' : ''}`} role="dialog" aria-modal="true">
                         <div className="ds-upd-hero">
                             <div className="ds-upd-badge">
                                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -1960,15 +1986,32 @@ window.showConnectionLost = function() {
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
                                 <span className="ds-upd-new">{updateInfo.latest_version}</span>
                             </p>
+                            {steps > 1 && <p className="ds-upd-steps">Gồm {steps} bản cập nhật</p>}
                         </div>
                         <div className="ds-dlg-body ds-upd-body">
                             <div className="ds-note is-info">
                                 <Icon name="alert-circle" size={15} stroke={2} />
                                 <span>Vui lòng cập nhật để tiếp tục sử dụng ứng dụng. Phiên bản hiện tại không còn được hỗ trợ.</span>
                             </div>
-                            {(sizeMb || updateInfo.release_name) && (
+                            {changes.length > 0 && <>
+                                <div className="ds-upd-logh">Nội dung cập nhật</div>
+                                <div className="ds-upd-log" tabIndex={0} aria-label="Nội dung cập nhật">
+                                    {changes.map(c => (
+                                        <section key={c.version} className="ds-upd-rel">
+                                            <header><b>{c.version}</b>{fmtRelDate(c.published_at) && <span>{fmtRelDate(c.published_at)}</span>}</header>
+                                            {c.title && <p className="ds-upd-reltitle">{cap(c.title)}</p>}
+                                            {(c.items || []).length
+                                                ? <ul>{c.items.map((it, i) => <li key={i}>{it}</li>)}</ul>
+                                                : <p className="ds-upd-more">Không có ghi chú.</p>}
+                                            {c.more > 0 && <p className="ds-upd-more">… và {c.more} thay đổi khác</p>}
+                                        </section>
+                                    ))}
+                                    {olderMore > 0 && <p className="ds-upd-more ds-upd-older">… và {olderMore} bản cũ hơn</p>}
+                                </div>
+                            </>}
+                            {(sizeMb || (updateInfo.release_name && !changes.length)) && (
                                 <div className="ds-upd-meta">
-                                    {updateInfo.release_name && <div className="ds-upd-mrow"><span className="ds-upd-mk">Bản phát hành</span><span className="ds-upd-mv">{updateInfo.release_name}</span></div>}
+                                    {updateInfo.release_name && !changes.length && <div className="ds-upd-mrow"><span className="ds-upd-mk">Bản phát hành</span><span className="ds-upd-mv">{updateInfo.release_name}</span></div>}
                                     {sizeMb && <div className="ds-upd-mrow"><span className="ds-upd-mk">Dung lượng tải</span><span className="ds-upd-mv">{sizeMb} MB</span></div>}
                                 </div>
                             )}
@@ -4016,6 +4059,58 @@ window.showConnectionLost = function() {
             );
         };
 
+        // Nút + menu "Xuất Excel" của 8 tab dữ liệu. PHẢI khai báo ngoài App (v1.10.5): trước đây nằm trong App → mỗi lần App vẽ
+        // lại là 1 component MỚI → React gỡ rồi lắp lại cả nút lẫn menu, hiệu ứng hiện menu (ds-pop-in) chạy lại → bấm
+        // "Đầy đủ" / "Như đang xem" thấy menu chớp nháy (Trum báo 28/09). App truyền state qua props (exportBtn).
+        const ExportButton = ({ kind, open, setOpen, exporting, cols, onCols, gridLays, onExport }) => {
+            const ref = useRef(null);
+            const isOpen = open === kind;
+            useEffect(() => {
+                const onDown = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(null); };
+                if (isOpen) document.addEventListener('mousedown', onDown);
+                return () => document.removeEventListener('mousedown', onDown);
+            }, [isOpen]);
+            return (
+                <div className="relative shrink-0" ref={ref}>
+                    <button
+                        type="button"
+                        disabled={exporting}
+                        onClick={() => setOpen(isOpen ? null : kind)}
+                        className="ds-btn"
+                    >
+                        {exporting ? <Icon name="loader" className="animate-spin" size={14}/> : <Icon name="file-spreadsheet" size={14} stroke={2} className="ds-ic-ok"/>}
+                        <span>{exporting ? 'Đang xuất...' : 'Xuất Excel'}</span>
+                        <Icon name="chevron-down" size={12} stroke={2} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {isOpen && (
+                        <div className="ds-pop ds-pop-in absolute top-full right-0 mt-1.5 w-72 z-[600] overflow-hidden">
+                            <div className="px-3 pt-2.5 pb-1.5 ds-poplabel">Cột xuất</div>
+                            <div className="ds-expcols">
+                                <div className="ds-seg">
+                                    <button type="button" className={cols === 'all' ? 'is-on' : ''} onClick={() => onCols('all')}>Đầy đủ</button>
+                                    <button type="button" className={cols === 'view' ? 'is-on' : ''} onClick={() => onCols('view')}>Như đang xem</button>
+                                </div>
+                                <small>{cols === 'view' ? `${gridLays[kind].cols.length} cột đang hiện, đúng thứ tự trên màn hình` : 'Bộ cột xuất chuẩn của danh sách'}</small>
+                            </div>
+                            <div className="px-3 pt-2.5 pb-1.5 ds-poplabel">Chọn kiểu và định dạng xuất</div>
+                            <button onClick={() => onExport(kind, 'single', 'xlsx')} className="ds-menuitem">
+                                <span className="ds-fmt is-ok">XLSX</span>
+                                <span><b>Xuất Excel (.xlsx)</b><small>Định dạng Excel chuẩn đẹp · Hiện tiến trình & Mở file</small></span>
+                            </button>
+                            <button onClick={() => onExport(kind, 'single', 'csv')} className="ds-menuitem">
+                                <span className="ds-fmt">CSV</span>
+                                <span><b>Xuất CSV (.csv)</b><small>Định dạng CSV nhẹ · Tải siêu tốc</small></span>
+                            </button>
+                            <button onClick={() => onExport(kind, 'by_org')} className="ds-menuitem mb-1">
+                                <span className="ds-fmt">ORG</span>
+                                <span><b>Tách sheet theo đơn vị (.xlsx)</b><small>Mỗi đơn vị 1 sheet trong 1 file Excel</small></span>
+                            </button>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
         const AppPageHeader = ({ activeTab, reportType }) => {
             if (activeTab === 'report') {
                 const r = NAV_REPORTS.find(x => x.id === reportType);
@@ -5820,53 +5915,8 @@ window.showConnectionLost = function() {
                 }
             };
 
-            const ExportButton = ({ kind }) => {
-                const ref = useRef(null);
-                useEffect(() => {
-                    const onDown = (e) => { if (ref.current && !ref.current.contains(e.target)) setExportOpen(null); };
-                    if (exportOpen === kind) document.addEventListener('mousedown', onDown);
-                    return () => document.removeEventListener('mousedown', onDown);
-                }, [exportOpen]);
-                return (
-                    <div className="relative shrink-0" ref={ref}>
-                        <button
-                            type="button"
-                            disabled={exporting}
-                            onClick={() => setExportOpen(exportOpen === kind ? null : kind)}
-                            className="ds-btn"
-                        >
-                            {exporting ? <Icon name="loader" className="animate-spin" size={14}/> : <Icon name="file-spreadsheet" size={14} stroke={2} className="ds-ic-ok"/>}
-                            <span>{exporting ? 'Đang xuất...' : 'Xuất Excel'}</span>
-                            <Icon name="chevron-down" size={12} stroke={2} className={`transition-transform ${exportOpen === kind ? 'rotate-180' : ''}`} />
-                        </button>
-                        {exportOpen === kind && (
-                            <div className="ds-pop ds-pop-in absolute top-full right-0 mt-1.5 w-72 z-[600] overflow-hidden">
-                                <div className="px-3 pt-2.5 pb-1.5 ds-poplabel">Cột xuất</div>
-                                <div className="ds-expcols">
-                                    <div className="ds-seg">
-                                        <button type="button" className={exportCols === 'all' ? 'is-on' : ''} onClick={() => chooseExportCols('all')}>Đầy đủ</button>
-                                        <button type="button" className={exportCols === 'view' ? 'is-on' : ''} onClick={() => chooseExportCols('view')}>Như đang xem</button>
-                                    </div>
-                                    <small>{exportCols === 'view' ? `${gridLays[kind].cols.length} cột đang hiện, đúng thứ tự trên màn hình` : 'Bộ cột xuất chuẩn của danh sách'}</small>
-                                </div>
-                                <div className="px-3 pt-2.5 pb-1.5 ds-poplabel">Chọn kiểu và định dạng xuất</div>
-                                <button onClick={() => doExport(kind, 'single', 'xlsx')} className="ds-menuitem">
-                                    <span className="ds-fmt is-ok">XLSX</span>
-                                    <span><b>Xuất Excel (.xlsx)</b><small>Định dạng Excel chuẩn đẹp · Hiện tiến trình & Mở file</small></span>
-                                </button>
-                                <button onClick={() => doExport(kind, 'single', 'csv')} className="ds-menuitem">
-                                    <span className="ds-fmt">CSV</span>
-                                    <span><b>Xuất CSV (.csv)</b><small>Định dạng CSV nhẹ · Tải siêu tốc</small></span>
-                                </button>
-                                <button onClick={() => doExport(kind, 'by_org')} className="ds-menuitem mb-1">
-                                    <span className="ds-fmt">ORG</span>
-                                    <span><b>Tách sheet theo đơn vị (.xlsx)</b><small>Mỗi đơn vị 1 sheet trong 1 file Excel</small></span>
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                );
-            };
+            // Props chung cho <ExportButton kind=… {...exportBtn} /> — component nằm NGOÀI App (xem định nghĩa trên App).
+            const exportBtn = { open: exportOpen, setOpen: setExportOpen, exporting, cols: exportCols, onCols: chooseExportCols, gridLays, onExport: doExport };
 
             const loadReportData = async (pageArg, modeArg) => {
                 // pageArg là số -> nhảy thẳng tới trang đó (dùng cho pager). Không phải số (vd event) -> dùng filters.page.
@@ -6153,7 +6203,7 @@ window.showConnectionLost = function() {
                                                         onChange={newSize => { setFilters(p => ({ ...p, page_size: newSize, page: 1 })); }} 
                                                     />
                                             <span className="ds-meta"><b>{pagination.total_rows?.toLocaleString()}</b> dòng</span>
-                                            <ExportButton kind="ledger" />
+                                            <ExportButton kind="ledger" {...exportBtn} />
                                             <button 
                                                 onClick={() => loadData(1, filters.page_size, null, { fresh: true })} 
                                                 disabled={loading} 
@@ -6295,7 +6345,7 @@ window.showConnectionLost = function() {
                                         <div className="ml-auto flex items-center gap-2">
                                             <PageSizeDropdown value={filters.page_size} onChange={newSize => { setFilters(p => ({ ...p, page_size: newSize, page: 1 })); }} />
                                             <span className="ds-meta"><b>{salePagination.total_rows?.toLocaleString()}</b> dòng</span>
-                                            <ExportButton kind="sale" />
+                                            <ExportButton kind="sale" {...exportBtn} />
                                             <button 
                                                 onClick={() => loadSaleData()} 
                                                 disabled={saleLoading} 
@@ -6433,7 +6483,7 @@ window.showConnectionLost = function() {
                                         <div className="ml-auto flex items-center gap-2">
                                             <PageSizeDropdown value={incomeAllocPageSize} onChange={newSize => { setIncomeAllocPageSize(newSize); }} />
                                             <span className="ds-meta"><b>{incomeAllocPagination.total_rows?.toLocaleString()}</b> dòng</span>
-                                            <ExportButton kind="income_alloc" />
+                                            <ExportButton kind="income_alloc" {...exportBtn} />
                                             <button 
                                                 onClick={() => loadIncomeAllocData()} 
                                                 disabled={incomeAllocLoading} 
@@ -6528,7 +6578,7 @@ window.showConnectionLost = function() {
                                         <div className="ml-auto flex items-center gap-2">
                                             <PageSizeDropdown value={filters.page_size} onChange={newSize => { setFilters(p => ({ ...p, page_size: newSize, page: 1 })); }} />
                                             <span className="ds-meta"><b>{voucherPagination.total_rows?.toLocaleString()}</b> dòng</span>
-                                            <ExportButton kind="voucher" />
+                                            <ExportButton kind="voucher" {...exportBtn} />
                                             <button 
                                                 onClick={() => loadVoucherData()} 
                                                 disabled={voucherLoading} 
@@ -6658,7 +6708,7 @@ window.showConnectionLost = function() {
                                                         }} 
                                                     />
                                             <span className="ds-meta"><b>{purchasePagination.total_rows?.toLocaleString()}</b> dòng</span>
-                                            <ExportButton kind="purchase" />
+                                            <ExportButton kind="purchase" {...exportBtn} />
                                             <button 
                                                 onClick={() => loadPurchaseData()} 
                                                 disabled={purchaseLoading} 
@@ -6804,7 +6854,7 @@ window.showConnectionLost = function() {
                                                         }} 
                                                     />
                                             <span className="ds-meta"><b>{warehousePagination.total_rows?.toLocaleString()}</b> dòng</span>
-                                            <ExportButton kind="warehouse" />
+                                            <ExportButton kind="warehouse" {...exportBtn} />
                                             <button 
                                                 onClick={() => loadWarehouseData()} 
                                                 disabled={warehouseLoading} 
@@ -6936,7 +6986,7 @@ window.showConnectionLost = function() {
                                                         onChange={newSize => { setFilters(p => ({ ...p, page_size: newSize, page: 1 })); }}
                                                     />
                                             <span className="ds-meta"><b>{warehouseBalancePagination.total_rows?.toLocaleString()}</b> dòng</span>
-                                            <ExportButton kind="warehouse_balance" />
+                                            <ExportButton kind="warehouse_balance" {...exportBtn} />
                                             <button 
                                                 onClick={() => loadWarehouseBalanceData()} 
                                                 disabled={warehouseBalanceLoading} 
@@ -7036,7 +7086,7 @@ window.showConnectionLost = function() {
                                         <div className="ml-auto flex items-center gap-2">
                                             <PageSizeDropdown value={prDetailPageSize} onChange={newSize => { setPrDetailPageSize(newSize); loadPrDetailData(1, newSize); }} />
                                             <span className="ds-meta"><b>{prDetailPagination.total_rows?.toLocaleString()}</b> đối tượng</span>
-                                            <ExportButton kind="pr_detail" />
+                                            <ExportButton kind="pr_detail" {...exportBtn} />
                                             <button 
                                                 onClick={() => loadPrDetailData(1, prDetailPageSize)} 
                                                 disabled={prDetailLoading} 

@@ -6607,6 +6607,117 @@ def _pick_exe_asset(release):
     return None
 
 
+# ---- Tóm tắt thay đổi cho hộp "Cập nhật ngay" (v1.10.5, Trum yêu cầu 28/09) ----
+# Máy đang ở bản X thấy bản mới Y → hộp cập nhật liệt kê từng bản X < v ≤ Y kèm gạch đầu dòng rút từ ghi chú release.
+# Ghi chú release có 3 kiểu viết: "## DataStudio vX — tóm tắt" + mục **Mới** / **Sửa lỗi**…; gạch đầu dòng trơn (Gemini);
+# "### Mới" (v1.8.x). Mục "Cập nhật" là hướng dẫn cài → bỏ. Viết ghi chú release mới thì giữ kiểu thứ nhất.
+UPDATE_LIST_URL = "https://api.github.com/repos/trungkhanhduong93/ledgerstudio/releases?per_page=30"
+_CHANGES_MAX_VERSIONS = 12   # tụt quá nhiều bản thì chỉ liệt kê 12 bản mới nhất (+ changes_more)
+_CHANGES_MAX_ITEMS = 6       # mỗi bản tối đa 6 gạch đầu dòng (+ more)
+_CHANGE_ITEM_LEN = 170       # gạch đầu dòng dài hơn → lấy câu đầu / cắt ở ranh giới từ
+
+
+def _fetch_release_list(timeout):
+    req = urllib.request.Request(UPDATE_LIST_URL, headers={
+        "User-Agent": _UPDATE_UA, "Accept": "application/vnd.github+json"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode('utf-8'))
+
+
+def _md_plain(s):
+    """Bỏ định dạng markdown đơn giản: [chữ](link) → chữ, **đậm**, `mã`, *nghiêng*. Không đụng dấu _ (tên cột DM_PR_DETAIL)."""
+    s = re.sub(r'\[([^\]]+)\]\([^)]*\)', r'\1', s or '')
+    s = s.replace('**', '').replace('`', '')
+    s = re.sub(r'(?<![\w*])\*([^*\n]+)\*(?![\w*])', r'\1', s)
+    return re.sub(r'\s+', ' ', s).strip()
+
+
+def _short_item(text):
+    if len(text) <= 120:
+        return text
+    first = re.split(r'(?<=[.!?])\s+(?=[A-ZĐÀ-Ỹ"“(])', text, maxsplit=1)[0]
+    if len(first) >= 30:
+        text = first
+    if len(text) > _CHANGE_ITEM_LEN:
+        text = text[:_CHANGE_ITEM_LEN].rsplit(' ', 1)[0].rstrip(',;:—-') + '…'
+    return text
+
+
+_GENERIC_SECTIONS = ('mới', 'có gì mới', 'sửa lỗi', 'sửa nhỏ', 'thay đổi', 'vá bảo mật', 'datastudio', 'ipos ledger studio', 'v1', 'phiên bản')
+
+
+def _release_summary(body, name=''):
+    """Ghi chú release (markdown) → (tóm tắt 1 dòng, [gạch đầu dòng]). Bỏ mục "Cập nhật" (hướng dẫn cài).
+    Gạch đầu dòng cha kết thúc bằng ":" thì nối các gạch con vào ("Tải lại danh mục: A; B; C")."""
+    title, items, section, label, cur, first_para = '', [], '', '', None, ''
+    for raw in (body or '').splitlines():
+        if not raw.strip():
+            continue
+        m = re.match(r'^(#{1,6})\s+(.*)$', raw.strip())
+        if m:                                           # "## DataStudio v1.10.4 — tóm tắt" / "### Mới"
+            h = _md_plain(m.group(2))
+            if len(m.group(1)) <= 2 and not title and ' — ' in h:
+                title = h.split(' — ', 1)[1]
+            section, label, cur = h.lower(), h, None
+            continue
+        m = re.match(r'^\*\*([^*]+)\*\*\s*(\([^)]*\))?\s*$', raw.strip())
+        if m:                                           # "**Mới**", "**Đổi tên cột** (…)" đứng riêng 1 dòng
+            label = _md_plain(m.group(1))
+            section, cur = label.lower(), None
+            continue
+        install = section.startswith(('cập nhật', 'cài đặt'))
+        m = re.match(r'^[-*]\s+(.*)$', raw)             # gạch đầu dòng cấp 1 (không thụt đầu dòng)
+        if m:
+            cur = None
+            if not install:
+                # mục đặc thù ("Đổi tên cột") → ghi tên mục phía trước cho khỏi cụt nghĩa; mục chung (Mới, Sửa lỗi…) thì thôi
+                pre = '' if (not section or section.startswith(_GENERIC_SECTIONS)) else label + ': '
+                cur = [pre + _md_plain(m.group(1))]
+                items.append(cur)
+            continue
+        m = re.match(r'^\s+[-*]\s+(.*)$', raw)          # gạch con
+        if m:
+            if cur is not None and cur[0].endswith(':'):
+                cur.append(_md_plain(m.group(1)))
+            continue
+        if install or raw.lstrip().startswith('>'):
+            continue
+        para = _md_plain(raw)
+        if para.lower().startswith('lưu ý'):            # "**Lưu ý:** …" → cũng là 1 thay đổi người dùng thấy
+            items.append([para])
+        elif not first_para:
+            first_para = re.sub(r'^Phiên bản\s+v?[\d.]+\s*:\s*', '', para, flags=re.I)
+    out = []
+    for it in items:
+        text = it[0] if len(it) == 1 else it[0] + ' ' + '; '.join(x.rstrip('.') for x in it[1:]) + '.'
+        if text.strip(':').strip():
+            out.append(_short_item(text))
+    if not out and first_para:                          # ghi chú chỉ có 1 câu (v1.9.9)
+        out = [_short_item(first_para)]
+    if not title and ' — ' in (name or ''):
+        title = _md_plain(name.split(' — ', 1)[1])
+    return title, out
+
+
+def _changes_between(releases, current, latest):
+    """Các bản current < v ≤ latest (bỏ nháp / thử nghiệm), mới nhất trước."""
+    cur_v, lat_v = _parse_semver(current), _parse_semver(latest)
+    picked = []
+    for r in releases or []:
+        if r.get('draft') or r.get('prerelease'):
+            continue
+        v = _parse_semver(r.get('tag_name'))
+        if cur_v < v <= lat_v:
+            picked.append((v, r))
+    picked.sort(key=lambda x: x[0], reverse=True)
+    out = []
+    for _, r in picked[:_CHANGES_MAX_VERSIONS]:
+        title, items = _release_summary(r.get('body'), r.get('name'))
+        out.append({"version": r.get('tag_name', ''), "published_at": r.get('published_at', ''), "title": title,
+                    "items": items[:_CHANGES_MAX_ITEMS], "more": max(0, len(items) - _CHANGES_MAX_ITEMS)})
+    return out, max(0, len(picked) - _CHANGES_MAX_VERSIONS)
+
+
 @app.route('/api/check_update', methods=['GET'])
 def check_update_api():
     """Public — so release mới nhất trên GitHub với APP_VERSION. Lỗi mạng / chưa có release → has_update=False."""
@@ -6616,9 +6727,20 @@ def check_update_api():
         asset = _pick_exe_asset(rel) or {}
         tag = rel.get('tag_name', '')
         digest = asset.get('digest') or ''
+        has_update = bool(asset) and _parse_semver(tag) > _parse_semver(APP_VERSION)
+        # Chỉ khi có bản mới mới gọi thêm danh sách release (API GitHub không đăng nhập: 60 lượt/giờ/IP).
+        # Lỗi → hộp cập nhật hiện như cũ (không có danh sách thay đổi), KHÔNG làm hỏng việc báo bản mới.
+        changes, changes_more = [], 0
+        if has_update:
+            try:
+                changes, changes_more = _changes_between(_fetch_release_list(timeout=3.0), APP_VERSION, tag)
+            except Exception:
+                pass
         return jsonify({
             "status": "ok",
-            "has_update": bool(asset) and _parse_semver(tag) > _parse_semver(APP_VERSION),
+            "has_update": has_update,
+            "changes": changes,
+            "changes_more": changes_more,
             "current_version": APP_VERSION,
             "latest_version": tag,
             "release_name": rel.get('name', ''),
