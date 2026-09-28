@@ -2,7 +2,7 @@
 
 > Toàn bộ những gì đã làm với **LedgerStudio**, và **vì sao**. Đọc file này trước khi sửa tiếp.
 > Kiến trúc và ma trận báo cáo: [CLAUDE.md](CLAUDE.md).
-> Phiên gần nhất: **28/09/2026** · EXE build mới nhất: **iPOS_Ledger_Studio v1.10.5** (đã phát hành 28/09, mục 29) — tên hiển thị DataStudio · v1.9.6–1.9.9 do Gemini làm, ghi ở GEMINI.md
+> Phiên gần nhất: **28/09/2026** · EXE build mới nhất: **iPOS_Ledger_Studio v1.10.5** (đã phát hành 28/09, mục 29) · `main` có thêm v1.10.6 dịch lỗi (mục 30, CHƯA build/phát hành) · việc tiếp theo: CLAUDE.md mục 6 — tên hiển thị DataStudio · v1.9.6–1.9.9 do Gemini làm, ghi ở GEMINI.md
 
 ---
 
@@ -1083,3 +1083,32 @@ nhật" + khung "Nội dung cập nhật" (mỗi bản: số bản, ngày, tóm 
 hành: `/api/check_update` thật — máy 1.10.3 thấy [v1.10.5, v1.10.4], máy 1.10.4 thấy [v1.10.5], máy 1.10.5 không có cập nhật.
 - Test cập nhật thật (EXE cũ bấm "Cập nhật ngay") KHÔNG chạy ở v1.10.4 lẫn v1.10.5 (Trum ngắt lần chạy ở v1.10.4). Code tải/thay EXE
   không đổi trong cả loạt v1.10.x; test thật đạt ở 4 lần phát hành v1.10.0–v1.10.3 (CLAUDE.md đầu file).
+
+## 30. v1.10.6 (ĐÃ PUSH, CHƯA build/phát hành): dịch mọi lỗi tiếng Anh sang tiếng Việt kèm cách khắc phục *(29/09/2026)*
+
+**Yêu cầu Trum:** gửi ảnh hộp "Xuất file không thành công" khi xuất BC007 (IACC_CHULONG, Tháng 8/2026, Đơn vị: Tất cả, ≈ 2.856.815 dòng) lỗi
+`('01000', '[01000] [Microsoft][ODBC SQL Server Driver][DBNETLIB]ConnectionWrite (send()). (10054) (SQLGetData); … General network error …')`
+→ hỏi "bị gì"; rồi "dịch hết lỗi tiếng Anh sang tiếng Việt cụ thể + hướng dẫn khắc phục"; rồi "làm xong cập nhật tiến độ + dự định cải thiện
+xuất Excel vào dự án, push git — chuyển agent khác làm tối ưu tải Excel". KHÔNG bảo phát hành → chỉ push.
+
+**Chẩn đoán 10054:** kết nối TCP tới SQL bị đóng ngang lúc đang đọc dòng (SQLGetData). Job xuất giữ kết nối suốt thời gian ghi file (đọc 5.000
+dòng → ghi → đọc tiếp) nên file lớn qua VPN dễ đứt. Không xác định được đứt sau bao lâu / dòng thứ mấy: EXE không ghi log ra file, trạng thái
+job chỉ trong RAM. Hướng sửa gốc → CLAUDE.md mục 6 (bàn giao).
+
+**Đã sửa:** xem CLAUDE.md Bẫy 24. `server.py`: khối "DỊCH LỖI SANG TIẾNG VIỆT" (`_VI_ERR_RULES` ~30 luật, `_err_brief`, `_vi_error_text`,
+after_request `_vi_error_response`); `_login_error_message`, `_rx_error_text`, lỗi tải cập nhật gọi bộ dịch. `index.html`: `viErr`, `ErrText`,
+CSS `.ds-errtext` / `.ds-err-box`; 5 chỗ hiện lỗi dùng `ErrText`; `alert` đổi tiêu đề tên view → tên màn hình, `err.message` → `viErr(err)`.
+
+**Verify:**
+
+| Bài | Kết quả |
+|---|---|
+| `test_vierr.py` — A: 36 mẫu lỗi đúng khuôn pyodbc (driver "SQL Server" + ODBC 17), Windows, Python, tải cập nhật, giữ câu Việt, không lồng, dự phòng · B: lỗi THẬT SQL Express 2 driver (sai mật khẩu 18456, máy chủ không tồn tại, CSDL không tồn tại 4060, CSDL master → `/api/sale` thiếu view 208 + `message_raw`, job xuất BC007 lỗi → `/api/export/status`) · C: JSON thành công không đụng, gzip vẫn nén, lỗi 400 tiếng Việt giữ nguyên | 57/57 (lần đầu 54/57: regex `a\|b` bắt trúng SQLSTATE '28000' đứng trước tên tài khoản → tách luật; dòng chi tiết dính câu lỗi thứ 2 → viết lại `_err_brief`) |
+| `pt/vierr.js` — alert tab, fetch hỏng, thẻ Tải lại danh mục, hộp xuất báo cáo (dữ liệu BC006 thật TRUNGDEMO làm API giả), màn đăng nhập, `viErr` | 8/8 |
+| `sidebar` / `expflicker` / `behave` / `foot` / `num` / `heights` / `updmodal` | 30 · 26 · 42 · 41 · 48 · 7/7 tab đều · 36 (sidebar sửa 2 kỳ vọng theo giao diện lỗi mới) |
+| `test_check_update.py` (GitHub thật) | 17/17 — đã đổi kỳ vọng ghi cứng "mới nhất = v1.10.4" sang đọc bản mới nhất thật (sau khi có v1.10.5 thì 7 ca kỳ vọng cũ trượt) |
+
+- Bộ kiểm nằm NGOÀI repo, trên máy dev của Trum: `%TEMP%\claude\D--IACC-HCM-iPOS-ACC-ACC-PMKT-LedgerStudio\f2866e8d-ac28-4a3e-ba44-2b6d4b1090a1\scratchpad\`
+  (`pt\harness.js` API giả + `__delay` / `__fail` (có `code`) / `__abort` / `__mock` / `update`, các bài `pt\*.js`; `test_*.py` chạy `server.py` bằng
+  test_client + Windows auth vào `localhost\SQLEXPRESS` TRUNGDEMO). Thư mục tạm — có thể đã bị dọn.
+- Chưa: build EXE, phát hành, test cập nhật thật (xem mục 29).
