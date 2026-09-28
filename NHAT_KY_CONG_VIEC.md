@@ -1007,3 +1007,14 @@ Video Trum (Snagit, tab bán hàng 44.223 dòng, lọc Tên kho "online") cho th
 - Thay đổi nhìn thấy: cột có chữ dài hơn bề ngang giờ rộng ra thay vì xuống dòng (vd Mã ĐT ở đoạn có "KL-CRM.CALCENTER").
 - Chưa tái hiện 1:1 cảnh "tự chạy tới cuối trang" (máy dev chỉ thấy trôi 230px); nguyên nhân khả dĩ nhất — scrollHeight đổi liên tục
   khi chiều cao dòng đo lại — đã hết. Cần Trum thử trên máy thật sau khi cập nhật.
+
+**QA trước push (pre-push-qa):** 🟡 — không lỗi chặn; vàng vì chưa chạy DB thật của khách. `origin/main` vẫn `267d542`; 256 dòng thêm:
+không secret, không log/TODO. Bắt được khi soát diff: `'\u00a0'` viết qua công cụ Edit/heredoc thành KÝ TỰ NBSP thật (vô hình) ở
+index.html + CLAUDE.md + GEMINI.md → đổi lại dạng mã `\u00a0` (dựng dấu `\` bằng `chr(92)`: heredoc của công cụ nuốt 1 dấu `\`).
+
+**Phát hành (Trum bảo "phát hành", "tự làm tới cuối đi"):** `build_exe.py` → 1.10.3, 16.559.112 byte; EXE ở thư mục tạm: `/api/version`
+1.10.3, `app.js` trùng SHA-1 `build_web`, `/api/ledger` chưa đăng nhập 401. Commit `ca38d21` → `gh release create v1.10.3` (exe +
+zip tạo lại 16.345.476 byte). API công khai trả `v1.10.3`, digest exe = SHA-256 file build `1277930d…3fa63`.
+
+**Test cập nhật thật:** EXE v1.10.2 (SHA = asset) → hộp bắt buộc cập nhật → bấm → 1.10.3 lên sau 6,9 s, còn 1 file, SHA = asset, bản mới
+`has_update=False`. Đã tắt EXE test + Chrome.
