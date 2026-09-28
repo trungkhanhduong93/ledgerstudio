@@ -186,6 +186,177 @@ def _gzip_response(response):
         pass
     return response
 
+
+# ===== DỊCH LỖI SANG TIẾNG VIỆT (v1.10.6, Trum yêu cầu 29/09) =====
+# Lỗi gốc của SQL Server / driver ODBC / Windows / Python là tiếng Anh ("[DBNETLIB]ConnectionWrite (10054)…").
+# _vi_error_text đổi thành 3 dòng mà app hiển thị tách phần:
+#     <chuyện gì xảy ra>
+#     Cách khắc phục: <làm gì>
+#     Chi tiết kỹ thuật: <mã gốc rút gọn — để IT tra>
+# Áp ở MỘT chỗ: _vi_error_response (after_request) sửa trường message / error / error_message của mọi JSON báo lỗi,
+# giữ bản gốc ở <trường>_raw. Thêm endpoint mới không cần làm gì. Lỗi mới hay gặp → thêm 1 luật vào _VI_ERR_RULES.
+import json   # json.dumps trong _vi_error_response (bản cũ chỉ import json ở gần cuối file)
+_VI_FIX = "Cách khắc phục:"
+_VI_DETAIL = "Chi tiết kỹ thuật:"
+_VI_CHARS = re.compile(r'[À-ỹđĐ]')
+_TECH_HINT = re.compile(r"\[Microsoft\]|\[ODBC|\[SQL Server\]|\[DBNETLIB\]|\('[0-9A-Z]{5}'|Traceback|Error\b|Exception\b|errno|WinError", re.I)
+_Q = lambda m, i=1: (m.group(i) if m and m.group(i) else '').strip()
+
+# (regex trên chữ gốc — không phân biệt hoa thường, chỉ áp khi ngữ cảnh khớp: None = mọi nơi, 'update' = tải bản cập nhật)
+#  → (hàm (match) -> câu chuyện gì xảy ra, cách khắc phục). THỨ TỰ QUAN TRỌNG: luật cụ thể đứng trước luật chung.
+_VI_ERR_RULES = [
+    (None, r'cancelled by user',
+     lambda m: ("Đã huỷ xuất file theo yêu cầu.", "Bấm Xuất lại nếu cần file.")),
+    (None, r'cannot open database "([^"]+)"',
+     lambda m: (f'Không mở được cơ sở dữ liệu "{_Q(m)}" — sai tên CSDL, hoặc tài khoản SQL chưa được cấp quyền vào CSDL này.',
+                "Kiểm tra lại ô Cơ sở dữ liệu (đúng tên, đúng hoa thường). Tên đúng mà vẫn lỗi thì nhờ IT cấp quyền cho tài khoản vào CSDL.")),
+    (None, r'password (?:has )?expired|must be changed|18487|18488',
+     lambda m: ("Mật khẩu tài khoản SQL Server đã hết hạn hoặc bắt buộc đổi.", "Nhờ IT đặt lại mật khẩu cho tài khoản SQL rồi đăng nhập lại.")),
+    (None, r'account is disabled|18470',
+     lambda m: ("Tài khoản SQL Server đang bị khoá.", "Nhờ IT mở khoá tài khoản SQL (hoặc dùng tài khoản khác) rồi đăng nhập lại.")),
+    # 2 luật riêng: SQLSTATE '28000' đứng TRƯỚC câu "Login failed for user 'x'" → gộp 1 regex là bắt trúng mã, mất tên tài khoản
+    (None, r"login failed for user '([^']+)'",
+     lambda m: (f"Sai tài khoản hoặc mật khẩu SQL Server (tài khoản {_Q(m)}).",
+                "Gõ lại Tài khoản / Mật khẩu (phân biệt chữ hoa thường, tắt bộ gõ tiếng Việt khi gõ mật khẩu). Chắc chắn đúng mà vẫn lỗi thì nhờ IT kiểm tra tài khoản SQL.")),
+    (None, r"login failed|\b28000\b|18456",
+     lambda m: ("Sai tài khoản hoặc mật khẩu SQL Server.",
+                "Gõ lại Tài khoản / Mật khẩu (phân biệt chữ hoa thường, tắt bộ gõ tiếng Việt khi gõ mật khẩu). Chắc chắn đúng mà vẫn lỗi thì nhờ IT kiểm tra tài khoản SQL.")),
+    (None, r'ssl provider|certificate chain|certificate verify',
+     lambda m: ("Driver ODBC từ chối chứng chỉ bảo mật của máy chủ SQL.",
+                "Đăng nhập lại (app dùng driver \"SQL Server\" mặc định). Vẫn lỗi thì nhờ IT kiểm tra chứng chỉ SSL của máy chủ SQL.")),
+    (None, r'login timeout expired|does not exist or access denied|server was not found|named pipes provider|'
+           r'tcp provider: (?:no such host|the wait operation timed out|a connection attempt failed)|\b08001\b',
+     lambda m: ("Không kết nối được máy chủ SQL — máy chưa vào mạng công ty, hoặc tên máy chủ sai.",
+                "Bật VPN công ty rồi thử lại. Đã bật VPN mà vẫn lỗi thì kiểm tra lại tên máy chủ và hỏi IT máy chủ SQL có đang chạy không.")),
+    (None, r'10054|10053|connectionwrite|connectionread|general network error|communication link failure|\b08s01\b|'
+           r'forcibly closed|connection (?:is )?broken|semaphore timeout|specified network name is no longer available',
+     lambda m: ("Mất kết nối tới máy chủ SQL giữa chừng — đường mạng (thường là VPN) bị ngắt trong lúc đang lấy dữ liệu.",
+                "Kiểm tra VPN công ty còn kết nối rồi thử lại. Dữ liệu lớn (hàng triệu dòng) thì thu hẹp kỳ, lọc theo đơn vị hoặc xuất CSV để rút ngắn thời gian truyền.")),
+    (None, r'query timeout expired|\bhyt00\b|timeout expired',
+     lambda m: ("Truy vấn chạy quá lâu nên bị máy chủ ngắt.",
+                "Thu hẹp kỳ hoặc thêm bộ lọc (đơn vị, tài khoản) rồi thử lại. Máy chủ đang bận (cuối tháng, nhiều người dùng) thì thử lại sau ít phút.")),
+    (None, r'deadlock|\b40001\b|1205\)',
+     lambda m: ("SQL Server huỷ truy vấn vì tranh chấp dữ liệu với người khác đang ghi sổ cùng lúc.", "Bấm lại lần nữa — thường sẽ chạy được ngay.")),
+    (None, r'lock request time out|1222\)',
+     lambda m: ("Dữ liệu đang bị một thao tác khác trên máy chủ khoá.", "Đợi ít phút rồi thử lại.")),
+    (None, r"permission was denied on the object '([^']+)'|permission was denied|\b229\)|\b230\)",
+     lambda m: (f"Tài khoản SQL không có quyền đọc {('“' + _Q(m) + '”') if _Q(m) else 'dữ liệu này'}.",
+                "Nhờ IT cấp quyền đọc (db_datareader) cho tài khoản trên CSDL này rồi thử lại.")),
+    (None, r"invalid object name '([^']+)'",
+     lambda m: (f"CSDL không có bảng/view “{_Q(m)}” — có thể đang chọn nhầm CSDL không phải kế toán iPOS, hoặc CSDL là phiên bản iPOS khác.",
+                "Kiểm tra đã đăng nhập đúng CSDL kế toán. Đúng CSDL mà vẫn lỗi thì chụp màn hình gửi người hỗ trợ DataStudio.")),
+    (None, r"invalid column name '([^']+)'",
+     lambda m: (f"CSDL thiếu cột “{_Q(m)}” mà chức năng này cần (CSDL là phiên bản iPOS khác).",
+                "Chụp màn hình gửi người hỗ trợ DataStudio kèm tên CSDL đang dùng.")),
+    (None, r'insufficient system memory|\b701\)',
+     lambda m: ("Máy chủ SQL thiếu bộ nhớ để chạy truy vấn này.",
+                "Thu hẹp kỳ hoặc thêm bộ lọc rồi thử lại. Lỗi lặp lại thường xuyên thì báo IT kiểm tra RAM máy chủ SQL.")),
+    (None, r'could not allocate (?:a new page|space)|filegroup is full|transaction log for database .* is full|\b1105\)|\b9002\)',
+     lambda m: ("Ổ đĩa máy chủ SQL đã hết chỗ (tempdb / nhật ký giao dịch).",
+                "Báo IT dọn dung lượng máy chủ SQL. Trong lúc chờ, thu hẹp kỳ truy vấn cho nhẹ hơn.")),
+    (None, r'conversion failed|error converting|arithmetic overflow|out-of-range|out of range value',
+     lambda m: ("Trong CSDL có giá trị ngày/số không đọc được (thường do dữ liệu nhập sai định dạng).",
+                "Thu hẹp kỳ để tìm chứng từ bị lỗi và sửa trong iPOS. Không tìm được thì chụp màn hình gửi người hỗ trợ DataStudio kèm kỳ đang xem.")),
+    (None, r'divide by zero',
+     lambda m: ("Máy chủ gặp phép chia cho 0 khi tính số liệu.", "Chụp màn hình gửi người hỗ trợ DataStudio kèm báo cáo và kỳ đang xem.")),
+    (None, r'connection is busy with results for another',
+     lambda m: ("Kết nối SQL đang bận với truy vấn trước.", "Đợi truy vấn trước chạy xong rồi bấm lại. Vẫn lỗi thì Đăng xuất rồi đăng nhập lại.")),
+    (None, r'data source name not found|\bim002\b|can\'t open lib|specified driver could not be loaded',
+     lambda m: ("Máy này chưa cài driver ODBC cho SQL Server.", "Cài \"ODBC Driver 17 for SQL Server\" (hoặc nhờ IT cài) rồi mở lại DataStudio.")),
+    (None, r'incorrect syntax near|\b102\)|\b156\)|is not a recognized built-in function',
+     lambda m: ("Máy chủ SQL không chạy được câu truy vấn của DataStudio — thường do SQL Server đời cũ hơn chức năng này cần.",
+                "Chụp màn hình gửi người hỗ trợ DataStudio kèm tên CSDL và phiên bản SQL Server.")),
+    # --- tải bản cập nhật từ GitHub (chỉ áp cho /api/check_update, /api/apply_update, /api/update_progress)
+    ('update', r'winerror 5\b|access is denied|permission denied|winerror 32|being used by another process',
+     lambda m: ("Không thay được file DataStudio — thư mục chứa file không cho ghi (vd Program Files), hoặc phần mềm diệt virus đang khoá file.",
+                "Chép iPOS_Ledger_Studio.exe ra Desktop hoặc Documents rồi chạy từ đó và cập nhật lại. Vẫn lỗi thì tải tay bản mới ở trang phát hành GitHub.")),
+    ('update', r'http error 403|rate limit',
+     lambda m: ("GitHub tạm chặn vì máy này (hoặc cả mạng công ty) hỏi quá nhiều lần trong 1 giờ.", "Đợi khoảng 1 giờ rồi mở lại DataStudio.")),
+    ('update', r'urlopen error|getaddrinfo|name or service|timed out|remote end closed|connection (?:reset|refused|aborted)|'
+               r'certificate_verify_failed|ssl|http error|winerror 100\d\d|incompleteread',
+     lambda m: ("Không tải được bản cập nhật từ internet.",
+                "Kiểm tra máy vào được internet rồi thử lại. Mạng công ty chặn GitHub thì nhờ IT mở github.com và objects.githubusercontent.com.")),
+    # --- máy người dùng (ghi file, bộ nhớ)
+    (None, r'no space left|errno 28|not enough space on the disk|winerror 112',
+     lambda m: ("Ổ đĩa máy này đã đầy.", "Xoá bớt file trong Downloads\\iPOS_Ledger_Studio hoặc dọn ổ C rồi làm lại.")),
+    (None, r'permission denied|errno 13|winerror 5\b|access is denied|winerror 32|being used by another process',
+     lambda m: ("Không ghi được file — file cùng tên đang mở trong Excel, hoặc thư mục không cho ghi.",
+                "Đóng file đó trong Excel rồi làm lại, hoặc đổi tên file.")),
+    (None, r'memoryerror|out of memory|cannot allocate memory',
+     lambda m: ("Máy này hết bộ nhớ khi xử lý chừng này dữ liệu.", "Đóng bớt chương trình khác, thu hẹp kỳ hoặc xuất CSV thay cho Excel.")),
+]
+_VI_ERR_COMPILED = [(ctx, re.compile(p, re.I), fn) for ctx, p, fn in _VI_ERR_RULES]
+
+
+def _err_brief(raw):
+    """Chữ gốc rút gọn cho dòng "Chi tiết kỹ thuật": SQLSTATE · câu lỗi ĐẦU TIÊN, bỏ tiền tố [Microsoft][ODBC …] và tên
+    hàm ODBC "(SQLExecDirectW)". Vd "01000 · [DBNETLIB]ConnectionWrite (send()). (10054)"."""
+    raw = re.sub(r"['\"]\)\s*$", '', str(raw or '').strip())                  # đuôi tuple của pyodbc: …')
+    st = re.search(r"^\('([0-9A-Z]{5})'", raw)
+    body = re.sub(r"^\('[0-9A-Z]{5}',\s*['\"]?", '', raw)
+    body = re.split(r";\s*\[[0-9A-Z]{5}\]", body)[0]                           # pyodbc nối nhiều câu bằng "; [SQLSTATE]"
+    body = re.sub(r"\[(?:Microsoft|ODBC[^\]]*|SQL Server|SQL Native Client[^\]]*|[0-9A-Z]{5})\]\s*", '', body)
+    body = re.sub(r"\s*\(SQL[A-Za-z]+\)", '', body)
+    body = re.sub(r"\s+", ' ', re.sub(r"\\r\\n|\\n", ' ', body)).strip()
+    if len(body) > 180:
+        body = body[:180].rsplit(' ', 1)[0] + '…'
+    return f"{st.group(1)} · {body}" if st and body else (body or raw[:180])
+
+
+def _vi_error_text(err, ctx=None):
+    """Lỗi (exception hoặc chuỗi) → 3 dòng tiếng Việt (xem đầu khối). Câu tiếng Việt sẵn (không có dấu vết lỗi kỹ thuật)
+    → giữ nguyên. Đã dịch rồi → giữ nguyên (gọi lại nhiều lần an toàn)."""
+    raw = str(err or '').strip()
+    if isinstance(err, MemoryError):
+        raw = raw or 'MemoryError'
+    if not raw or _VI_FIX in raw:
+        return raw
+    for rctx, rx, fn in _VI_ERR_COMPILED:
+        if rctx is not None and rctx != ctx:
+            continue
+        m = rx.search(raw)
+        if m:
+            what, fix = fn(m)
+            return f"{what}\n{_VI_FIX} {fix}\n{_VI_DETAIL} {_err_brief(raw)}"
+    if _VI_CHARS.search(raw) and not _TECH_HINT.search(raw):
+        return raw
+    return (f"{'Không tải được bản cập nhật.' if ctx == 'update' else 'Có lỗi chưa rõ nguyên nhân.'}\n"
+            f"{_VI_FIX} Thử lại. Vẫn lỗi thì chụp màn hình này gửi người hỗ trợ DataStudio.\n{_VI_DETAIL} {_err_brief(raw)}")
+
+
+@app.after_request
+def _vi_error_response(response):
+    """Dịch trường lỗi của MỌI JSON báo lỗi (xem khối trên). Chạy TRƯỚC _gzip_response (Flask gọi after_request
+    ngược thứ tự khai báo) nên luôn thấy JSON chưa nén. Chỉ đụng JSON nhỏ (< 256 KB) — dữ liệu bảng lớn không bị parse lại."""
+    try:
+        if response.direct_passthrough or response.is_streamed or not response.is_json:
+            return response
+        if (response.content_length or 0) > 256 * 1024:
+            return response
+        # lọc rẻ trước khi parse: phản hồi thành công (đa số) không có chữ "error" → bỏ qua, khỏi json.loads
+        if response.status_code < 400 and b'"error"' not in response.get_data():
+            return response
+        data = response.get_json(silent=True)
+        if not isinstance(data, dict):
+            return response
+        failed = response.status_code >= 400 or data.get('status') == 'error'
+        if not failed:
+            return response
+        ctx = 'update' if request.path in ('/api/check_update', '/api/apply_update', '/api/update_progress') else None
+        changed = False
+        for k in ('message', 'error', 'error_message'):
+            v = data.get(k)
+            if isinstance(v, str) and v:
+                t = _vi_error_text(v, ctx)
+                if t != v:
+                    data[k], data[k + '_raw'] = t, v
+                    changed = True
+        if changed:
+            response.set_data(json.dumps(data, ensure_ascii=False))
+    except Exception:
+        logger.exception("Loi dich thong bao loi")
+    return response
+
 def kill_process_on_port(port):
     """Giải phóng port nếu có process khác đang chiếm đóng (Tránh lỗi cache bản cũ)."""
     try:
@@ -450,9 +621,10 @@ def _login_error_message(e, server_name):
     state = e.args[0] if isinstance(e, pyodbc.Error) and e.args else ''
     text = str(e)
     if isinstance(e, TimeoutError) or ((state in ('08001', 'HYT00') or '[08001]' in text) and 'SSL' not in text):
-        return (f'Không kết nối được máy chủ "{server_name}" — máy chưa vào mạng công ty. '
-                'Hãy bật VPN công ty rồi đăng nhập lại. Đã bật VPN mà vẫn lỗi thì kiểm tra lại tên máy chủ.')
-    return f"Lỗi kết nối: {text}"
+        return (f'Không kết nối được máy chủ "{server_name}" — máy chưa vào mạng công ty.' + '\n'
+                f'{_VI_FIX} Bật VPN công ty rồi đăng nhập lại. Đã bật VPN mà vẫn lỗi thì kiểm tra lại tên máy chủ.' + '\n'
+                f'{_VI_DETAIL} ' + (_err_brief(text) if text else f'quá {_LOGIN_WAIT} giây chưa kết nối được'))
+    return _vi_error_text(e)
 
 @app.route("/api/login", methods=["POST"])
 def login():
@@ -6370,15 +6542,9 @@ def _rx_plan(rpt, variant, info, p, payload):
 
 
 def _rx_error_text(e):
-    msg = str(e)
-    low = msg.lower()
-    if isinstance(e, PermissionError) or 'permission denied' in low:
-        return "Không ghi được file vào thư mục Downloads\\iPOS_Ledger_Studio (thiếu quyền hoặc file đang mở)."
-    if '08s01' in low or 'communication link' in low or 'tcp provider' in low:
-        return "Mất kết nối tới SQL Server trong lúc xuất. Kiểm tra mạng rồi thử lại."
-    if 'no space' in low or 'errno 28' in low:
-        return "Ổ đĩa đã đầy, không đủ chỗ ghi file."
-    return msg
+    # v1.10.6: dùng bộ dịch chung (_vi_error_text). Trước đây chỉ nhận 08S01 / "communication link" → lỗi mạng của
+    # driver cũ "SQL Server" ("[DBNETLIB]ConnectionWrite (10054) … General network error") hiện nguyên tiếng Anh (Trum 29/09).
+    return _vi_error_text(e)
 
 
 def _rx_start_job(path, fmt, plan, db_cfg, report_type):
@@ -6871,7 +7037,7 @@ def _download_and_swap():
                 os.remove(new_path)
             except OSError:
                 pass
-        _set_update_state(status="error", error_message=str(err))
+        _set_update_state(status="error", error_message=_vi_error_text(err, 'update'))
 
 
 if __name__ == "__main__":

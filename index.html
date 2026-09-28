@@ -217,6 +217,7 @@ window.showConnectionLost = function() {
         .ds-toast-body b { font-size: 13px; font-weight: 600; color: var(--ds-ink); }
         .ds-toast-body span { font-size: 12px; line-height: 17px; color: var(--ds-ink-2); overflow-wrap: anywhere; }
         .ds-toast-body em { font-style: normal; white-space: nowrap; }
+        .ds-toast-body .ds-errtext p { font-size: 12px; line-height: 17px; color: var(--ds-ink-2); }
         .ds-toast-body small { font-size: 11px; color: var(--ds-ink-4); font-variant-numeric: tabular-nums; }
         .ds-toast-x { flex: none; width: 24px; height: 24px; margin: -3px -2px 0 0; display: grid; place-items: center; border-radius: 6px; color: var(--ds-ink-4); }
         .ds-toast-x:hover { background: var(--ds-tint); color: var(--ds-ink); }
@@ -445,6 +446,15 @@ window.showConnectionLost = function() {
         .ds-note.is-warn { background: var(--ds-warn-soft); border-color: #F3DDAE; color: var(--ds-warn-ink); }
         .ds-note.is-info { background: var(--ds-brand-soft); border-color: var(--ds-brand-line); color: #0B4A78; }
         .ds-note.is-bad { background: var(--ds-bad-soft); border-color: #F2C4CD; color: var(--ds-bad-ink); }
+        /* ErrText — lỗi 3 phần (v1.10.6): chuyện gì · Cách khắc phục · Chi tiết kỹ thuật (chữ nhỏ, chọn được để gửi IT) */
+        .ds-errtext { min-width: 0; }
+        .ds-errtext p { margin: 0; overflow-wrap: anywhere; }
+        .ds-errtext .ds-err-fix { margin-top: 5px; }
+        .ds-errtext .ds-err-fix b { font-weight: 600; margin-right: 4px; }
+        .ds-errtext .ds-err-raw { margin-top: 5px; font-size: 11px; line-height: 1.45; opacity: .72; user-select: text; }
+        .ds-err-box { margin-top: 12px; padding: 10px 12px; text-align: left; font-size: 12.5px; line-height: 1.55; color: var(--ds-ink-2);
+            background: var(--ds-wash); border: 1px solid var(--ds-line-soft); border-radius: 10px; }
+        .ds-err-box .ds-err-what { color: var(--ds-ink); font-weight: 500; }
         .ds-err { font-size: 12px; color: var(--ds-bad-ink); }
         .ds-path { padding: 8px 10px; border: 1px solid var(--ds-line-soft); border-radius: 8px; background: var(--ds-wash); font: 11.5px/1.5 ui-monospace, Consolas, monospace; color: var(--ds-ink-2); word-break: break-all; text-align: left; }
         .ds-progress { position: relative; height: 6px; border-radius: 3px; background: var(--ds-line-soft); overflow: hidden; }
@@ -1961,6 +1971,33 @@ window.showConnectionLost = function() {
             return { updateInfo, hasForceUpdate, isUpdating, setIsUpdating, progress, startUpdate };
         };
 
+        // ===== LỖI TIẾNG VIỆT (v1.10.6) =====
+        // Server dịch mọi lỗi (server.py _vi_error_text) thành 3 dòng: "<chuyện gì>\nCách khắc phục: …\nChi tiết kỹ thuật: …".
+        // viErr làm y hệt cho lỗi phát sinh NGAY TRONG trình duyệt (fetch hỏng, JSON hỏng, thiếu bộ nhớ);
+        // ErrText hiện 3 dòng đó thành 3 phần. Câu tiếng Việt thường (1 dòng) → in nguyên.
+        const ERR_FIX = 'Cách khắc phục:', ERR_DETAIL = 'Chi tiết kỹ thuật:';
+        const viErr = (e) => {
+            const raw = String((e && e.message) || e || '').trim();
+            if (!raw || raw.includes(ERR_FIX)) return raw;
+            const pack = (what, fix) => `${what}\n${ERR_FIX} ${fix}\n${ERR_DETAIL} ${raw.slice(0, 180)}`;
+            if (/Failed to fetch|NetworkError|Load failed|ERR_CONNECTION|ERR_INTERNET/i.test(raw))
+                return pack('Không kết nối được tới phần chạy nền của DataStudio.', 'Đóng hẳn DataStudio rồi mở lại. Vẫn lỗi thì khởi động lại máy.');
+            if (/Unexpected token|Unexpected end of JSON|JSON\.parse|is not valid JSON/i.test(raw))
+                return pack('Phần chạy nền trả về dữ liệu hỏng (thường do truy vấn bị ngắt giữa chừng).', 'Bấm lại. Vẫn lỗi thì đóng DataStudio và mở lại.');
+            if (/Invalid array length|out of memory|Maximum call stack|allocation failed|Array buffer allocation/i.test(raw))
+                return pack('Trình duyệt không đủ bộ nhớ để xử lý chừng này dòng.', 'Giảm số dòng mỗi trang, thu hẹp kỳ, hoặc xuất Excel dạng XLSX/CSV (máy chủ ghi file, không qua trình duyệt).');
+            if (/[À-ỹđĐ]/.test(raw)) return raw;
+            return pack('Có lỗi chưa rõ nguyên nhân.', 'Thử lại. Vẫn lỗi thì chụp màn hình này gửi người hỗ trợ DataStudio.');
+        };
+        const ErrText = ({ text, className = '' }) => (
+            <div className={`ds-errtext ${className}`}>
+                {String(text || '').split('\n').filter(l => l.trim()).map((l, i) =>
+                    l.startsWith(ERR_FIX) ? <p key={i} className="ds-err-fix"><b>{ERR_FIX}</b>{l.slice(ERR_FIX.length)}</p>
+                    : l.startsWith(ERR_DETAIL) ? <p key={i} className="ds-err-raw">{l}</p>
+                    : <p key={i} className="ds-err-what">{l}</p>)}
+            </div>
+        );
+
         // Ngày phát hành (ISO, UTC) → dd/mm/yyyy giờ máy
         const fmtRelDate = s => { const d = new Date(s || ''); return isNaN(d) ? '' : d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }); };
         // Hộp bắt buộc cập nhật. Từ v1.10.5 kèm "Nội dung cập nhật": server (/api/check_update → changes) liệt kê từng bản
@@ -2059,7 +2096,7 @@ window.showConnectionLost = function() {
                                 </div>
                             )}
                             {isDone && <div className="ds-note">Cửa sổ này sẽ tự đóng, ứng dụng mở lại sau vài giây</div>}
-                            {isErr && <div className="ds-note is-bad"><span><b className="font-semibold">Chi tiết:</b> {progress.error_message}</span></div>}
+                            {isErr && <div className="ds-note is-bad"><ErrText text={progress.error_message} /></div>}
                         </div>
                         {isErr && (
                             <div className="ds-dlg-foot">
@@ -2404,7 +2441,7 @@ window.showConnectionLost = function() {
                     poll();
                 } catch (e) {
                     if (window.isNetworkError && window.isNetworkError(e)) { window.showConnectionLost(); return; }
-                    setErrorMsg('Lỗi: ' + e.message); setStep('error');
+                    setErrorMsg(viErr(e)); setStep('error');
                 }
             };
 
@@ -2429,7 +2466,7 @@ window.showConnectionLost = function() {
                     const j = await r.json();
                     if (j.status !== 'ok') { setActionMsg(j.message || 'Không mở được.'); return; }
                     close();
-                } catch (e) { setActionMsg('Không mở được: ' + e.message); }
+                } catch (e) { setActionMsg('Không mở được: ' + viErr(e).split('\n')[0]); }
             };
 
             React.useEffect(() => {
@@ -2660,7 +2697,7 @@ window.showConnectionLost = function() {
                                 <div className="ds-dlg-body text-center pt-6">
                                     <div className={`ds-dlg-ic is-lg ${step === 'error' ? 'is-bad' : 'is-warn'}`}><Icon name={step === 'error' ? 'alert-circle' : 'x'} size={24} stroke={2} /></div>
                                     <h3 className="mt-3 text-[16px] font-semibold text-ink">{step === 'error' ? 'Xuất file không thành công' : 'Đã hủy xuất file'}</h3>
-                                    <p className="text-[12.5px] text-ink-2 mt-1.5 leading-relaxed break-words">{step === 'error' ? errorMsg : 'File đang ghi dở đã được dọn sạch, không để lại file hỏng trong thư mục.'}</p>
+                                    {step === 'error' ? <ErrText text={errorMsg} className="ds-err-box" /> : <p className="text-[12.5px] text-ink-2 mt-1.5 leading-relaxed break-words">File đang ghi dở đã được dọn sạch, không để lại file hỏng trong thư mục.</p>}
                                 </div>
                                 <div className="ds-dlg-foot">
                                     <button onClick={close} className="ds-btn">Đóng</button>
@@ -4050,7 +4087,7 @@ window.showConnectionLost = function() {
                     <div className="ds-toast-body">
                         <b>{refresh.title}</b>
                         {refresh.parts ? <span>{refresh.parts.map((p, i) => <React.Fragment key={i}>{i ? ' · ' : ''}<em>{p}</em></React.Fragment>)}</span>
-                            : refresh.text && <span>{refresh.text}</span>}
+                            : refresh.text && <ErrText text={refresh.text} />}
                         {ok && refresh.ms != null && <small>Xong sau {fmtSec(refresh.ms)}</small>}
                     </div>
                     <button type="button" className="ds-toast-x" onClick={onClose} title="Đóng"><Icon name="x" size={14} stroke={2} /></button>
@@ -4343,7 +4380,7 @@ window.showConnectionLost = function() {
                         setLoginError(res.message);
                     }
                 } catch (err) {
-                    setLoginError("Không thể kết nối đến Server Python.");
+                    setLoginError(viErr('Failed to fetch'));
                 } finally {
                     setLoginLoading(false);
                 }
@@ -4377,7 +4414,7 @@ window.showConnectionLost = function() {
                 } catch (e) {
                     // fetch lỗi mạng = TypeError ("Failed to fetch") → câu dễ hiểu; lỗi từ server giữ nguyên văn
                     setMetaRefresh({ phase: 'err', id: t0, title: 'Chưa tải lại được danh mục',
-                        text: e instanceof TypeError ? 'Không kết nối được tới máy chủ ứng dụng. Danh mục cũ vẫn dùng được.' : String(e.message || e) });
+                        text: viErr(e) });
                 }
             };
 
@@ -4466,11 +4503,11 @@ window.showConnectionLost = function() {
                             setQueryTiming({ ...st, total: now - t0, wait: tResp - t0, read: tJson - tResp, draw: now - tJson, rows: (res.data || []).length });
                         }));
                     } else {
-                        alert('Lỗi truy vấn LEDGER:\n\n' + (res.message || JSON.stringify(res)));
+                        alert('Không truy vấn được Chứng từ tổng hợp.\n\n' + (res.message || JSON.stringify(res)));
                     }
                 } catch (err) {
                     if (err.name === 'AbortError' || _ctrl.signal.aborted) return; // Request bị hủy — bình thường, bỏ qua
-                    alert('Lỗi kết nối API LEDGER:\n\n' + err.message);
+                    alert('Không truy vấn được Chứng từ tổng hợp.\n\n' + viErr(err));
                 } finally { setLoading(false); }
             };
 
@@ -4609,11 +4646,11 @@ window.showConnectionLost = function() {
                         setFilters(p => ({ ...p, page: targetPage, page_size: targetPageSize }));
                         markTabApplied('sale');
                     } else {
-                        alert('Lỗi truy vấn SALE_VIEW:\n\n' + (res.message || JSON.stringify(res)));
+                        alert('Không truy vấn được Chứng từ xuất - bán hàng.\n\n' + (res.message || JSON.stringify(res)));
                     }
                 } catch (err) {
                     if (err.name === 'AbortError' || _ctrl.signal.aborted) return;
-                    alert('Lỗi mạng / parse: ' + err.message);
+                    alert('Không truy vấn được dữ liệu.\n\n' + viErr(err));
                 } finally { setSaleLoading(false); }
             };
 
@@ -4684,11 +4721,11 @@ window.showConnectionLost = function() {
                         if (res.summary) setIncomeAllocSummary(res.summary);
                         markTabApplied('income_alloc');
                     } else {
-                        alert('Lỗi truy vấn Doanh thu chờ phân bổ:\n\n' + (res.message || JSON.stringify(res)));
+                        alert('Không truy vấn được Doanh thu chờ phân bổ.\n\n' + (res.message || JSON.stringify(res)));
                     }
                 } catch (err) {
                     if (err.name === 'AbortError' || _ctrl.signal.aborted) return;
-                    alert('Lỗi mạng / parse: ' + err.message);
+                    alert('Không truy vấn được dữ liệu.\n\n' + viErr(err));
                 } finally { setIncomeAllocLoading(false); }
             };
 
@@ -4784,11 +4821,11 @@ window.showConnectionLost = function() {
                         setFilters(p => ({ ...p, page: targetPage, page_size: targetPageSize }));
                         markTabApplied('voucher');
                     } else {
-                        alert('Lỗi truy vấn VOUCHER_VIEW:\n\n' + (res.message || JSON.stringify(res)));
+                        alert('Không truy vấn được Chứng từ tiền.\n\n' + (res.message || JSON.stringify(res)));
                     }
                 } catch (err) {
                     if (err.name === 'AbortError' || _ctrl.signal.aborted) return;
-                    alert('Lỗi mạng / parse: ' + err.message);
+                    alert('Không truy vấn được dữ liệu.\n\n' + viErr(err));
                 } finally { setVoucherLoading(false); }
             };
 
@@ -4958,11 +4995,11 @@ window.showConnectionLost = function() {
                         setFilters(p => ({ ...p, page: targetPage, page_size: targetPageSize }));
                         markTabApplied('purchase');
                     } else {
-                        alert('Lỗi truy vấn PURCHASE_VIEW:\n\n' + (res.message || JSON.stringify(res)));
+                        alert('Không truy vấn được Chứng từ nhập - mua hàng.\n\n' + (res.message || JSON.stringify(res)));
                     }
                 } catch (err) {
                     if (err.name === 'AbortError' || _ctrl.signal.aborted) return;
-                    alert('Lỗi mạng / parse: ' + err.message);
+                    alert('Không truy vấn được dữ liệu.\n\n' + viErr(err));
                 } finally { setPurchaseLoading(false); }
             };
 
@@ -5105,11 +5142,11 @@ window.showConnectionLost = function() {
                         setFilters(p => ({ ...p, page: targetPage, page_size: targetPageSize }));
                         markTabApplied('warehouse');
                     } else {
-                        alert('Lỗi truy vấn WAREHOUSE_VIEW:\n\n' + (res.message || JSON.stringify(res)));
+                        alert('Không truy vấn được Chứng từ kho.\n\n' + (res.message || JSON.stringify(res)));
                     }
                 } catch (err) {
                     if (err.name === 'AbortError' || _ctrl.signal.aborted) return;
-                    alert('Lỗi mạng / parse: ' + err.message);
+                    alert('Không truy vấn được dữ liệu.\n\n' + viErr(err));
                 } finally { setWarehouseLoading(false); }
             };
 
@@ -5193,11 +5230,11 @@ window.showConnectionLost = function() {
                         setFilters(p => ({ ...p, page_size: targetPageSize }));
                         markTabApplied('warehouse_balance');
                     } else {
-                        alert('Lỗi truy vấn tồn kho thực tế:\n\n' + (res.message || JSON.stringify(res)));
+                        alert('Không truy vấn được Tồn kho thực tế.\n\n' + (res.message || JSON.stringify(res)));
                     }
                 } catch (err) {
                     if (err.name === 'AbortError' || _ctrl.signal.aborted) return;
-                    alert('Lỗi mạng / parse: ' + err.message);
+                    alert('Không truy vấn được dữ liệu.\n\n' + viErr(err));
                 } finally { setWarehouseBalanceLoading(false); }
             };
 
@@ -5303,11 +5340,11 @@ window.showConnectionLost = function() {
                         setPrDetailPageSize(targetPageSize);
                         markTabApplied('pr_detail');
                     } else {
-                        alert('Lỗi truy vấn danh mục đối tượng:\n\n' + (res.message || JSON.stringify(res)));
+                        alert('Không truy vấn được Danh mục đối tượng.\n\n' + (res.message || JSON.stringify(res)));
                     }
                 } catch (err) {
                     if (err.name === 'AbortError' || _ctrl.signal.aborted) return;
-                    alert('Lỗi mạng / parse: ' + err.message);
+                    alert('Không truy vấn được dữ liệu.\n\n' + viErr(err));
                 } finally { setPrDetailLoading(false); }
             };
 
@@ -5740,7 +5777,7 @@ window.showConnectionLost = function() {
                     const r = await fetch(`/api/${kind}/stream_csv?${q.toString()}`, { method: 'POST' });
                     const res = await r.json();
                     if (res.status !== 'ok' || !res.job_id) {
-                        alert('Lỗi khởi tạo job xuất: ' + (res.message || 'unknown'));
+                        alert('Không bắt đầu xuất được.\n\n' + (res.message || 'Máy chủ không trả lý do.'));
                         return;
                     }
                     const jobId = res.job_id;
@@ -5758,12 +5795,12 @@ window.showConnectionLost = function() {
                             break;
                         }
                         if (sj.status === 'error') {
-                            alert('Lỗi xuất CSV: ' + (sj.error || ''));
+                            alert('Xuất file không thành công.\n\n' + (sj.error || ''));
                             break;
                         }
                     }
                 } catch (err) {
-                    alert('Lỗi: ' + err.message);
+                    alert(viErr(err));
                 } finally {
                     setExporting(false);
                     setExportProgress(null);
@@ -5779,7 +5816,7 @@ window.showConnectionLost = function() {
                     });
                     const j = await r.json();
                     if (j.status !== 'ok') alert('Không mở được file: ' + (j.message || ''));
-                } catch (e) { alert('Lỗi: ' + e.message); }
+                } catch (e) { alert(viErr(e)); }
             };
             const openExportedFolder = async (path) => {
                 try {
@@ -5790,7 +5827,7 @@ window.showConnectionLost = function() {
                     });
                     const j = await r.json();
                     if (j.status !== 'ok') alert('Không mở được folder: ' + (j.message || ''));
-                } catch (e) { alert('Lỗi: ' + e.message); }
+                } catch (e) { alert(viErr(e)); }
             };
 
             const doExport = async (kind, mode, format = 'xlsx') => {
@@ -5908,7 +5945,7 @@ window.showConnectionLost = function() {
                     a.click();
                     setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(blobUrl); }, 100);
                 } catch (err) {
-                    alert('Lỗi xuất Excel: ' + (err && err.message ? err.message : String(err)));
+                    alert('Lỗi xuất Excel.\n\n' + viErr(err));
                 } finally {
                     setExporting(false);
                     setExportProgress(null);
@@ -6106,7 +6143,7 @@ window.showConnectionLost = function() {
                                         </div></div>
                                     </div>
 
-                                    {loginError && <div className="ds-note is-bad mb-3"><Icon name="alert-circle" size={15} stroke={2} /><span>{loginError}</span></div>}
+                                    {loginError && <div className="ds-note is-bad mb-3"><Icon name="alert-circle" size={15} stroke={2} /><ErrText text={loginError} /></div>}
 
                                     <button disabled={loginLoading} type="submit" className="ds-btn ds-btn-pri ds-login-go">
                                         {loginLoading ? <><Icon name="loader" size={15} className="animate-spin" /> Đang kết nối</> : <>Kết nối <Icon name="arrow-right" size={15} stroke={2} className="ds-arrow" /></>}
@@ -7265,7 +7302,7 @@ window.showConnectionLost = function() {
                                     <div className="ds-dlg-ic is-warn"><Icon name="alert-circle" size={18} stroke={2} /></div>
                                     <h3>{noticeModal.title || 'Thông báo'}</h3>
                                 </div>
-                                <div className="ds-dlg-body">{noticeModal.message}</div>
+                                <div className="ds-dlg-body"><ErrText text={noticeModal.message} /></div>
                                 <div className="ds-dlg-foot">
                                     <button type="button" onClick={() => setNoticeModal(null)} className="ds-btn ds-btn-pri">Đã hiểu</button>
                                 </div>
