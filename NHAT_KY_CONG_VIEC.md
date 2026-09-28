@@ -2,7 +2,7 @@
 
 > Toàn bộ những gì đã làm với **LedgerStudio**, và **vì sao**. Đọc file này trước khi sửa tiếp.
 > Kiến trúc và ma trận báo cáo: [CLAUDE.md](CLAUDE.md).
-> Phiên gần nhất: **27/09/2026** · EXE build mới nhất: **iPOS_Ledger_Studio v1.9.5** — tên hiển thị DataStudio · bản phát hành: v1.9.5
+> Phiên gần nhất: **28/09/2026** · EXE build mới nhất: **iPOS_Ledger_Studio v1.10.0** (chưa phát hành) — tên hiển thị DataStudio · bản phát hành: v1.9.9 (v1.9.6–1.9.9 do Gemini làm, ghi ở GEMINI.md)
 
 ---
 
@@ -836,3 +836,36 @@ Commit `8235ccd` push `main` → `gh release create v1.9.5` (+ zip tạo lại).
 
 **Test cập nhật thật:** EXE release v1.9.4 (SHA khớp asset) → `check_update` có v1.9.5 → bấm "Cập nhật ngay" → tải 100% trong
 8,3 s → server cũ thoát ở 9,8 s → 1.9.5 lên ngay sau đó → thư mục còn 1 file, SHA = asset v1.9.5, `has_update=False`. Đã tắt EXE test.
+
+## 24. v1.10.0: đổi chỗ + ẩn/hiện cột 8 bảng dữ liệu, xuất Excel "Như đang xem", đổi tên 2 cột doanh thu *(28/09/2026)*
+
+**Yêu cầu Trum:** (1) di chuyển cột trong danh sách chứng từ, (2) cấu hình ẩn/hiện cột — cả hai lưu theo máy; (3) tab bán hàng đổi
+tên `INCOME_AMOUNT` = "Doanh thu 511", `VAT_INCOME_AMOUNT` = "Doanh thu trước thuế". Chốt thêm: áp cả 8 tab nhóm Dữ liệu; kéo được
+ngay trên tiêu đề lẫn trong bảng cấu hình; tên mới áp cả file xuất; **thêm lựa chọn xuất Excel theo bố cục đang xem**.
+
+**Đã sửa:**
+- `index.html`: 8 bảng chuyển sang khai báo cột `*_GRID` + `GridHead`/`GridRow`/`GridGroupRow`/`GridFoot`/`useColLayout`/
+  `ColumnConfigurator` (CLAUDE.md Bẫy 23). Gỡ 11 component dòng cũ + `PR_DETAIL_TYPE_MAP` chuyển lên cấp trên cùng.
+  `SortableHeader` nhận thêm `colId`/`onColMove`. Menu Xuất Excel thêm "Cột xuất: Đầy đủ / Như đang xem". Icon mới `columns`.
+- `server.py`: `_pick_export_cols` + `_tran_name_map` + `TRAN_NAME_EXPORT_COL`; 8 endpoint `stream_csv` nhận `cols`; đổi tên 2 cột
+  trong `SALE_CSV_COLS`.
+- Sửa kèm (lỗi có sẵn): dòng gom nhóm tab bán hàng đặt tổng tiền dưới cột "Số lượng" → nay dưới "Tổng TT"; "Tách sheet theo đơn vị"
+  của Danh mục đối tượng ra file `DanhMucDoiTuong_xlsx` không đuôi → `DanhMucDoiTuong.xlsx` (trùng tên bản server).
+- Đổi so với phương án đã chốt: nút "Cột" đặt ở **chân bảng** thay vì thanh lọc — đo thấy thanh lọc rớt 2 hàng (bảng dưới).
+
+**Verify** (bộ kiểm ở scratchpad phiên 28/09 — puppeteer-core + Chrome thật, API giả qua request interception, bản dịch sẵn
+`build_web` HEAD 1.9.9 dựng lại từ `git archive` so với bản mới):
+
+| Mức | Nội dung | Kết quả |
+|---|---|---|
+| M1 | `ast.parse` server.py · `webbuild/build.js` (Babel 7.29.7) | đạt; app.js 494.649 → 462.932 byte, app.css không đổi (29.140 byte) |
+| M3 bố cục mặc định | 8 bảng × (thường + gom nhóm ORGANIZATION_ID) ở 1366 và 1440 px, mọi phần tử trong `table.ds-grid` × 37 thuộc tính computed style + toạ độ | sổ cái, tiền, nhập kho, kho, tồn kho, đối tượng: **0 khác biệt**; DT chờ phân bổ: chỉ `cursor: move` ở 4 tiêu đề thường; bán hàng: chỉ 2 tiêu đề đổi tên (cột rộng thêm 25,5 px → cột sau dời), con trỏ kéo 7 tiêu đề, dòng nhóm đặt tổng đúng cột |
+| M3 thanh lọc | 8 tab × 1366/1440/1920 × thanh bên mở/thu | nút ở chân bảng: bề rộng cần trùng 1.9.9 mọi cấu hình. (Lần đầu đặt trên thanh lọc: +87 px, 6 tab rớt 2 hàng → dời) |
+| M3 thao tác | 42 ca: kéo tiêu đề trước/sau (vạch xanh, không sót `data-drop`), 44 cặp nhãn–giá trị giữ nguyên, tiêu đề/hàng tìm/ô/dòng tổng/dòng nhóm thẳng cột, cột cuối mất viền phải, ẩn cột → 42/43 + xoá ô tìm, kéo trong bảng "Cột", mở lại app giữ bố cục, Khôi phục xoá khoá localStorage, sổ cái Nợ/Có tách xa vẫn thẳng cột, tiêu đề thường kéo được, còn 1 cột thì khoá công tắc, xuất XLSX/CSV gửi `cols` đúng thứ tự, Đầy đủ không gửi, tách sheet 4 sheet × 42 cột đúng thứ tự + tên mới | **42/42 đạt**, không lỗi JS |
+| M3 tốc độ | bán hàng + sổ cái 10.000 dòng, 3 vòng xen kẽ, JS vẽ dòng mỗi bước cuộn | bán hàng 12,30 → 12,40 ms (300 px), 29,2 → 29,3 ms (1.500 px); sổ cái 11,5 → 11,4 / 25,8 → 27,0 ms — bằng nhau |
+| M3 SQL thật | TRUNGDEMO (Windows auth, CHỈ SELECT), 2024–2026, server HEAD vs mới qua test_client, `_export_dir` trỏ scratchpad, chặn `kill_process_on_port` lúc import | không gửi cols: 8/8 danh sách trùng tiêu đề + tập dòng + cỡ file (bán hàng khác đúng 2 tên cột); có cols: tiêu đề đúng thứ tự, tập dòng = bản đầy đủ chiếu lên đúng khoá, "Tên chứng từ" lấy từ danh mục (trống đúng như màn hình với mã NKHO không active); xlsx có cols đúng tiêu đề; khoá lạ/trùng bỏ qua, toàn khoá lạ → xuất đủ |
+| M3 EXE | `python build_exe.py` → 1.10.0, 16.550.684 byte | `/api/version` 1.10.0, app.js trùng SHA-1 `build_web`, không còn CDN Babel, `/api/ledger` chưa đăng nhập 401; đã tắt EXE + cửa sổ Chrome |
+
+- Thứ tự các dòng trùng khoá sắp xếp (cùng ngày + số CT) khác nhau giữa 2 lần chạy cùng câu SQL — có sẵn từ trước (Bẫy 20), so file
+  phải so theo tập dòng.
+- **Chưa làm:** commit/push/phát hành (bản phát hành bị ép cập nhật từ v1.9.6 → chờ Trum test EXE). Chưa chạy với DB thật của khách.

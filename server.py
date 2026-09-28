@@ -1928,6 +1928,37 @@ def _start_export_job(filename, headers, sql, params, transform_row, total_estim
     return job_id
 
 
+def _pick_export_cols(args, full_cols, extra_cols=()):
+    """Xuất "Như đang xem" (v1.10.0): args['cols'] = 'KEY1,KEY2,…' — đúng các cột đang hiện, theo thứ tự trên màn hình.
+    Chỉ nhận khoá có trong bộ cột xuất của tab (full_cols) hoặc cột chỉ có trên màn hình (extra_cols): khoá lạ bỏ qua,
+    không đụng tới SQL. Không gửi cols / không còn khoá hợp lệ → xuất đủ như cũ. Tên cột giữ theo bộ cột xuất chuẩn."""
+    raw = (args.get("cols") or "").strip()
+    if not raw:
+        return list(full_cols)
+    labels = dict(extra_cols)
+    labels.update(full_cols)
+    picked, seen = [], set()
+    for key in raw.split(","):
+        key = key.strip()
+        if key in labels and key not in seen:
+            seen.add(key)
+            picked.append((key, labels[key]))
+    return picked or list(full_cols)
+
+
+def _tran_name_map():
+    """Mã loại chứng từ → tên (SYS_TRAN) lấy từ cache danh mục của CSDL đang đăng nhập.
+    Gọi trong request (cần session) — KHÔNG gọi trong transform (chạy ở thread nền)."""
+    db_name = session.get('db_config', {}).get('database', 'N/A')
+    meta = _meta_cache.get(db_name) or {}
+    return {(it.get('id') or '').strip(): it.get('name') or '' for it in meta.get('tran_ids', [])}
+
+
+# Cột "Tên chứng từ" có trên màn hình bán hàng/nhập kho/kho nhưng bộ cột xuất chuẩn của 3 tab này không có
+# → chỉ xuất khi chọn "Như đang xem" và cột đang hiện.
+TRAN_NAME_EXPORT_COL = [("TRAN_NAME", "Tên chứng từ")]
+
+
 # --- LEDGER count + stream csv ---
 LEDGER_CSV_COLS = [
     ("TRAN_DATE","Ngày CT"), ("TRAN_NO","Số chứng từ"), ("TRAN_ID","Mã CT"), ("TRAN_NAME","Tên chứng từ"),
@@ -2032,6 +2063,11 @@ def get_ledger_stream_csv():
         jt = " ".join(joins)
         join_filter = " AND ".join(join_clauses) if join_clauses else "1=1"
         sql = f"SELECT {BASE_COLS} {jt} WHERE {where_sql} AND {join_filter} ORDER BY {order_by_sql}"
+        cols = _pick_export_cols(args, LEDGER_CSV_COLS)
+        all_keys = [k for k, _ in LEDGER_CSV_COLS]
+        pick = [all_keys.index(k) for k, _ in cols]
+        if pick == list(range(len(all_keys))):
+            pick = None   # xuất đủ như cũ — khỏi chép lại từng dòng
 
         def transform(raw, _cols):
             (tran_date, tran_no, tran_id, tran_name,
@@ -2045,7 +2081,7 @@ def get_ledger_stream_csv():
              bank_id, bank_name, bank_id_contra, bank_name_contra) = raw
             debit  = float(amount) if dc == 'DEB' and amount is not None else ''
             credit = float(amount) if dc == 'CRD' and amount is not None else ''
-            return [
+            out = [
                 tran_date, tran_no, tran_id, tran_name or '',
                 acc, acc_contra,
                 desc or comments or '',
@@ -2063,8 +2099,9 @@ def get_ledger_stream_csv():
                 bank_id or '', bank_name or '',
                 bank_id_contra or '', bank_name_contra or '',
             ]
+            return out if pick is None else [out[i] for i in pick]
 
-        headers = [label for _, label in LEDGER_CSV_COLS]
+        headers = [label for _, label in cols]
         fname   = f"ChungTuTongHop_{args.get('from_date','').replace('/','')}-{args.get('to_date','').replace('/','')}.{args.get('format', 'csv')}"
         job_id  = _start_export_job(fname, headers, sql, params + join_params, transform, total_estimate)
         return jsonify({"status": "ok", "job_id": job_id, "filename": fname})
@@ -2128,12 +2165,16 @@ def get_purchase_stream_csv():
         """
         SELECT_LIST = f"{col_list}, O.ORGANIZATION_NAME AS ORGANIZATION_NAME, E.EXPENSE_NAME AS EXPENSE_NAME"
         sql = f"SELECT {SELECT_LIST} {JOIN_SQL} WHERE {where_sql} ORDER BY {order_by_sql}"
+        cols = _pick_export_cols(args, PURCHASE_CSV_COLS, TRAN_NAME_EXPORT_COL)
+        tran_map = _tran_name_map() if any(k == "TRAN_NAME" for k, _ in cols) else None
 
         def transform(raw, sql_cols):
             d = dict(zip(sql_cols, raw))
-            return [d.get(key) for key, _ in PURCHASE_CSV_COLS]
+            if tran_map is not None and 'TRAN_NAME' not in d:
+                d['TRAN_NAME'] = tran_map.get((str(d.get('TRAN_ID') or '')).strip(), '')
+            return [d.get(key) for key, _ in cols]
 
-        headers = [label for _, label in PURCHASE_CSV_COLS]
+        headers = [label for _, label in cols]
         fname   = f"PhieuNhapKho_{args.get('from_date','').replace('/','')}-{args.get('to_date','').replace('/','')}.{args.get('format', 'csv')}"
         job_id  = _start_export_job(fname, headers, sql, params, transform, total_estimate)
         return jsonify({"status": "ok", "job_id": job_id, "filename": fname})
@@ -2200,11 +2241,16 @@ def get_warehouse_stream_csv():
         """
         sql = f"SELECT {SELECT_LIST} {JOIN_SQL} WHERE {where_sql} ORDER BY {order_by_sql}"
 
+        cols = _pick_export_cols(args, WAREHOUSE_CSV_COLS, TRAN_NAME_EXPORT_COL)
+        tran_map = _tran_name_map() if any(k == "TRAN_NAME" for k, _ in cols) else None
+
         def transform(raw, sql_cols):
             d = dict(zip(sql_cols, raw))
-            return [d.get(key) for key, _ in WAREHOUSE_CSV_COLS]
+            if tran_map is not None and 'TRAN_NAME' not in d:
+                d['TRAN_NAME'] = tran_map.get((str(d.get('TRAN_ID') or '')).strip(), '')
+            return [d.get(key) for key, _ in cols]
 
-        headers = [label for _, label in WAREHOUSE_CSV_COLS]
+        headers = [label for _, label in cols]
         fname   = f"ChungTuKho_{args.get('from_date','').replace('/','')}-{args.get('to_date','').replace('/','')}.{args.get('format', 'csv')}"
         job_id  = _start_export_job(fname, headers, sql, params, transform, total_estimate)
         return jsonify({"status": "ok", "job_id": job_id, "filename": fname})
@@ -2410,11 +2456,13 @@ def get_warehouse_balance_stream_csv():
         SELECT_LIST = _warehouse_balance_select_list()
         sql = f"SELECT {SELECT_LIST} {_WBA_JOIN_SQL} WHERE {where_sql} ORDER BY {order_by_sql}"
 
+        cols = _pick_export_cols(args, WAREHOUSE_BALANCE_CSV_COLS)
+
         def transform(raw, sql_cols):
             d = dict(zip(sql_cols, raw))
-            return [d.get(key) for key, _ in WAREHOUSE_BALANCE_CSV_COLS]
+            return [d.get(key) for key, _ in cols]
 
-        headers = [label for _, label in WAREHOUSE_BALANCE_CSV_COLS]
+        headers = [label for _, label in cols]
         fname   = f"TonKhoThucTe_{args.get('from_date','').replace('/','')}-{args.get('to_date','').replace('/','')}.{args.get('format', 'csv')}"
         job_id  = _start_export_job(fname, headers, sql, params, transform, total_estimate)
         return jsonify({"status": "ok", "job_id": job_id, "filename": fname})
@@ -2660,6 +2708,7 @@ def get_pr_detail_stream_csv():
             "P.PR_DETAIL_ID ASC"
         )
         sql = f"SELECT {select_list} {join_sql} WHERE {where_sql} ORDER BY {order_by_sql}"
+        cols = _pick_export_cols(args, PR_DETAIL_CSV_COLS)
 
         def transform(raw, sql_cols):
             d = dict(zip(sql_cols, raw))
@@ -2667,9 +2716,9 @@ def get_pr_detail_stream_csv():
             d["PR_DETAIL_TYPE_NAME"] = PR_DETAIL_TYPE_MAP.get(tid, "")
             if "ACTIVE" in d:
                 d["ACTIVE"] = "Đang dùng" if d["ACTIVE"] == 1 else "Ngừng"
-            return [d.get(key) for key, _ in PR_DETAIL_CSV_COLS]
+            return [d.get(key) for key, _ in cols]
 
-        headers = [label for _, label in PR_DETAIL_CSV_COLS]
+        headers = [label for _, label in cols]
         fname = f"DanhMucDoiTuong.{args.get('format', 'xlsx')}"
         job_id = _start_export_job(fname, headers, sql, params, transform, total_estimate)
         return jsonify({"status": "ok", "job_id": job_id, "filename": fname})
@@ -3025,7 +3074,7 @@ SALE_CSV_COLS = [
     ("IS_RETURN","Hàng trả"), ("STATUS","Trạng thái"),
     ("PAYMENT_METHOD_ID","Mã HTTT"), ("PAYMENT_METHOD_NAME","Hình thức thanh toán"),
     ("EXTRA_ID_2","Mã nguồn đơn"), ("EXTRA_NAME_2","Nguồn đơn"),
-    ("INCOME_AMOUNT","Doanh thu"), ("VAT_INCOME_AMOUNT","Thuế doanh thu"),
+    ("INCOME_AMOUNT","Doanh thu 511"), ("VAT_INCOME_AMOUNT","Doanh thu trước thuế"),
     ("COMMENTS","Ghi chú"),
 ]
 
@@ -3061,6 +3110,8 @@ def get_sale_stream_csv():
         extra_cols = _sale_extra_cols(dim)
         join_from = SALE_JOIN_SQL if need_join else SALE_FROM_ONLY
         sql = f"SELECT {_sale_select_list(need_join, extra_cols)} {join_from} WHERE {where_sql} ORDER BY {order_by_sql} OPTION (RECOMPILE)"
+        cols = _pick_export_cols(args, SALE_CSV_COLS, TRAN_NAME_EXPORT_COL)
+        tran_map = _tran_name_map() if any(k == "TRAN_NAME" for k, _ in cols) else None
 
         def transform(raw, sql_cols):
             d = dict(zip(sql_cols, raw))
@@ -3071,9 +3122,11 @@ def get_sale_stream_csv():
             d['UNIT_NAME']      = unit_map.get((str(d.get('UNIT_ID') or '')).strip(), '')
             d['PAYMENT_METHOD_NAME'] = dim["pay"].get((str(d.get('PAYMENT_METHOD_ID') or '')).strip(), '')
             d['EXTRA_NAME_2']        = dim["extra2"].get((str(d.get('EXTRA_ID_2') or '')).strip(), '')
-            return [d.get(key) for key, _ in SALE_CSV_COLS]
+            if tran_map is not None and 'TRAN_NAME' not in d:
+                d['TRAN_NAME'] = tran_map.get((str(d.get('TRAN_ID') or '')).strip(), '')
+            return [d.get(key) for key, _ in cols]
 
-        headers = [label for _, label in SALE_CSV_COLS]
+        headers = [label for _, label in cols]
         fname   = f"ChungTuBanHang_{args.get('from_date','').replace('/','')}-{args.get('to_date','').replace('/','')}.{args.get('format', 'csv')}"
         job_id  = _start_export_job(fname, headers, sql, params, transform, total_estimate)
         return jsonify({"status": "ok", "job_id": job_id, "filename": fname})
@@ -3538,6 +3591,7 @@ def get_income_alloc_stream_csv():
 
         # Map tên chuẩn bị sẵn (1 lần) — transform chạy ở thread nền nên KHÔNG được đụng session/DB
         org_map, item_map, job_map, pr_map, exp_map, tran_map = _income_alloc_name_maps()
+        cols = _pick_export_cols(args, INCOME_ALLOC_CSV_COLS)
 
         def transform(raw, sql_cols):
             d = dict(zip(sql_cols, raw))
@@ -3547,9 +3601,9 @@ def get_income_alloc_stream_csv():
             d['TRAN_NAME']         = tran_map.get((str(d.get('TRAN_ID') or '')).strip(), '')
             d['ALLOCATION_METHOD_NAME'] = ALLOC_METHOD_MAP.get(str(d.get('ALLOCATION_METHOD') or '').strip(),
                                                                str(d.get('ALLOCATION_METHOD') or ''))
-            return [d.get(key) for key, _ in INCOME_ALLOC_CSV_COLS]
+            return [d.get(key) for key, _ in cols]
 
-        headers = [label for _, label in INCOME_ALLOC_CSV_COLS]
+        headers = [label for _, label in cols]
         fname   = f"DoanhThuChoPhanBo_{args.get('from_date','').replace('/','')}-{args.get('to_date','').replace('/','')}.{args.get('format', 'csv')}"
         job_id  = _start_export_job(fname, headers, sql, d_params + w_params, transform, total_estimate)
         return jsonify({"status": "ok", "job_id": job_id, "filename": fname})
@@ -3666,6 +3720,7 @@ def get_voucher_stream_csv():
         org_map  = {(it.get('id') or '').strip(): it.get('name') or '' for it in meta.get('orgs', [])}
         tran_map = {(it.get('id') or '').strip(): it.get('name') or '' for it in meta.get('tran_ids', [])}
         pr_map   = _voucher_prdetail_map(get_connection().cursor())
+        cols = _pick_export_cols(args, VOUCHER_CSV_COLS)
 
         def transform(raw, sql_cols):
             d = dict(zip(sql_cols, raw))
@@ -3675,9 +3730,9 @@ def get_voucher_stream_csv():
             d['PR_DETAIL_NAME_DEBIT'], d['BANK_NAME_DEBIT'], d['BANK_ACCOUNT_DEBIT'] = pd
             pc = pr_map.get((str(d.get('PR_DETAIL_ID_CREDIT') or '')).strip()) or ('', '', '')
             d['PR_DETAIL_NAME_CREDIT'], d['BANK_NAME_CREDIT'], d['BANK_ACCOUNT_CREDIT'] = pc
-            return [d.get(key) for key, _ in VOUCHER_CSV_COLS]
+            return [d.get(key) for key, _ in cols]
 
-        headers = [label for _, label in VOUCHER_CSV_COLS]
+        headers = [label for _, label in cols]
         fname   = f"ChungTuTien_{args.get('from_date','').replace('/','')}-{args.get('to_date','').replace('/','')}.{args.get('format', 'csv')}"
         job_id  = _start_export_job(fname, headers, sql, params, transform, total_estimate)
         return jsonify({"status": "ok", "job_id": job_id, "filename": fname})

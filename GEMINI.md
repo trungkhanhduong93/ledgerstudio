@@ -7,7 +7,7 @@
 > Remote cũ từng trỏ nhầm repo **LedgerReport** (gỡ 16/08/2026): push nhầm là đè code Studio lên `main` của Report.
 > Repo công khai → **cấm commit mật khẩu / IP server DB / file dữ liệu khách** (`BaoCaoMau/` đã `.gitignore`).
 > Build vẫn chạy **`BuildEXE-LedgerStudio.bat`**, EXE nằm trong `dist` (không lên git). Phát hành qua **GitHub Releases** — app từ v1.8.3 tự cập nhật (mục 5, Bước 5).
-> **Cập nhật gần nhất:** 28/09/2026 (v1.9.9: hiệu ứng nút Truy vấn/Xem báo cáo chuyển cam nhấp nháy pulse + chấm đỏ báo áp dụng bộ lọc khi thay đổi bộ lọc · v1.9.8: hiển thị tên loại đối tượng 00-08, trạng thái chữ xanh lá in đậm, chỉ load khi bấm Truy vấn — mục 3.2 · v1.9.7: tab Danh mục đối tượng DM_PR_DETAIL · v1.9.6: Force update bắt buộc cập nhật trước đăng nhập, popup giữa màn hình · v1.9.5: đăng nhập báo bật VPN + chờ tối đa 8 s, bỏ tên Thông tư 200 — mục 3.1 · v1.9.4: kéo cuộn mượt — Bẫy 16, tiêu đề bảng lọt chữ — Bẫy 22 · v1.9.3: tốc độ sổ cái — Bẫy 20, bộ lọc nâng cao — Bẫy 21 · v1.9.2: màn đăng nhập — Bẫy 19 · v1.9.1: hộp thoại — Bẫy 18 · v1.9.0: khung báo cáo + zoom — Bẫy 17 · v1.8.9: bảng dữ liệu + cuộn mượt — Bẫy 16 · v1.8.8: thanh lọc chip · v1.8.7: khung + DataStudio — Bẫy 15 · v1.8.6: dịch sẵn — Bẫy 14)
+> **Cập nhật gần nhất:** 28/09/2026 (v1.10.0 — Claude, đã build, chưa phát hành: đổi chỗ + ẩn/hiện cột 8 bảng dữ liệu, xuất Excel "Như đang xem", bán hàng đổi tên INCOME_AMOUNT = "Doanh thu 511", VAT_INCOME_AMOUNT = "Doanh thu trước thuế" — Bẫy 23 · v1.9.9: hiệu ứng nút Truy vấn/Xem báo cáo chuyển cam nhấp nháy pulse + chấm đỏ báo áp dụng bộ lọc khi thay đổi bộ lọc · v1.9.8: hiển thị tên loại đối tượng 00-08, trạng thái chữ xanh lá in đậm, chỉ load khi bấm Truy vấn — mục 3.2 · v1.9.7: tab Danh mục đối tượng DM_PR_DETAIL · v1.9.6: Force update bắt buộc cập nhật trước đăng nhập, popup giữa màn hình · v1.9.5: đăng nhập báo bật VPN + chờ tối đa 8 s, bỏ tên Thông tư 200 — mục 3.1 · v1.9.4: kéo cuộn mượt — Bẫy 16, tiêu đề bảng lọt chữ — Bẫy 22 · v1.9.3: tốc độ sổ cái — Bẫy 20, bộ lọc nâng cao — Bẫy 21 · v1.9.2: màn đăng nhập — Bẫy 19 · v1.9.1: hộp thoại — Bẫy 18 · v1.9.0: khung báo cáo + zoom — Bẫy 17 · v1.8.9: bảng dữ liệu + cuộn mượt — Bẫy 16 · v1.8.8: thanh lọc chip · v1.8.7: khung + DataStudio — Bẫy 15 · v1.8.6: dịch sẵn — Bẫy 14)
 
 ---
 
@@ -230,6 +230,10 @@ Tất cả các báo cáo hiển thị dưới dạng tờ **A4/A4 Ngang (`.repo
 
 ### Bẫy 22: Tiêu đề bảng lọt chữ khi cuộn (v1.9.4)
 - `thead` dính + `border-collapse: collapse` → Chrome vẽ sai, chữ dòng dưới lọt lên hàng ô tìm. Sửa: `table.ds-grid { border-collapse: separate; border-spacing: 0 }`; chế độ tách bỏ qua viền trên `<tr>/<tfoot>` → vạch ngang đặt lên `td`. Dropdown lọc: cột mã đo bề rộng mã dài nhất (`--ds-code-w`). Chi tiết CLAUDE.md Bẫy 22.
+
+### Bẫy 23: Bảng dữ liệu = MỘT mảng khai báo cột `*_GRID` (v1.10.0)
+- 8 bảng dữ liệu đổi chỗ + ẩn/hiện cột, nhớ `localStorage['ds_cols_<tab>']`; nút "Cột" ở chân bảng; Xuất Excel có "Cột xuất: Đầy đủ / Như đang xem" (gửi `cols=` cho `/api/<tab>/stream_csv`, server lọc bằng `_pick_export_cols`).
+- **Đừng viết cứng `<th>`/`<td>` hay `colSpan` theo vị trí nữa.** Thêm cột = thêm 1 phần tử vào `LEDGER_GRID`/`SALE_GRID`/… (khối "BỐ CỤC CỘT" sau `VirtualRows`): `{ id, label, sort?, th, align?, search?, td, v?, exp? }`, mọi ô để `border-r`. Tiêu đề, hàng tìm, dòng, dòng nhóm (`grid.grp`), dòng tổng (`GridFoot cells={{ ID: <td/> }}`) tự theo. Khoá xuất của cột phải có ở cả `*_EXPORT_COLS` (App) và `*_CSV_COLS` (server). Chi tiết CLAUDE.md Bẫy 23.
 
 ---
 
