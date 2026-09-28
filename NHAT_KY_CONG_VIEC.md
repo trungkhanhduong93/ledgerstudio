@@ -2,7 +2,7 @@
 
 > Toàn bộ những gì đã làm với **LedgerStudio**, và **vì sao**. Đọc file này trước khi sửa tiếp.
 > Kiến trúc và ma trận báo cáo: [CLAUDE.md](CLAUDE.md).
-> Phiên gần nhất: **28/09/2026** · EXE build mới nhất: **iPOS_Ledger_Studio v1.10.2** (đã phát hành 28/09, mục 26) — tên hiển thị DataStudio · v1.9.6–1.9.9 do Gemini làm, ghi ở GEMINI.md
+> Phiên gần nhất: **28/09/2026** · EXE build mới nhất: **iPOS_Ledger_Studio v1.10.5** (đã phát hành 28/09, mục 29) — tên hiển thị DataStudio · v1.9.6–1.9.9 do Gemini làm, ghi ở GEMINI.md
 
 ---
 
@@ -1018,3 +1018,68 @@ zip tạo lại 16.345.476 byte). API công khai trả `v1.10.3`, digest exe = S
 
 **Test cập nhật thật:** EXE v1.10.2 (SHA = asset) → hộp bắt buộc cập nhật → bấm → 1.10.3 lên sau 6,9 s, còn 1 file, SHA = asset, bản mới
 `has_update=False`. Đã tắt EXE test + Chrome.
+
+## 28. v1.10.4: thanh bên 2 thẻ Dữ liệu | Báo cáo, hiệu ứng Tải lại danh mục, ẩn Tồn kho thực tế, đổi 2 tên *(28/09/2026)*
+
+**Yêu cầu Trum:** (1) ẩn bảng tồn kho thực tế; (2) làm lại hiệu ứng khi bấm "Tải lại danh mục" xong cho đẹp hơn; (3) thanh bên có 2
+thẻ nhỏ Dữ liệu và Báo cáo, bấm thẻ nào hiện danh sách của thẻ đó; (4) đổi tên "Chứng từ bán hàng" → "Chứng từ xuất - bán hàng",
+"Chứng từ nhập kho" → "Chứng từ nhập - mua hàng".
+
+**Đã sửa (chỉ `index.html`, server không đổi):**
+- (1) Comment dòng `warehouse_balance` trong `DOC_TABS` — code tab + API giữ nguyên. Màn đăng nhập tự ghi "7 phân hệ chứng từ" (đếm `DOC_TABS`).
+- (4) `DOC_TABS` + `NAV_DOC_META` (thanh bên + đầu trang). Tên file xuất GIỮ `ChungTuBanHang_` / `PhieuNhapKho_` (tên file ASCII,
+  Trum chỉ yêu cầu tên hiển thị). Đo: 2 tên mới vừa thanh bên 216px, không bị cắt "…".
+- (3) `AppSidebar` thành component có state `sec`: `.ds-navtabs` (2 nút, `role="tablist"`) + `.ds-navlist` (`key={sec}` → hiệu ứng
+  hiện 0,16 s). Bấm thẻ chỉ đổi danh sách; trang đang mở ở thẻ kia → chấm xanh `has-page`; trang đổi nhóm → thẻ theo. Không nhớ thẻ
+  qua localStorage (activeTab cũng không nhớ). Gỡ `ds-group`.
+- (2) `refreshing` (bool) → `metaRefresh` (`busy/ok/err`); nút đổi dạng (xoay → nền xanh lá + ✓ tự vẽ → về thường) + `MetaToast` cạnh
+  nút có số danh mục vừa nạp + thời gian. Trước: thêm class Tailwind `bg-emerald-500/20 text-emerald-400` (xanh nhạt trên nền sáng,
+  gần như không thấy) và lỗi thì im lặng — nay lỗi server hiện nguyên văn, mất mạng hiện câu tiếng Việt, danh mục cũ giữ nguyên.
+
+**Verify (M3 giao diện, API giả, bản dịch sẵn `build_web`):**
+
+| Bài | Kết quả |
+|---|---|
+| `pt/sidebar.js` (mới): 2 thẻ, 7 mục + tên mới, không mục nào bị cắt, bấm thẻ không đổi trang, chấm `has-page`, chọn báo cáo / tab dữ liệu thì thẻ theo, thu gọn 56px không tràn, tải lại: đang tải (xoay, khoá, không mờ) → xong (nền xanh, ✓ vẽ xong, thẻ báo đúng số, cách thanh bên + thanh trạng thái 12px, tự tắt 3,6 s) → lỗi 500 (nguyên văn, danh mục cũ còn) → mất mạng + thu gọn (câu dễ hiểu, thẻ dời theo) → bấm 3 lần lúc đang tải = 1 lần gọi → in không có thẻ báo | 30/30 |
+| `behave.js` / `foot.js` / `num.js` / `heights.js` | 42/42 · 41/41 · 48/48 · 7/7 tab đều (bỏ tab tồn kho khỏi bài vì đã ẩn) |
+| `search.js` so v1.10.2 | 75/80 — 5 trượt là khác biệt đã biết của v1.10.3 (cột Địa chỉ, cột rộng thêm do nowrap) + `/icon.svg` 404 có sẵn |
+
+- Bộ kiểm: `harness.js` thêm `page.__delay` / `__fail` / `__abort` theo đường dẫn API (trễ / trả 500 / cắt kết nối); `gotoTab`
+  nhận cả tên tab cũ (so bản ≤ v1.10.3). `page.setOfflineMode` KHÔNG làm fetch lỗi khi đang chặn request (API giả vẫn trả lời).
+
+**Phát hành (Trum bảo "phát hành"):** QA 🟢; tắt EXE `dist` đang mở (khoá file khi build — Bẫy 10); `build_exe.py` → 1.10.4, 16.563.151 byte;
+EXE ở thư mục tạm: `/api/version` 1.10.4, `app.js`/`app.css`/`index.html` trùng `build_web`, `/api/ledger` chưa đăng nhập 401;
+`/api/metadata` + refresh trên TRUNGDEMO đủ 5 mảng (265 TK · 6 ĐV · 103 ĐT · 4.397 HH · 9 kho). Commit `c08768a` → Release v1.10.4, digest
+exe = SHA-256 build `0886151c…8122a`. Test cập nhật thật 1.10.3 → 1.10.4: Trum ngắt giữa chừng để báo lỗi chớp menu Xuất Excel — KHÔNG chạy.
+
+## 29. v1.10.5: hộp "Cập nhật ngay" liệt kê nội dung từng bản + sửa chớp nháy menu Xuất Excel *(28/09/2026)*
+
+**Yêu cầu Trum:** (1) menu Xuất Excel: bấm qua lại "Đầy đủ" / "Như đang xem" thì nút chuyển (pill) và bảng chọn chớp nháy; (2) hộp "Cập nhật
+ngay" phải ghi từ bản nào lên bản mới nhất + gạch đầu dòng tóm tắt nội dung qua các phiên bản; "sửa xong phát hành luôn".
+
+**(1) Nguyên nhân:** `ExportButton` khai báo TRONG thân App → mỗi lần App vẽ lại là một kiểu component mới → React gỡ + lắp lại cả nút lẫn
+menu; `chooseExportCols` đổi state của App → vẽ lại → menu lắp lại, hiệu ứng `ds-pop-in` chạy lại = chớp. Đo (`pt/expflicker.js`, 3 tab ×
+4 lần bấm): v1.10.4 phần tử menu/nút bị thay mới, `animationstart` 2–4 lần → sửa: `ExportButton` ra cấp trên cùng, App truyền
+`{...exportBtn}` (8 chỗ gọi) → cùng phần tử, 0 lần; lựa chọn + localStorage, bấm ra ngoài đóng, mở lại nhớ lựa chọn, xuất "Như đang xem"
+gửi `cols=`: 26/26.
+
+**(2) Làm:** `server.py` `_fetch_release_list` / `_md_plain` / `_short_item` / `_release_summary` / `_changes_between`; `/api/check_update` thêm
+`changes`, `changes_more` (chỉ gọi danh sách khi có bản mới; lỗi → rỗng, không ảnh hưởng báo bản mới). `ForceUpdateModal`: "Gồm N bản cập
+nhật" + khung "Nội dung cập nhật" (mỗi bản: số bản, ngày, tóm tắt, gạch đầu dòng), không có `changes` → hộp y hệt cũ.
+- Giới hạn đã báo Trum: hộp là code của bản đang cài → máy ≤ v1.10.4 lên v1.10.5 vẫn thấy hộp cũ (chỉ có dòng "Bản phát hành" = tên release).
+  Tên release v1.10.5 đặt "Thanh bên 2 thẻ, sửa Xuất Excel" (31 ký tự): thử tên 76 / 46 ký tự trên hộp cũ → nhãn "Bản phát hành" gãy 3 / 2 dòng.
+
+**Verify:**
+
+| Bài | Kết quả |
+|---|---|
+| `test_changes.py`: `_release_summary` trên ghi chú thật 17 release (3 kiểu viết) | đủ ý, bỏ mục Cập nhật/Cài đặt (v1.8.3 "### Cài đặt" lọt 3 dòng ở lần chạy đầu → đã thêm) |
+| `test_check_update.py`: `/api/check_update` với GitHub thật, giả máy ở 1.10.3 / 1.10.2 / 1.9.5 / 1.10.4 + ca lỗi (danh sách lỗi, 16 bản, nháp/thử nghiệm, ghi chú rỗng, > 6 dòng) | 17/17 |
+| `pt/updmodal.js` (dữ liệu = check_update thật + v1.10.5 dựng từ ghi chú): 1366×768 và 1920×1080, 2 bản và 10 bản, hộp nằm trọn màn hình, danh sách tự cuộn; không `changes` → so từng phần tử với hộp v1.10.4 | 36/36 (33 phần tử trùng) |
+| `sidebar` / `expflicker` / `behave` / `foot` / `num` / `heights` | 30/30 · 26/26 · 42/42 · 41/41 · 48/48 · 7/7 tab đều |
+| EXE thư mục tạm | `/api/version` 1.10.5, 3 file giao diện trùng `build_web`, `/api/check_update` trong EXE gọi GitHub được, 401 |
+
+**Phát hành:** commit `5251d87` → Release v1.10.5 (exe 16.567.021 byte, digest = SHA-256 build `640d6770…8f090`; zip tạo lại). Sau phát
+hành: `/api/check_update` thật — máy 1.10.3 thấy [v1.10.5, v1.10.4], máy 1.10.4 thấy [v1.10.5], máy 1.10.5 không có cập nhật.
+- Test cập nhật thật (EXE cũ bấm "Cập nhật ngay") KHÔNG chạy ở v1.10.4 lẫn v1.10.5 (Trum ngắt lần chạy ở v1.10.4). Code tải/thay EXE
+  không đổi trong cả loạt v1.10.x; test thật đạt ở 4 lần phát hành v1.10.0–v1.10.3 (CLAUDE.md đầu file).
