@@ -2,7 +2,7 @@
 
 > Toàn bộ những gì đã làm với **LedgerStudio**, và **vì sao**. Đọc file này trước khi sửa tiếp.
 > Kiến trúc và ma trận báo cáo: [CLAUDE.md](CLAUDE.md).
-> Phiên gần nhất: **28/09/2026** · EXE build mới nhất: **iPOS_Ledger_Studio v1.10.0** (chưa phát hành) — tên hiển thị DataStudio · bản phát hành: v1.9.9 (v1.9.6–1.9.9 do Gemini làm, ghi ở GEMINI.md)
+> Phiên gần nhất: **28/09/2026** · EXE build mới nhất: **iPOS_Ledger_Studio v1.10.0** (đã phát hành 28/09, mục 24) — tên hiển thị DataStudio · v1.9.6–1.9.9 do Gemini làm, ghi ở GEMINI.md
 
 ---
 
@@ -868,4 +868,21 @@ ngay trên tiêu đề lẫn trong bảng cấu hình; tên mới áp cả file 
 
 - Thứ tự các dòng trùng khoá sắp xếp (cùng ngày + số CT) khác nhau giữa 2 lần chạy cùng câu SQL — có sẵn từ trước (Bẫy 20), so file
   phải so theo tập dòng.
-- **Chưa làm:** commit/push/phát hành (bản phát hành bị ép cập nhật từ v1.9.6 → chờ Trum test EXE). Chưa chạy với DB thật của khách.
+- **Chưa làm:** chạy với DB thật của khách; kéo thả bằng chuột thật (bộ kiểm dùng sự kiện kéo giả lập trong Chrome chạy ngầm).
+
+**QA trước push (skill pre-push-qa):** 🟡 VÀNG — không phát hiện lỗi chặn push; vàng vì 2 mục "chưa làm" trên. Đã rà: diff 7 file
+(843 dòng thêm); `origin/main` vẫn là `809e6c0` (Gemini không đẩy thêm); EXE build 13:17 sau lần sửa nguồn cuối (index.html 12:57,
+server.py 12:31); không mất handler nào khi gỡ 11 component dòng (chỉ còn `toggleExpand` dòng nhóm + `title` địa chỉ — đều giữ);
+mọi cột trên màn hình có khoá trong cả `*_EXPORT_COLS` lẫn `*_CSV_COLS` (script so 8 bảng); 8 `ExportButton` đều có trong
+`gridLays`; quét secret dòng thêm (IP, chuỗi kết nối, từ khoá mật khẩu, token, email — chỉ in vị trí + độ dài, đã tự thử trên
+chuỗi mẫu): 0 khớp; `py_compile` đạt. Ghi nhận nhỏ, không sửa: dòng gợi ý "N cột đang hiện" trong menu xuất đếm khoá xuất —
+Danh mục đối tượng ra 16 (cột "Loại đối tượng" xuất 2 cột mã + tên) trong khi bảng hiện 15.
+
+**Phát hành (Trum bảo 28/09):** commit `8a5ac51` push `main` → `gh release create v1.10.0` (tiêu đề "DataStudio v1.10.0 (iPOS Ledger
+Studio)", target SHA đầy đủ), asset `iPOS_Ledger_Studio.exe` 16.550.684 byte + `.zip` tạo lại từ EXE (zip trong `dist/` còn là bản
+27/09). API công khai `releases/latest` trả `v1.10.0`, digest exe = SHA-256 file build `3fdb44b6…86d3`.
+
+**Test cập nhật thật:** EXE release v1.9.9 (SHA = asset `88ce1537…b54a`) chạy ở thư mục tạm → `check_update`: `has_update=true`,
+`latest=v1.10.0` (so bộ số: 1.10.0 > 1.9.9) → hộp bắt buộc cập nhật hiện "v1.9.9 → v1.10.0 · DataStudio v1.10.0 · 15.8 MB" → bấm
+"Cập nhật ngay" (puppeteer) → tải 100% trong ~3 s → server cũ thoát → 1.10.0 lên sau 6,3 s kể từ lúc bấm → thư mục còn 1 file,
+SHA = asset v1.10.0, bản mới `has_update=False`. Đã tắt EXE test + 9 tiến trình Chrome của cửa sổ app, cổng 5050 đã nhả.
