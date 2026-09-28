@@ -55,6 +55,7 @@ import hashlib
 import subprocess
 import platform
 import mimetypes
+import re   # _NUM_PREFIX_RE (ô lọc cột số) biên dịch lúc nạp module — trước đây re chỉ import ở gần cuối file
 import xlsx_report as XR
 
 # Font Inter đóng kèm bản EXE (vendor/fonts/*.woff2): registry Windows nhiều máy không có kiểu này
@@ -696,6 +697,52 @@ def _apply_date_search(s_date, clauses, params):
     clauses.append("CONVERT(VARCHAR(10), L.TRAN_DATE, 103) LIKE ?")
     params.append(f"%{s}%")
 
+_NUM_PREFIX_RE = re.compile(r"-?\d*\.?\d*")
+
+
+def _num_prefix_where(args, colmap):
+    """Ô lọc cột số (v1.10.2): args['n_<ID>'] = chữ số người dùng gõ. So với số ĐANG HIỆN trên màn hình — làm tròn đúng số
+    lẻ hiển thị (fmtInt 0, fmtNum 2), đổi ra chữ không dấu phẩy — phải BẮT ĐẦU bằng chữ số đã gõ: 145 khớp 145; 1,450;
+    145,000; không khớp 2,145. Số âm phải gõ '-'. colmap: {ID: (biểu thức SQL, số lẻ)}; biểu thức None = DB không có cột đó
+    (màn hình để trống) → 1=0. Gõ thứ không phải số → 1=0 (trên trang cũng không dòng nào khớp). Luật khớp với gridMatch."""
+    clauses, params = [], []
+    for cid, (expr, dec) in colmap.items():
+        v = re.sub(r"[,\s%]", "", args.get("n_" + cid, "") or "")
+        if not v:
+            continue
+        if expr is None or not _NUM_PREFIX_RE.fullmatch(v):
+            clauses.append("1=0")
+            continue
+        clauses.append(f"CONVERT(VARCHAR(50), CAST(ROUND({expr}, {dec}) AS DECIMAL(38, {dec}))) LIKE ?")
+        params.append(v + "%")
+    return clauses, params
+
+
+# Cột số từng bảng cho ô lọc: (biểu thức, số lẻ đang hiện). Thuế % hiện nguyên giá trị → so 4 số lẻ.
+LEDGER_NUM_SEARCH = {
+    "DEBIT":  ("CASE WHEN L.DEBIT_CREDIT = 'DEB' THEN L.AMOUNT END", 2),
+    "CREDIT": ("CASE WHEN L.DEBIT_CREDIT = 'CRD' THEN L.AMOUNT END", 2),
+}
+PURCHASE_NUM_SEARCH = {
+    "QUANTITY": ("P.QUANTITY", 2), "QUANTITY_WH": ("P.QUANTITY_WH", 2), "UNIT_PRICE": ("P.UNIT_PRICE", 2),
+    "DISCOUNT_AMOUNT": ("P.DISCOUNT_AMOUNT", 0), "PURCHASE_COST": ("P.PURCHASE_COST", 2), "VAT_TAX_RATE": ("P.VAT_TAX_RATE", 4),
+    "VAT_TAX_AMOUNT": ("P.VAT_TAX_AMOUNT", 0), "TOTAL_AMOUNT": ("P.TOTAL_AMOUNT", 0),
+}
+WAREHOUSE_NUM_SEARCH = {
+    "QUANTITY": ("W.QUANTITY", 2), "QUANTITY_EXTRA": ("W.QUANTITY_EXTRA", 2), "UNIT_PRICE": ("W.UNIT_PRICE", 2), "AMOUNT": ("W.AMOUNT", 0),
+}
+WAREHOUSE_BALANCE_NUM_SEARCH = {   # màn hình hiện ô trống là 0.00 (fmtQty2)
+    "QUANTITY": ("ISNULL(WBA.QUANTITY, 0)", 2), "QUANTITY_ADJ": ("ISNULL(WBA.QUANTITY_ADJ, 0)", 2),
+}
+SALE_NUM_SEARCH = {
+    "QUANTITY": ("S.QUANTITY", 2), "UNIT_PRICE": ("S.UNIT_PRICE", 2), "AMOUNT": ("S.AMOUNT", 0), "DISCOUNT_AMOUNT": ("S.DISCOUNT_AMOUNT", 0),
+    "VAT_TAX_RATE": ("S.VAT_TAX_RATE", 4), "VAT_TAX_AMOUNT": ("S.VAT_TAX_AMOUNT", 0), "TOTAL_AMOUNT": ("S.TOTAL_AMOUNT", 0),
+    "COG_AMOUNT": ("S.COG_AMOUNT", 0),
+}
+SALE_EXTRA_NUM_SEARCH = ("INCOME_AMOUNT", "VAT_INCOME_AMOUNT")   # cột phụ SALE_VIEW — chỉ lọc khi DB có (Bẫy 5)
+VOUCHER_NUM_SEARCH = {"AMOUNT": ("D.AMOUNT", 0)}
+
+
 def _build_where(request_args):
     """Xây dựng WHERE clause + params từ request args. Trả về (where_sql, params, has_join_search)."""
     f_date = request_args.get("from_date", "01/01/2026")
@@ -782,6 +829,9 @@ def _build_where(request_args):
             join_clauses.append(f"{field} LIKE ?")
             join_params.append(f"%{val}%")
 
+    n_clauses, n_params = _num_prefix_where(request_args, LEDGER_NUM_SEARCH)
+    clauses += n_clauses
+    params += n_params
     return " AND ".join(clauses), params, join_clauses, join_params
 
 @app.route("/api/ledger")
@@ -1218,6 +1268,9 @@ def _build_purchase_where(request_args):
             clauses.append("CONVERT(VARCHAR(10), P.VAT_TRAN_DATE, 103) LIKE ?")
             params.append(f"%{vd}%")
 
+    n_clauses, n_params = _num_prefix_where(request_args, PURCHASE_NUM_SEARCH)
+    clauses += n_clauses
+    params += n_params
     return " AND ".join(clauses), params
 
 
@@ -1454,6 +1507,9 @@ def _build_warehouse_where(request_args):
             clauses.append(f"{field} LIKE ?")
             params.append(f"%{val}%")
 
+    n_clauses, n_params = _num_prefix_where(request_args, WAREHOUSE_NUM_SEARCH)
+    clauses += n_clauses
+    params += n_params
     return " AND ".join(clauses), params
 
 
@@ -2347,6 +2403,9 @@ def _build_warehouse_balance_where(request_args):
             clauses.append(f"{field} LIKE ?")
             params.append(f"%{val}%")
 
+    n_clauses, n_params = _num_prefix_where(request_args, WAREHOUSE_BALANCE_NUM_SEARCH)
+    clauses += n_clauses
+    params += n_params
     return " AND ".join(clauses), params
 
 
@@ -2883,6 +2942,13 @@ def _build_sale_where(request_args):
             clauses.append("CONVERT(VARCHAR(10), S.VAT_TRAN_DATE, 103) LIKE ?")
             params.append(f"%{vd}%")
 
+    num_cols = dict(SALE_NUM_SEARCH)
+    if any((request_args.get("n_" + c, "") or "").strip() for c in SALE_EXTRA_NUM_SEARCH):
+        cols = _sale_dim_info()["cols"]
+        num_cols.update({c: (f"S.{c}" if c in cols else None, 0) for c in SALE_EXTRA_NUM_SEARCH})
+    n_clauses, n_params = _num_prefix_where(request_args, num_cols)
+    clauses += n_clauses
+    params += n_params
     return " AND ".join(clauses), params
 
 
@@ -3259,6 +3325,9 @@ def _build_voucher_where(request_args):
         if val:
             clauses.append(f"{field} LIKE ?"); params.append(f"%{val}%")
 
+    n_clauses, n_params = _num_prefix_where(request_args, VOUCHER_NUM_SEARCH)
+    clauses += n_clauses
+    params += n_params
     return " AND ".join(clauses), params
 
 

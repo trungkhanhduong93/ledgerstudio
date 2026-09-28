@@ -839,6 +839,8 @@ window.showConnectionLost = function() {
         //          lọc toàn bộ dữ liệu (khoá có trong build…Query của tab VÀ _build_…_where của server đọc tham số đó).
         //          Tooltip ô lọc ghi theo giá trị này → đổi 1 ↔ 2 phải khớp code gửi/nhận tham số, không thì tooltip nói sai.
         //   sv     chữ dùng khi lọc trên trang (mặc định r[id]) — cho cột cờ hiện chữ khác giá trị gốc; sh = gợi ý gõ gì (tooltip)
+        //   q      kiểu so khi lọc (v1.10.2): 'num' = cột số, so số đang hiện bắt đầu bằng chữ số đã gõ (search 2 → gửi n_<ID>,
+        //          server so cùng luật trong _num_prefix_where); 'pre' = cột mã/tài khoản, bắt đầu bằng; không có = chứa
         //   td     class ô dữ liệu (giá trị = v(r) nếu có, không thì r[id]) — hoặc hàm (r, key) => <td key={key} …/> cho ô đặc biệt
         //   exp    khoá cột khi xuất "Như đang xem" (mặc định [id]) — phải có trong *_EXPORT_COLS (App) và *_CSV_COLS (server.py)
         // Mọi ô đều có border-r; CSS bỏ viền phải của ô cuối hàng → cột nào đứng cuối cũng đúng. Thêm cột = thêm 1 phần tử; máy
@@ -978,7 +980,10 @@ window.showConnectionLost = function() {
         // Tooltip ô tìm theo cột: nói rõ ô lọc tới đâu (search 1/2 ở comment đầu khối) + gợi ý gõ gì với cột cờ.
         const colSearchTitle = c => (c.search === 2
             ? 'Gõ để lọc ngay các dòng đang tải · Bấm Truy vấn để lọc trên toàn bộ dữ liệu'
-            : 'Chỉ lọc các dòng đang tải trên trang này — bấm Truy vấn không lọc thêm') + (c.sh ? ' · ' + c.sh : '');
+            : 'Chỉ lọc các dòng đang tải trên trang này — bấm Truy vấn không lọc thêm')
+            + (c.q === 'num' ? ' · Số bắt đầu bằng chữ số đã gõ: 145 → 145; 1,450; 145,000 (không ra 2,145) · số âm gõ dấu -'
+                : c.q === 'pre' ? ' · Mã bắt đầu bằng chữ đã gõ: 511 → 511, 5111 (không ra 1511)' : ' · Tìm chữ nằm ở bất kỳ đâu')
+            + (c.sh ? ' · ' + c.sh : '');
 
         // Tiêu đề + hàng tìm theo cột (setSearch không có → bảng không có hàng tìm). Kéo tiêu đề thả lên tiêu đề khác = đổi chỗ.
         const GridHead =({ grid, cols, sort, onSort, onMove, search, setSearch }) => (
@@ -1120,37 +1125,37 @@ window.showConnectionLost = function() {
             grp: { DEBIT: { sum: 'DEBIT', dec: 2, color: 'text-indigo-700' }, CREDIT: { sum: 'CREDIT', dec: 2, color: 'text-indigo-700' } },
             cols: [
                 { id: 'TRAN_DATE',             label: 'Ngày CT',        sort: 'TRAN_DATE',           th: 'border-r w-28',                     search: 2, td: 'border-r text-center font-bold' },
-                { id: 'TRAN_NO',               label: 'Số chứng từ',    sort: 'TRAN_NO',             th: 'border-r w-36 px-3',                search: 2, td: 'border-r font-black px-3' },
-                { id: 'TRAN_ID',               label: 'Mã CT',          sort: 'TRAN_ID',             th: 'border-r w-16',                     search: 2, td: 'border-r text-center italic' },
+                { id: 'TRAN_NO',               label: 'Số chứng từ',    sort: 'TRAN_NO',             th: 'border-r w-36 px-3',                search: 2, td: 'border-r font-black px-3', q: 'pre' },
+                { id: 'TRAN_ID',               label: 'Mã CT',          sort: 'TRAN_ID',             th: 'border-r w-16',                     search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'TRAN_NAME',             label: 'Tên chứng từ',   sort: 'TRAN_ID',             th: 'border-r w-40 px-3',                search: 1, td: 'border-r whitespace-nowrap px-3 italic' },
-                { id: 'ACCOUNT_ID',            label: 'Tài khoản',      sort: 'ACCOUNT_ID',          th: 'border-r w-24',                     search: 2, td: 'border-r text-center font-black text-indigo-600' },
-                { id: 'ACCOUNT_ID_CONTRA',     label: 'Đối ứng',        sort: 'ACCOUNT_ID_CONTRA',   th: 'border-r w-24',                     search: 2, td: 'border-r text-center' },
+                { id: 'ACCOUNT_ID',            label: 'Tài khoản',      sort: 'ACCOUNT_ID',          th: 'border-r w-24',                     search: 2, td: 'border-r text-center font-black text-indigo-600', q: 'pre' },
+                { id: 'ACCOUNT_ID_CONTRA',     label: 'Đối ứng',        sort: 'ACCOUNT_ID_CONTRA',   th: 'border-r w-24',                     search: 2, td: 'border-r text-center', q: 'pre' },
                 { id: 'DESCRIPTION',           label: 'Diễn giải',      sort: 'DESCRIPTION',         th: 'border-r w-64 px-3', align: 'left', search: 2, td: 'border-r whitespace-nowrap truncate max-w-[250px] px-3 py-1.5', v: r => r.DESCRIPTION || r.COMMENTS },
-                { id: 'DEBIT',                 label: 'Nợ',             sort: 'AMOUNT',              th: 'border-r w-44 px-4', align: 'right',            td: 'border-r text-right font-mono font-black text-emerald-600 px-4', v: r => r.DEBIT_CREDIT === 'DEB' ? fmtNum(r.AMOUNT) : '' },
-                { id: 'CREDIT',                label: 'Có',             sort: 'AMOUNT',              th: 'border-r w-44 px-4', align: 'right',            td: 'border-r text-right font-mono font-black text-red-600 px-4', v: r => r.DEBIT_CREDIT === 'CRD' ? fmtNum(r.AMOUNT) : '' },
-                { id: 'PR_DETAIL_ID',          label: 'Mã ĐT',          sort: 'PR_DETAIL_ID',        th: 'border-r w-24',                     search: 1, td: 'border-r text-center italic' },
+                { id: 'DEBIT',                 label: 'Nợ',             sort: 'AMOUNT',              th: 'border-r w-44 px-4', align: 'right', search: 2, td: 'border-r text-right font-mono font-black text-emerald-600 px-4', v: r => r.DEBIT_CREDIT === 'DEB' ? fmtNum(r.AMOUNT) : '', q: 'num' },
+                { id: 'CREDIT',                label: 'Có',             sort: 'AMOUNT',              th: 'border-r w-44 px-4', align: 'right', search: 2, td: 'border-r text-right font-mono font-black text-red-600 px-4', v: r => r.DEBIT_CREDIT === 'CRD' ? fmtNum(r.AMOUNT) : '', q: 'num' },
+                { id: 'PR_DETAIL_ID',          label: 'Mã ĐT',          sort: 'PR_DETAIL_ID',        th: 'border-r w-24',                     search: 1, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'PR_DETAIL_NAME',        label: 'Đối tượng',      sort: 'PR_DETAIL_ID',        th: 'border-r w-56 px-3', align: 'left', search: 2, td: 'border-r whitespace-nowrap italic px-3' },
-                { id: 'PR_DETAIL_ID_CONTRA',   label: 'Mã ĐT ĐƯ',       sort: 'PR_DETAIL_ID_CONTRA', th: 'border-r w-24',                     search: 1, td: 'border-r text-center font-bold text-teal-700' },
+                { id: 'PR_DETAIL_ID_CONTRA',   label: 'Mã ĐT ĐƯ',       sort: 'PR_DETAIL_ID_CONTRA', th: 'border-r w-24',                     search: 1, td: 'border-r text-center font-bold text-teal-700', q: 'pre' },
                 { id: 'PR_DETAIL_NAME_CONTRA', label: 'Đối tượng ĐƯ',   sort: 'PR_DETAIL_ID_CONTRA', th: 'border-r w-56 px-3', align: 'left', search: 1, td: 'border-r whitespace-nowrap italic px-3 text-teal-700' },
-                { id: 'EXPENSE_ID',            label: 'Mã MCP',         sort: 'EXPENSE_ID',          th: 'border-r w-24',                     search: 1, td: 'border-r text-center italic' },
+                { id: 'EXPENSE_ID',            label: 'Mã MCP',         sort: 'EXPENSE_ID',          th: 'border-r w-24',                     search: 1, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'EXPENSE_NAME',          label: 'Mục chi phí',    sort: 'EXPENSE_ID',          th: 'border-r w-44 px-4', align: 'left', search: 2, td: 'border-r whitespace-nowrap italic px-4' },
-                { id: 'EXPENSE_ID_CONTRA',     label: 'Mã MCP ĐƯ',      sort: 'EXPENSE_ID_CONTRA',   th: 'border-r w-24',                     search: 1, td: 'border-r text-center font-bold text-teal-700' },
+                { id: 'EXPENSE_ID_CONTRA',     label: 'Mã MCP ĐƯ',      sort: 'EXPENSE_ID_CONTRA',   th: 'border-r w-24',                     search: 1, td: 'border-r text-center font-bold text-teal-700', q: 'pre' },
                 { id: 'EXPENSE_NAME_CONTRA',   label: 'Mục chi phí ĐƯ', sort: 'EXPENSE_ID_CONTRA',   th: 'border-r w-44 px-4', align: 'left', search: 1, td: 'border-r whitespace-nowrap italic px-4 text-teal-700' },
-                { id: 'ORGANIZATION_ID',       label: 'Mã ĐV',          sort: 'ORGANIZATION_ID',     th: 'border-r w-24',                     search: 2, td: 'border-r text-center italic' },
+                { id: 'ORGANIZATION_ID',       label: 'Mã ĐV',          sort: 'ORGANIZATION_ID',     th: 'border-r w-24',                     search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'ORGANIZATION_NAME',     label: 'Tên đơn vị',     sort: 'ORGANIZATION_ID',     th: 'border-r w-44 px-4', align: 'left', search: 2, td: 'border-r whitespace-nowrap px-4 font-bold' },
-                { id: 'ITEM_ID',               label: 'Mã HH',          sort: 'ITEM_ID',             th: 'border-r w-24',                     search: 1, td: 'border-r text-center italic' },
+                { id: 'ITEM_ID',               label: 'Mã HH',          sort: 'ITEM_ID',             th: 'border-r w-24',                     search: 1, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'ITEM_NAME',             label: 'Hàng hóa',       sort: 'ITEM_ID',             th: 'border-r w-44 px-4', align: 'left', search: 2, td: 'border-r px-4 whitespace-nowrap italic' },
-                { id: 'ITEM_ID_CONTRA',        label: 'Mã HH ĐƯ',       sort: 'ITEM_ID_CONTRA',      th: 'border-r w-24',                     search: 1, td: 'border-r text-center font-bold text-teal-700' },
+                { id: 'ITEM_ID_CONTRA',        label: 'Mã HH ĐƯ',       sort: 'ITEM_ID_CONTRA',      th: 'border-r w-24',                     search: 1, td: 'border-r text-center font-bold text-teal-700', q: 'pre' },
                 { id: 'ITEM_NAME_CONTRA',      label: 'Hàng hóa ĐƯ',    sort: 'ITEM_ID_CONTRA',      th: 'border-r w-44 px-4', align: 'left', search: 1, td: 'border-r px-4 whitespace-nowrap italic text-teal-700' },
-                { id: 'JOB_ID',                label: 'Mã CV',          sort: 'JOB_ID',              th: 'border-r w-24',                     search: 1, td: 'border-r text-center italic' },
+                { id: 'JOB_ID',                label: 'Mã CV',          sort: 'JOB_ID',              th: 'border-r w-24',                     search: 1, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'JOB_NAME',              label: 'Công việc',      sort: 'JOB_ID',              th: 'border-r w-44 px-4', align: 'left', search: 1, td: 'border-r px-4 whitespace-nowrap italic' },
-                { id: 'JOB_ID_CONTRA',         label: 'Mã CV ĐƯ',       sort: 'JOB_ID_CONTRA',       th: 'border-r w-24',                     search: 1, td: 'border-r text-center font-bold text-teal-700' },
+                { id: 'JOB_ID_CONTRA',         label: 'Mã CV ĐƯ',       sort: 'JOB_ID_CONTRA',       th: 'border-r w-24',                     search: 1, td: 'border-r text-center font-bold text-teal-700', q: 'pre' },
                 { id: 'JOB_NAME_CONTRA',       label: 'Công việc ĐƯ',   sort: 'JOB_ID_CONTRA',       th: 'border-r w-44 px-4', align: 'left', search: 1, td: 'border-r px-4 whitespace-nowrap italic text-teal-700' },
-                { id: 'PRODUCT_ID',            label: 'Mã SP',          sort: 'PRODUCT_ID',          th: 'border-r w-24',                     search: 1, td: 'border-r text-center italic' },
+                { id: 'PRODUCT_ID',            label: 'Mã SP',          sort: 'PRODUCT_ID',          th: 'border-r w-24',                     search: 1, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'PRODUCT_NAME',          label: 'Sản phẩm',       sort: 'PRODUCT_ID',          th: 'border-r w-44 px-4', align: 'left', search: 2, td: 'border-r px-4 whitespace-nowrap italic' },
-                { id: 'BANK_ID',               label: 'Mã NH',          sort: 'BANK_ID',             th: 'border-r w-24',                     search: 1, td: 'border-r text-center font-bold text-indigo-700' },
+                { id: 'BANK_ID',               label: 'Mã NH',          sort: 'BANK_ID',             th: 'border-r w-24',                     search: 1, td: 'border-r text-center font-bold text-indigo-700', q: 'pre' },
                 { id: 'BANK_NAME',             label: 'Ngân hàng',      sort: 'BANK_ID',             th: 'border-r w-44 px-4', align: 'left', search: 1, td: 'border-r px-4 whitespace-nowrap italic text-indigo-700' },
-                { id: 'BANK_ID_CONTRA',        label: 'Mã NH ĐƯ',       sort: 'BANK_ID_CONTRA',      th: 'border-r w-24',                     search: 1, td: 'border-r text-center font-bold text-teal-700' },
+                { id: 'BANK_ID_CONTRA',        label: 'Mã NH ĐƯ',       sort: 'BANK_ID_CONTRA',      th: 'border-r w-24',                     search: 1, td: 'border-r text-center font-bold text-teal-700', q: 'pre' },
                 { id: 'BANK_NAME_CONTRA',      label: 'NH đối ứng',     sort: 'BANK_ID_CONTRA',      th: 'border-r w-44 px-4', align: 'left', search: 1, td: 'border-r px-4 whitespace-nowrap italic text-teal-700' },
             ],
         };
@@ -1159,48 +1164,48 @@ window.showConnectionLost = function() {
             numTh: 'border-r w-12', numTd: 'border-r text-center', grp: GRP_TOTAL,
             tr: r => `hover:bg-indigo-50 border-b border-slate-50 ${r.IS_RETURN ? 'bg-red-50/40' : ''}`,
             cols: [
-                { id: 'ORGANIZATION_ID',     label: 'Mã ĐV',         sort: 'ORGANIZATION_ID',   th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic' },
+                { id: 'ORGANIZATION_ID',     label: 'Mã ĐV',         sort: 'ORGANIZATION_ID',   th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'ORGANIZATION_NAME',   label: 'Tên đơn vị',    sort: 'ORGANIZATION_NAME', th: 'border-r w-40 px-3', align: 'left',  search: 2, td: 'border-r whitespace-nowrap px-3 font-bold' },
-                { id: 'TRAN_ID',             label: 'Mã CT',         sort: 'TRAN_ID',           th: 'border-r w-16',                      search: 2, td: 'border-r text-center italic' },
+                { id: 'TRAN_ID',             label: 'Mã CT',         sort: 'TRAN_ID',           th: 'border-r w-16',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'TRAN_NAME',           label: 'Tên chứng từ',  sort: 'TRAN_ID',           th: 'border-r w-40 px-3',                 search: 1, td: 'border-r whitespace-nowrap px-3 italic' },
-                { id: 'TRAN_NO',             label: 'Số CT',         sort: 'TRAN_NO',           th: 'border-r w-32 px-3',                 search: 2, td: 'border-r font-black px-3' },
+                { id: 'TRAN_NO',             label: 'Số CT',         sort: 'TRAN_NO',           th: 'border-r w-32 px-3',                 search: 2, td: 'border-r font-black px-3', q: 'pre' },
                 { id: 'TRAN_DATE',           label: 'Ngày CT',       sort: 'TRAN_DATE',         th: 'border-r w-24',                      search: 1, td: 'border-r text-center font-bold' },
-                { id: 'VAT_TRAN_NO',         label: 'Số HĐ',         sort: 'VAT_TRAN_NO',       th: 'border-r w-28 px-2',                 search: 2, td: 'border-r px-2 whitespace-nowrap' },
+                { id: 'VAT_TRAN_NO',         label: 'Số HĐ',         sort: 'VAT_TRAN_NO',       th: 'border-r w-28 px-2',                 search: 2, td: 'border-r px-2 whitespace-nowrap', q: 'pre' },
                 { id: 'VAT_TRAN_DATE',       label: 'Ngày HĐ',       sort: 'VAT_TRAN_DATE',     th: 'border-r w-24',                      search: 2, td: 'border-r text-center' },
-                { id: 'VAT_TRAN_SERIE',      label: 'Ký hiệu',       sort: 'VAT_TRAN_SERIE',    th: 'border-r w-24',                      search: 1, td: 'border-r text-center' },
-                { id: 'PR_DETAIL_ID',        label: 'Mã ĐT',         sort: 'PR_DETAIL_ID',      th: 'border-r w-24',                      search: 2, td: 'border-r text-center italic' },
+                { id: 'VAT_TRAN_SERIE',      label: 'Ký hiệu',       sort: 'VAT_TRAN_SERIE',    th: 'border-r w-24',                      search: 1, td: 'border-r text-center', q: 'pre' },
+                { id: 'PR_DETAIL_ID',        label: 'Mã ĐT',         sort: 'PR_DETAIL_ID',      th: 'border-r w-24',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'PR_DETAIL_NAME',      label: 'Tên đối tượng', sort: 'PR_DETAIL_NAME',    th: 'border-r w-44 px-3', align: 'left',  search: 2, td: 'border-r whitespace-nowrap px-3 font-bold' },
-                { id: 'WAREHOUSE_ID',        label: 'Mã kho',        sort: 'WAREHOUSE_ID',      th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic' },
+                { id: 'WAREHOUSE_ID',        label: 'Mã kho',        sort: 'WAREHOUSE_ID',      th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'WAREHOUSE_NAME',      label: 'Tên kho',       sort: 'WAREHOUSE_NAME',    th: 'border-r w-36 px-3', align: 'left',  search: 1, td: 'border-r whitespace-nowrap px-3' },
-                { id: 'ITEM_ID',             label: 'Mã hàng',       sort: 'ITEM_ID',           th: 'border-r w-24',                      search: 2, td: 'border-r text-center font-black text-indigo-600' },
+                { id: 'ITEM_ID',             label: 'Mã hàng',       sort: 'ITEM_ID',           th: 'border-r w-24',                      search: 2, td: 'border-r text-center font-black text-indigo-600', q: 'pre' },
                 { id: 'ITEM_NAME',           label: 'Tên hàng hóa',  sort: 'ITEM_NAME',         th: 'border-r w-44 px-3', align: 'left',  search: 2, td: 'border-r whitespace-nowrap px-3' },
                 { id: 'DESCRIPTION',         label: 'Diễn giải',     sort: 'DESCRIPTION',       th: 'border-r w-56 px-3', align: 'left',  search: 2, td: 'border-r whitespace-nowrap truncate max-w-[250px] px-3 py-1.5' },
-                { id: 'UNIT_ID',             label: 'ĐVT',           sort: 'UNIT_ID',           th: 'border-r w-16',                      search: 2, td: 'border-r text-center' },
+                { id: 'UNIT_ID',             label: 'ĐVT',           sort: 'UNIT_ID',           th: 'border-r w-16',                      search: 2, td: 'border-r text-center', q: 'pre' },
                 { id: 'UNIT_NAME',           label: 'Tên ĐVT',       sort: 'UNIT_NAME',         th: 'border-r w-24 px-2', align: 'left',  search: 1, td: 'border-r whitespace-nowrap px-2' },
-                { id: 'QUANTITY',            label: 'Số lượng',      sort: 'QUANTITY',          th: 'border-r w-24 px-2', align: 'right',            td: 'border-r text-right font-mono px-2', v: r => fmtNum(r.QUANTITY) },
-                { id: 'UNIT_PRICE',          label: 'Đơn giá',       sort: 'UNIT_PRICE',        th: 'border-r w-28 px-2', align: 'right',            td: 'border-r text-right font-mono px-2', v: r => fmtNum(r.UNIT_PRICE) },
-                { id: 'AMOUNT',              label: 'Thành tiền',    sort: 'AMOUNT',            th: 'border-r w-32 px-2', align: 'right',            td: 'border-r text-right font-mono px-2', v: r => fmtInt(r.AMOUNT) },
-                { id: 'DISCOUNT_AMOUNT',     label: 'Giảm giá',      sort: 'DISCOUNT_AMOUNT',   th: 'border-r w-24 px-2', align: 'right',            td: 'border-r text-right font-mono px-2 text-orange-600', v: r => fmtInt(r.DISCOUNT_AMOUNT) },
-                { id: 'VAT_TAX_RATE',        label: 'Thuế %',        sort: 'VAT_TAX_RATE',      th: 'border-r w-16',                                 td: 'border-r text-center', v: fmtRate },
-                { id: 'VAT_TAX_AMOUNT',      label: 'Tiền thuế',     sort: 'VAT_TAX_AMOUNT',    th: 'border-r w-28 px-2', align: 'right',            td: 'border-r text-right font-mono px-2 text-violet-600', v: r => fmtInt(r.VAT_TAX_AMOUNT) },
-                { id: 'TOTAL_AMOUNT',        label: 'Tổng TT',       sort: 'TOTAL_AMOUNT',      th: 'border-r w-32 px-2', align: 'right',            td: 'border-r text-right font-mono font-black px-2 text-emerald-600', v: r => fmtInt(r.TOTAL_AMOUNT) },
-                { id: 'COG_AMOUNT',          label: 'Giá vốn',       sort: 'COG_AMOUNT',        th: 'border-r w-32 px-2', align: 'right',            td: 'border-r text-right font-mono px-2 text-rose-600', v: r => fmtInt(r.COG_AMOUNT) },
-                { id: 'ACCOUNT_ID',          label: 'TK',            sort: 'ACCOUNT_ID',        th: 'border-r w-20',                      search: 2, td: 'border-r text-center font-black text-indigo-600' },
-                { id: 'ACCOUNT_ID_PR',       label: 'TK công nợ',    sort: 'ACCOUNT_ID_PR',     th: 'border-r w-24',                      search: 1, td: 'border-r text-center font-black text-cyan-600' },
-                { id: 'ACCOUNT_ID_COST',     label: 'TK kho',        sort: 'ACCOUNT_ID_COST',   th: 'border-r w-20',                      search: 1, td: 'border-r text-center font-black text-rose-600' },
-                { id: 'ACCOUNT_ID_INCOME',   label: 'TK DT',         sort: 'ACCOUNT_ID_INCOME', th: 'border-r w-20',                      search: 1, td: 'border-r text-center italic' },
-                { id: 'ACCOUNT_ID_VAT',      label: 'TK thuế',       sort: 'ACCOUNT_ID_VAT',    th: 'border-r w-20',                      search: 1, td: 'border-r text-center italic' },
-                { id: 'EXPENSE_ID',          label: 'Mã MCP',        sort: 'EXPENSE_ID',        th: 'border-r w-24',                      search: 2, td: 'border-r text-center italic' },
+                { id: 'QUANTITY',            label: 'Số lượng',      sort: 'QUANTITY',          th: 'border-r w-24 px-2', align: 'right', search: 2, td: 'border-r text-right font-mono px-2', v: r => fmtNum(r.QUANTITY), q: 'num' },
+                { id: 'UNIT_PRICE',          label: 'Đơn giá',       sort: 'UNIT_PRICE',        th: 'border-r w-28 px-2', align: 'right', search: 2, td: 'border-r text-right font-mono px-2', v: r => fmtNum(r.UNIT_PRICE), q: 'num' },
+                { id: 'AMOUNT',              label: 'Thành tiền',    sort: 'AMOUNT',            th: 'border-r w-32 px-2', align: 'right', search: 2, td: 'border-r text-right font-mono px-2', v: r => fmtInt(r.AMOUNT), q: 'num' },
+                { id: 'DISCOUNT_AMOUNT',     label: 'Giảm giá',      sort: 'DISCOUNT_AMOUNT',   th: 'border-r w-24 px-2', align: 'right', search: 2, td: 'border-r text-right font-mono px-2 text-orange-600', v: r => fmtInt(r.DISCOUNT_AMOUNT), q: 'num' },
+                { id: 'VAT_TAX_RATE',        label: 'Thuế %',        sort: 'VAT_TAX_RATE',      th: 'border-r w-16',                      search: 2, td: 'border-r text-center', v: fmtRate, q: 'num' },
+                { id: 'VAT_TAX_AMOUNT',      label: 'Tiền thuế',     sort: 'VAT_TAX_AMOUNT',    th: 'border-r w-28 px-2', align: 'right', search: 2, td: 'border-r text-right font-mono px-2 text-violet-600', v: r => fmtInt(r.VAT_TAX_AMOUNT), q: 'num' },
+                { id: 'TOTAL_AMOUNT',        label: 'Tổng TT',       sort: 'TOTAL_AMOUNT',      th: 'border-r w-32 px-2', align: 'right', search: 2, td: 'border-r text-right font-mono font-black px-2 text-emerald-600', v: r => fmtInt(r.TOTAL_AMOUNT), q: 'num' },
+                { id: 'COG_AMOUNT',          label: 'Giá vốn',       sort: 'COG_AMOUNT',        th: 'border-r w-32 px-2', align: 'right', search: 2, td: 'border-r text-right font-mono px-2 text-rose-600', v: r => fmtInt(r.COG_AMOUNT), q: 'num' },
+                { id: 'ACCOUNT_ID',          label: 'TK',            sort: 'ACCOUNT_ID',        th: 'border-r w-20',                      search: 2, td: 'border-r text-center font-black text-indigo-600', q: 'pre' },
+                { id: 'ACCOUNT_ID_PR',       label: 'TK công nợ',    sort: 'ACCOUNT_ID_PR',     th: 'border-r w-24',                      search: 1, td: 'border-r text-center font-black text-cyan-600', q: 'pre' },
+                { id: 'ACCOUNT_ID_COST',     label: 'TK kho',        sort: 'ACCOUNT_ID_COST',   th: 'border-r w-20',                      search: 1, td: 'border-r text-center font-black text-rose-600', q: 'pre' },
+                { id: 'ACCOUNT_ID_INCOME',   label: 'TK DT',         sort: 'ACCOUNT_ID_INCOME', th: 'border-r w-20',                      search: 1, td: 'border-r text-center italic', q: 'pre' },
+                { id: 'ACCOUNT_ID_VAT',      label: 'TK thuế',       sort: 'ACCOUNT_ID_VAT',    th: 'border-r w-20',                      search: 1, td: 'border-r text-center italic', q: 'pre' },
+                { id: 'EXPENSE_ID',          label: 'Mã MCP',        sort: 'EXPENSE_ID',        th: 'border-r w-24',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'EXPENSE_NAME',        label: 'Tên MCP',       sort: 'EXPENSE_NAME',      th: 'border-r w-36 px-3', align: 'left',  search: 2, td: 'border-r whitespace-nowrap px-3 italic' },
-                { id: 'JOB_ID',              label: 'Mã CV',         sort: 'JOB_ID',            th: 'border-r w-24',                      search: 2, td: 'border-r text-center italic' },
+                { id: 'JOB_ID',              label: 'Mã CV',         sort: 'JOB_ID',            th: 'border-r w-24',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'JOB_NAME',            label: 'Tên công việc', sort: 'JOB_NAME',          th: 'border-r w-36 px-3', align: 'left',  search: 2, td: 'border-r whitespace-nowrap px-3 italic' },
                 { id: 'IS_RETURN',           label: 'Trả',           sort: 'IS_RETURN',         th: 'border-r w-16',                      search: 2, td: 'border-r text-center font-black', v: r => r.IS_RETURN ? <span className="text-red-600">Trả</span> : '', sv: r => r.IS_RETURN ? 'Trả' : '', sh: 'Gõ "trả" để lọc hàng trả lại' },
-                { id: 'PAYMENT_METHOD_ID',   label: 'Mã HTTT',                                  th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic' },
+                { id: 'PAYMENT_METHOD_ID',   label: 'Mã HTTT',                                  th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'PAYMENT_METHOD_NAME', label: 'Hình thức TT',                             th: 'border-r w-36 px-3 text-left',       search: 2, td: 'border-r whitespace-nowrap px-3' },
-                { id: 'EXTRA_ID_2',          label: 'Mã nguồn',                                 th: 'border-r w-24',                      search: 2, td: 'border-r text-center italic' },
+                { id: 'EXTRA_ID_2',          label: 'Mã nguồn',                                 th: 'border-r w-24',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'EXTRA_NAME_2',        label: 'Nguồn đơn',                                th: 'border-r w-36 px-3 text-left',       search: 2, td: 'border-r whitespace-nowrap px-3' },
-                { id: 'INCOME_AMOUNT',       label: 'Doanh thu 511',                            th: 'border-r w-32 px-2 text-right',                 td: 'border-r text-right font-mono px-2 text-emerald-700', v: r => fmtInt(r.INCOME_AMOUNT) },
-                { id: 'VAT_INCOME_AMOUNT',   label: 'Doanh thu trước thuế',                     th: 'border-r w-28 px-2 text-right',                 td: 'border-r text-right font-mono px-2 text-violet-600', v: r => fmtInt(r.VAT_INCOME_AMOUNT) },
+                { id: 'INCOME_AMOUNT',       label: 'Doanh thu 511',                            th: 'border-r w-32 px-2 text-right',      search: 2, td: 'border-r text-right font-mono px-2 text-emerald-700', v: r => fmtInt(r.INCOME_AMOUNT), q: 'num' },
+                { id: 'VAT_INCOME_AMOUNT',   label: 'Doanh thu trước thuế',                     th: 'border-r w-28 px-2 text-right',      search: 2, td: 'border-r text-right font-mono px-2 text-violet-600', v: r => fmtInt(r.VAT_INCOME_AMOUNT), q: 'num' },
                 { id: 'COMMENTS',            label: 'Ghi chú',                                  th: 'border-r w-56 px-3 text-left',       search: 2, td: 'border-r whitespace-nowrap px-3 text-slate-500' },
             ],
         };
@@ -1208,28 +1213,28 @@ window.showConnectionLost = function() {
         const INCOME_ALLOC_GRID = {
             numTh: 'border-r w-12', numTd: 'border-r text-center', tr: 'hover:bg-indigo-50 border-b border-slate-50',
             cols: [
-                { id: 'ORGANIZATION_ID',        label: 'Đơn vị',        sort: 'ORGANIZATION_ID',   th: 'border-r w-16',          search: 1, td: 'border-r text-center italic' },
+                { id: 'ORGANIZATION_ID',        label: 'Đơn vị',        sort: 'ORGANIZATION_ID',   th: 'border-r w-16',          search: 1, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'ORGANIZATION_NAME',      label: 'Tên đơn vị',                               th: 'border-r w-40 px-3',     search: 1, td: 'border-r whitespace-nowrap px-3 font-bold' },
-                { id: 'TRAN_ID',                label: 'Mã CT',         sort: 'TRAN_ID',           th: 'border-r w-16',          search: 1, td: 'border-r text-center italic' },
-                { id: 'TRAN_NO',                label: 'Số CT',         sort: 'TRAN_NO',           th: 'border-r w-32 px-3',     search: 1, td: 'border-r font-black px-3 whitespace-nowrap' },
+                { id: 'TRAN_ID',                label: 'Mã CT',         sort: 'TRAN_ID',           th: 'border-r w-16',          search: 1, td: 'border-r text-center italic', q: 'pre' },
+                { id: 'TRAN_NO',                label: 'Số CT',         sort: 'TRAN_NO',           th: 'border-r w-32 px-3',     search: 1, td: 'border-r font-black px-3 whitespace-nowrap', q: 'pre' },
                 { id: 'TRAN_DATE',              label: 'Ngày CT',       sort: 'TRAN_DATE',         th: 'border-r w-24',          search: 1, td: 'border-r text-center font-bold' },
                 { id: 'USE_DATE',               label: 'Ngày pbổ',      sort: 'USE_DATE',          th: 'border-r w-24',          search: 1, td: 'border-r text-center' },
                 { id: 'DESCRIPTION',            label: 'Diễn giải',     sort: 'DESCRIPTION',       th: 'border-r w-56 px-3', align: 'left', search: 1, td: 'border-r whitespace-nowrap truncate max-w-[250px] px-3 py-1.5' },
-                { id: 'ITEM_ID',                label: 'Hàng hóa',      sort: 'ITEM_ID',           th: 'border-r w-20',          search: 1, td: 'border-r text-center font-black text-indigo-600' },
+                { id: 'ITEM_ID',                label: 'Hàng hóa',      sort: 'ITEM_ID',           th: 'border-r w-20',          search: 1, td: 'border-r text-center font-black text-indigo-600', q: 'pre' },
                 { id: 'ITEM_NAME',              label: 'Tên hàng hóa',                             th: 'border-r w-40 px-3',     search: 1, td: 'border-r whitespace-nowrap px-3' },
-                { id: 'ALLOCATION_RATE',        label: 'Tỷ lệ pb',      sort: 'ALLOCATION_RATE',   th: 'border-r w-16 px-2', align: 'right', td: 'border-r text-right font-mono px-2', v: r => fmtNum(r.ALLOCATION_RATE) },
-                { id: 'INCOME_AMOUNT',          label: 'Doanh thu',     sort: 'INCOME_AMOUNT',     th: 'border-r w-32 px-2', align: 'right', td: 'border-r text-right font-mono px-2 font-black', v: r => fmtInt(r.INCOME_AMOUNT) },
-                { id: 'PERIOD_AMT',             label: 'Dthu kỳ này',   sort: 'PERIOD_AMT',        th: 'border-r w-32 px-2', align: 'right', td: 'border-r text-right font-mono px-2 text-emerald-600', v: r => fmtInt(r.PERIOD_AMT) },
-                { id: 'CUM_AMT',                label: 'Lũy kế',        sort: 'CUM_AMT',           th: 'border-r w-32 px-2', align: 'right', td: 'border-r text-right font-mono px-2 text-violet-600', v: r => fmtInt(r.CUM_AMT) },
-                { id: 'CON_LAI',                label: 'Còn lại',       sort: 'CON_LAI',           th: 'border-r w-32 px-2', align: 'right', td: 'border-r text-right font-mono px-2 font-black text-rose-600', v: r => fmtInt(r.CON_LAI) },
-                { id: 'ACCOUNT_ID_DES',         label: 'TK đích',       sort: 'ACCOUNT_ID_DES',    th: 'border-r w-20',          search: 1, td: 'border-r text-center font-black text-indigo-600' },
-                { id: 'PR_DETAIL_ID',           label: 'Đối tượng',     sort: 'PR_DETAIL_ID',      th: 'border-r w-24',          search: 1, td: 'border-r text-center italic' },
+                { id: 'ALLOCATION_RATE',        label: 'Tỷ lệ pb',      sort: 'ALLOCATION_RATE',   th: 'border-r w-16 px-2', align: 'right', search: 1, td: 'border-r text-right font-mono px-2', v: r => fmtNum(r.ALLOCATION_RATE), q: 'num' },
+                { id: 'INCOME_AMOUNT',          label: 'Doanh thu',     sort: 'INCOME_AMOUNT',     th: 'border-r w-32 px-2', align: 'right', search: 1, td: 'border-r text-right font-mono px-2 font-black', v: r => fmtInt(r.INCOME_AMOUNT), q: 'num' },
+                { id: 'PERIOD_AMT',             label: 'Dthu kỳ này',   sort: 'PERIOD_AMT',        th: 'border-r w-32 px-2', align: 'right', search: 1, td: 'border-r text-right font-mono px-2 text-emerald-600', v: r => fmtInt(r.PERIOD_AMT), q: 'num' },
+                { id: 'CUM_AMT',                label: 'Lũy kế',        sort: 'CUM_AMT',           th: 'border-r w-32 px-2', align: 'right', search: 1, td: 'border-r text-right font-mono px-2 text-violet-600', v: r => fmtInt(r.CUM_AMT), q: 'num' },
+                { id: 'CON_LAI',                label: 'Còn lại',       sort: 'CON_LAI',           th: 'border-r w-32 px-2', align: 'right', search: 1, td: 'border-r text-right font-mono px-2 font-black text-rose-600', v: r => fmtInt(r.CON_LAI), q: 'num' },
+                { id: 'ACCOUNT_ID_DES',         label: 'TK đích',       sort: 'ACCOUNT_ID_DES',    th: 'border-r w-20',          search: 1, td: 'border-r text-center font-black text-indigo-600', q: 'pre' },
+                { id: 'PR_DETAIL_ID',           label: 'Đối tượng',     sort: 'PR_DETAIL_ID',      th: 'border-r w-24',          search: 1, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'PR_DETAIL_NAME',         label: 'Tên đối tượng',                            th: 'border-r w-44 px-3',     search: 1, td: 'border-r whitespace-nowrap px-3 font-bold' },
                 { id: 'ALLOCATION_METHOD_NAME', label: 'Tiêu thức',     sort: 'ALLOCATION_METHOD', th: 'border-r w-20',          search: 1, td: 'border-r text-center' },
-                { id: 'JOB_ID',                 label: 'Công việc',     sort: 'JOB_ID',            th: 'border-r w-20',          search: 1, td: 'border-r text-center italic' },
-                { id: 'ACCOUNT_ID',             label: 'TK',            sort: 'ACCOUNT_ID',        th: 'border-r w-16',          search: 1, td: 'border-r text-center italic' },
-                { id: 'ACCOUNT_ID_CONTRA',      label: 'Tk đ/ứ',        sort: 'ACCOUNT_ID_CONTRA', th: 'border-r w-16',          search: 1, td: 'border-r text-center italic' },
-                { id: 'EXPENSE_ID',             label: 'Mục cp',        sort: 'EXPENSE_ID',        th: 'border-r w-20',          search: 1, td: 'border-r text-center italic' },
+                { id: 'JOB_ID',                 label: 'Công việc',     sort: 'JOB_ID',            th: 'border-r w-20',          search: 1, td: 'border-r text-center italic', q: 'pre' },
+                { id: 'ACCOUNT_ID',             label: 'TK',            sort: 'ACCOUNT_ID',        th: 'border-r w-16',          search: 1, td: 'border-r text-center italic', q: 'pre' },
+                { id: 'ACCOUNT_ID_CONTRA',      label: 'Tk đ/ứ',        sort: 'ACCOUNT_ID_CONTRA', th: 'border-r w-16',          search: 1, td: 'border-r text-center italic', q: 'pre' },
+                { id: 'EXPENSE_ID',             label: 'Mục cp',        sort: 'EXPENSE_ID',        th: 'border-r w-20',          search: 1, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'ACTIVE',                 label: 'Active',        sort: 'ACTIVE',            th: 'border-r w-16',          search: 1, td: 'border-r text-center font-black', v: r => Number(r.ACTIVE) === 1 ? <span className="text-emerald-600">✓</span> : <span className="text-slate-300">—</span>, sv: r => Number(r.ACTIVE) === 1 ? 'Có' : 'Không', sh: 'Gõ "có" hoặc "không"' },
                 { id: 'COMMENTS',               label: 'Ghi chú',                                  th: 'border-r w-56 px-3',     search: 1, td: 'border-r whitespace-nowrap px-3 py-1.5 italic' },
             ],
@@ -1238,33 +1243,33 @@ window.showConnectionLost = function() {
         const VOUCHER_GRID = {
             numTh: 'border-r w-12', numTd: 'border-r text-center', tr: 'hover:bg-indigo-50 border-b border-slate-50', grp: GRP_AMOUNT,
             cols: [
-                { id: 'ORGANIZATION_ID',       label: 'Mã ĐV',             sort: 'ORGANIZATION_ID',       th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic' },
+                { id: 'ORGANIZATION_ID',       label: 'Mã ĐV',             sort: 'ORGANIZATION_ID',       th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'ORGANIZATION_NAME',     label: 'Tên đơn vị',        sort: 'ORGANIZATION_NAME',     th: 'border-r w-40 px-3', align: 'left',  search: 1, td: 'border-r whitespace-nowrap px-3 font-bold' },
-                { id: 'TRAN_ID',               label: 'Mã CT',             sort: 'TRAN_ID',               th: 'border-r w-16',                      search: 2, td: 'border-r text-center italic' },
+                { id: 'TRAN_ID',               label: 'Mã CT',             sort: 'TRAN_ID',               th: 'border-r w-16',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'TRAN_NAME',             label: 'Tên chứng từ',      sort: 'TRAN_ID',               th: 'border-r w-40 px-3',                 search: 1, td: 'border-r whitespace-nowrap px-3 italic' },
-                { id: 'TRAN_NO',               label: 'Số CT',             sort: 'TRAN_NO',               th: 'border-r w-32 px-3',                 search: 2, td: 'border-r font-black px-3' },
+                { id: 'TRAN_NO',               label: 'Số CT',             sort: 'TRAN_NO',               th: 'border-r w-32 px-3',                 search: 2, td: 'border-r font-black px-3', q: 'pre' },
                 { id: 'TRAN_DATE',             label: 'Ngày CT',           sort: 'TRAN_DATE',             th: 'border-r w-24',                      search: 1, td: 'border-r text-center font-bold' },
-                { id: 'ACCOUNT_ID_DEBIT',      label: 'Tài khoản',         sort: 'ACCOUNT_ID_DEBIT',      th: 'border-r w-20',                      search: 2, td: 'border-r text-center font-black text-indigo-600' },
-                { id: 'ACCOUNT_ID_CREDIT',     label: 'TK đối ứng',        sort: 'ACCOUNT_ID_CREDIT',     th: 'border-r w-20',                      search: 2, td: 'border-r text-center font-black text-rose-600' },
-                { id: 'AMOUNT',                label: 'Số tiền',           sort: 'AMOUNT',                th: 'border-r w-32 px-2', align: 'right', search: 1, td: 'border-r text-right font-mono font-black px-2 text-emerald-600', v: r => fmtInt(r.AMOUNT) },
+                { id: 'ACCOUNT_ID_DEBIT',      label: 'Tài khoản',         sort: 'ACCOUNT_ID_DEBIT',      th: 'border-r w-20',                      search: 2, td: 'border-r text-center font-black text-indigo-600', q: 'pre' },
+                { id: 'ACCOUNT_ID_CREDIT',     label: 'TK đối ứng',        sort: 'ACCOUNT_ID_CREDIT',     th: 'border-r w-20',                      search: 2, td: 'border-r text-center font-black text-rose-600', q: 'pre' },
+                { id: 'AMOUNT',                label: 'Số tiền',           sort: 'AMOUNT',                th: 'border-r w-32 px-2', align: 'right', search: 2, td: 'border-r text-right font-mono font-black px-2 text-emerald-600', v: r => fmtInt(r.AMOUNT), q: 'num' },
                 { id: 'DESCRIPTION',           label: 'Diễn giải',         sort: 'DESCRIPTION',           th: 'border-r w-56 px-3', align: 'left',  search: 2, td: 'border-r whitespace-nowrap truncate max-w-[250px] px-3 py-1.5' },
-                { id: 'PR_DETAIL_ID_DEBIT',    label: 'Mã đối tượng',      sort: 'PR_DETAIL_ID_DEBIT',    th: 'border-r w-24',                      search: 2, td: 'border-r text-center italic' },
+                { id: 'PR_DETAIL_ID_DEBIT',    label: 'Mã đối tượng',      sort: 'PR_DETAIL_ID_DEBIT',    th: 'border-r w-24',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'PR_DETAIL_NAME_DEBIT',  label: 'Đối tượng',         sort: 'PR_DETAIL_NAME_DEBIT',  th: 'border-r w-40 px-3', align: 'left',  search: 1, td: 'border-r whitespace-nowrap px-3' },
-                { id: 'PR_DETAIL_ID_CREDIT',   label: 'Mã ĐT đối ứng',     sort: 'PR_DETAIL_ID_CREDIT',   th: 'border-r w-24',                      search: 2, td: 'border-r text-center italic' },
+                { id: 'PR_DETAIL_ID_CREDIT',   label: 'Mã ĐT đối ứng',     sort: 'PR_DETAIL_ID_CREDIT',   th: 'border-r w-24',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'PR_DETAIL_NAME_CREDIT', label: 'Đối tượng đối ứng', sort: 'PR_DETAIL_NAME_CREDIT', th: 'border-r w-40 px-3', align: 'left',  search: 1, td: 'border-r whitespace-nowrap px-3' },
-                { id: 'EXPENSE_ID_DEBIT',      label: 'Mục chi phí',       sort: 'EXPENSE_ID_DEBIT',      th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic' },
-                { id: 'EXPENSE_ID_CREDIT',     label: 'MCP đối ứng',       sort: 'EXPENSE_ID_CREDIT',     th: 'border-r w-24',                      search: 2, td: 'border-r text-center italic' },
-                { id: 'JOB_ID_DEBIT',          label: 'Công việc',         sort: 'JOB_ID_DEBIT',          th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic' },
-                { id: 'JOB_ID_CREDIT',         label: 'CV đối ứng',        sort: 'JOB_ID_CREDIT',         th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic' },
+                { id: 'EXPENSE_ID_DEBIT',      label: 'Mục chi phí',       sort: 'EXPENSE_ID_DEBIT',      th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
+                { id: 'EXPENSE_ID_CREDIT',     label: 'MCP đối ứng',       sort: 'EXPENSE_ID_CREDIT',     th: 'border-r w-24',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
+                { id: 'JOB_ID_DEBIT',          label: 'Công việc',         sort: 'JOB_ID_DEBIT',          th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
+                { id: 'JOB_ID_CREDIT',         label: 'CV đối ứng',        sort: 'JOB_ID_CREDIT',         th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'BANK_NAME_DEBIT',       label: 'Ngân hàng',         sort: 'BANK_NAME_DEBIT',       th: 'border-r w-32 px-2', align: 'left',  search: 1, td: 'border-r whitespace-nowrap px-2' },
-                { id: 'BANK_ACCOUNT_DEBIT',    label: 'TK ngân hàng',      sort: 'BANK_ACCOUNT_DEBIT',    th: 'border-r w-28 px-2',                 search: 1, td: 'border-r whitespace-nowrap px-2' },
+                { id: 'BANK_ACCOUNT_DEBIT',    label: 'TK ngân hàng',      sort: 'BANK_ACCOUNT_DEBIT',    th: 'border-r w-28 px-2',                 search: 1, td: 'border-r whitespace-nowrap px-2', q: 'pre' },
                 { id: 'BANK_NAME_CREDIT',      label: 'NH đối ứng',        sort: 'BANK_NAME_CREDIT',      th: 'border-r w-32 px-2', align: 'left',  search: 1, td: 'border-r whitespace-nowrap px-2' },
-                { id: 'BANK_ACCOUNT_CREDIT',   label: 'TKNH đối ứng',      sort: 'BANK_ACCOUNT_CREDIT',   th: 'border-r w-28 px-2',                 search: 1, td: 'border-r whitespace-nowrap px-2' },
+                { id: 'BANK_ACCOUNT_CREDIT',   label: 'TKNH đối ứng',      sort: 'BANK_ACCOUNT_CREDIT',   th: 'border-r w-28 px-2',                 search: 1, td: 'border-r whitespace-nowrap px-2', q: 'pre' },
                 { id: 'CONTACT_PERSON',        label: 'Người nộp/nhận',    sort: 'CONTACT_PERSON',        th: 'border-r w-36 px-3', align: 'left',  search: 2, td: 'border-r whitespace-nowrap px-3 py-1.5' },
                 { id: 'ADDRESS',               label: 'Địa chỉ',           sort: 'ADDRESS',               th: 'border-r w-44 px-3', align: 'left',  search: 2, td: 'border-r whitespace-nowrap px-3 py-1.5' },
-                { id: 'REFERENCE_NO',          label: 'Tham chiếu',        sort: 'REFERENCE_NO',          th: 'border-r w-28 px-2',                 search: 2, td: 'border-r whitespace-nowrap px-2' },
-                { id: 'EMPLOYEE_ID',           label: 'Mã NV',             sort: 'EMPLOYEE_ID',           th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic' },
-                { id: 'CURRENCY_ID',           label: 'Tiền',              sort: 'CURRENCY_ID',           th: 'border-r w-16',                      search: 2, td: 'border-r text-center' },
+                { id: 'REFERENCE_NO',          label: 'Tham chiếu',        sort: 'REFERENCE_NO',          th: 'border-r w-28 px-2',                 search: 2, td: 'border-r whitespace-nowrap px-2', q: 'pre' },
+                { id: 'EMPLOYEE_ID',           label: 'Mã NV',             sort: 'EMPLOYEE_ID',           th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
+                { id: 'CURRENCY_ID',           label: 'Tiền',              sort: 'CURRENCY_ID',           th: 'border-r w-16',                      search: 2, td: 'border-r text-center', q: 'pre' },
                 { id: 'STATUS',                label: 'Trạng thái',        sort: 'STATUS',                th: 'border-r w-20',                      search: 1, td: 'border-r text-center' },
             ],
         };
@@ -1272,35 +1277,35 @@ window.showConnectionLost = function() {
         const PURCHASE_GRID = {
             numTh: 'border-r w-12', numTd: 'border-r text-center', tr: 'hover:bg-indigo-50 border-b border-slate-50', grp: GRP_TOTAL,
             cols: [
-                { id: 'ORGANIZATION_ID',   label: 'Mã ĐV',         sort: 'ORGANIZATION_ID',   th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic' },
+                { id: 'ORGANIZATION_ID',   label: 'Mã ĐV',         sort: 'ORGANIZATION_ID',   th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'ORGANIZATION_NAME', label: 'Tên đơn vị',    sort: 'ORGANIZATION_NAME', th: 'border-r w-40 px-3', align: 'left',  search: 2, td: 'border-r whitespace-nowrap px-3 font-bold' },
-                { id: 'TRAN_ID',           label: 'Mã CT',         sort: 'TRAN_ID',           th: 'border-r w-16',                      search: 2, td: 'border-r text-center italic' },
+                { id: 'TRAN_ID',           label: 'Mã CT',         sort: 'TRAN_ID',           th: 'border-r w-16',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'TRAN_NAME',         label: 'Tên chứng từ',  sort: 'TRAN_ID',           th: 'border-r w-40 px-3',                 search: 1, td: 'border-r whitespace-nowrap px-3 italic' },
-                { id: 'TRAN_NO',           label: 'Số CT',         sort: 'TRAN_NO',           th: 'border-r w-32 px-3',                 search: 2, td: 'border-r font-black px-3' },
+                { id: 'TRAN_NO',           label: 'Số CT',         sort: 'TRAN_NO',           th: 'border-r w-32 px-3',                 search: 2, td: 'border-r font-black px-3', q: 'pre' },
                 { id: 'TRAN_DATE',         label: 'Ngày CT',       sort: 'TRAN_DATE',         th: 'border-r w-24',                      search: 1, td: 'border-r text-center font-bold' },
-                { id: 'VAT_TRAN_NO',       label: 'Số HĐ',         sort: 'VAT_TRAN_NO',       th: 'border-r w-28 px-2',                 search: 2, td: 'border-r px-2 whitespace-nowrap' },
+                { id: 'VAT_TRAN_NO',       label: 'Số HĐ',         sort: 'VAT_TRAN_NO',       th: 'border-r w-28 px-2',                 search: 2, td: 'border-r px-2 whitespace-nowrap', q: 'pre' },
                 { id: 'VAT_TRAN_DATE',     label: 'Ngày HĐ',       sort: 'VAT_TRAN_DATE',     th: 'border-r w-24',                      search: 2, td: 'border-r text-center' },
-                { id: 'PO_TRAN_NO',        label: 'Số PO',         sort: 'PO_TRAN_NO',        th: 'border-r w-24',                      search: 2, td: 'border-r text-center' },
-                { id: 'WAREHOUSE_ID',      label: 'Mã kho',        sort: 'WAREHOUSE_ID',      th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic' },
+                { id: 'PO_TRAN_NO',        label: 'Số PO',         sort: 'PO_TRAN_NO',        th: 'border-r w-24',                      search: 2, td: 'border-r text-center', q: 'pre' },
+                { id: 'WAREHOUSE_ID',      label: 'Mã kho',        sort: 'WAREHOUSE_ID',      th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'WAREHOUSE_NAME',    label: 'Tên kho',       sort: 'WAREHOUSE_NAME',    th: 'border-r w-36 px-3', align: 'left',  search: 2, td: 'border-r whitespace-nowrap px-3' },
-                { id: 'ITEM_ID',           label: 'Mã hàng',       sort: 'ITEM_ID',           th: 'border-r w-24',                      search: 2, td: 'border-r text-center font-black text-indigo-600' },
+                { id: 'ITEM_ID',           label: 'Mã hàng',       sort: 'ITEM_ID',           th: 'border-r w-24',                      search: 2, td: 'border-r text-center font-black text-indigo-600', q: 'pre' },
                 { id: 'DESCRIPTION',       label: 'Diễn giải',     sort: 'DESCRIPTION',       th: 'border-r w-56 px-3', align: 'left',  search: 2, td: 'border-r whitespace-nowrap truncate max-w-[250px] px-3 py-1.5' },
-                { id: 'UNIT_ID',           label: 'ĐVT',           sort: 'UNIT_ID',           th: 'border-r w-16',                      search: 2, td: 'border-r text-center' },
-                { id: 'QUANTITY',          label: 'Số lượng',      sort: 'QUANTITY',          th: 'border-r w-24 px-2', align: 'right',            td: 'border-r text-right font-mono px-2', v: r => fmtNum(r.QUANTITY) },
-                { id: 'UNIT_ID_WH',        label: 'ĐVT kho',       sort: 'UNIT_ID_WH',        th: 'border-r w-16',                      search: 2, td: 'border-r text-center' },
-                { id: 'QUANTITY_WH',       label: 'SL kho',        sort: 'QUANTITY_WH',       th: 'border-r w-24 px-2', align: 'right',            td: 'border-r text-right font-mono px-2', v: r => fmtNum(r.QUANTITY_WH) },
-                { id: 'UNIT_PRICE',        label: 'Đơn giá',       sort: 'UNIT_PRICE',        th: 'border-r w-28 px-2', align: 'right',            td: 'border-r text-right font-mono px-2', v: r => fmtNum(r.UNIT_PRICE) },
-                { id: 'DISCOUNT_AMOUNT',   label: 'Giảm giá',      sort: 'DISCOUNT_AMOUNT',   th: 'border-r w-24 px-2', align: 'right',            td: 'border-r text-right font-mono px-2 text-orange-600', v: r => fmtInt(r.DISCOUNT_AMOUNT) },
-                { id: 'PURCHASE_COST',     label: 'Chi phí',       sort: 'PURCHASE_COST',     th: 'border-r w-28 px-2', align: 'right',            td: 'border-r text-right font-mono px-2', v: r => fmtNum(r.PURCHASE_COST) },
-                { id: 'VAT_TAX_RATE',      label: 'Thuế %',        sort: 'VAT_TAX_RATE',      th: 'border-r w-16',                                 td: 'border-r text-center', v: fmtRate },
-                { id: 'VAT_TAX_AMOUNT',    label: 'Tiền thuế',     sort: 'VAT_TAX_AMOUNT',    th: 'border-r w-28 px-2', align: 'right',            td: 'border-r text-right font-mono px-2 text-violet-600', v: r => fmtInt(r.VAT_TAX_AMOUNT) },
-                { id: 'TOTAL_AMOUNT',      label: 'Tổng tiền',     sort: 'TOTAL_AMOUNT',      th: 'border-r w-32 px-2', align: 'right',            td: 'border-r text-right font-mono font-black px-2 text-emerald-600', v: r => fmtInt(r.TOTAL_AMOUNT) },
-                { id: 'ACCOUNT_ID_COST',   label: 'TK kho',        sort: 'ACCOUNT_ID_COST',   th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic' },
-                { id: 'PR_DETAIL_ID',      label: 'Mã ĐT',         sort: 'PR_DETAIL_ID',      th: 'border-r w-24',                      search: 2, td: 'border-r text-center italic' },
+                { id: 'UNIT_ID',           label: 'ĐVT',           sort: 'UNIT_ID',           th: 'border-r w-16',                      search: 2, td: 'border-r text-center', q: 'pre' },
+                { id: 'QUANTITY',          label: 'Số lượng',      sort: 'QUANTITY',          th: 'border-r w-24 px-2', align: 'right', search: 2, td: 'border-r text-right font-mono px-2', v: r => fmtNum(r.QUANTITY), q: 'num' },
+                { id: 'UNIT_ID_WH',        label: 'ĐVT kho',       sort: 'UNIT_ID_WH',        th: 'border-r w-16',                      search: 2, td: 'border-r text-center', q: 'pre' },
+                { id: 'QUANTITY_WH',       label: 'SL kho',        sort: 'QUANTITY_WH',       th: 'border-r w-24 px-2', align: 'right', search: 2, td: 'border-r text-right font-mono px-2', v: r => fmtNum(r.QUANTITY_WH), q: 'num' },
+                { id: 'UNIT_PRICE',        label: 'Đơn giá',       sort: 'UNIT_PRICE',        th: 'border-r w-28 px-2', align: 'right', search: 2, td: 'border-r text-right font-mono px-2', v: r => fmtNum(r.UNIT_PRICE), q: 'num' },
+                { id: 'DISCOUNT_AMOUNT',   label: 'Giảm giá',      sort: 'DISCOUNT_AMOUNT',   th: 'border-r w-24 px-2', align: 'right', search: 2, td: 'border-r text-right font-mono px-2 text-orange-600', v: r => fmtInt(r.DISCOUNT_AMOUNT), q: 'num' },
+                { id: 'PURCHASE_COST',     label: 'Chi phí',       sort: 'PURCHASE_COST',     th: 'border-r w-28 px-2', align: 'right', search: 2, td: 'border-r text-right font-mono px-2', v: r => fmtNum(r.PURCHASE_COST), q: 'num' },
+                { id: 'VAT_TAX_RATE',      label: 'Thuế %',        sort: 'VAT_TAX_RATE',      th: 'border-r w-16',                      search: 2, td: 'border-r text-center', v: fmtRate, q: 'num' },
+                { id: 'VAT_TAX_AMOUNT',    label: 'Tiền thuế',     sort: 'VAT_TAX_AMOUNT',    th: 'border-r w-28 px-2', align: 'right', search: 2, td: 'border-r text-right font-mono px-2 text-violet-600', v: r => fmtInt(r.VAT_TAX_AMOUNT), q: 'num' },
+                { id: 'TOTAL_AMOUNT',      label: 'Tổng tiền',     sort: 'TOTAL_AMOUNT',      th: 'border-r w-32 px-2', align: 'right', search: 2, td: 'border-r text-right font-mono font-black px-2 text-emerald-600', v: r => fmtInt(r.TOTAL_AMOUNT), q: 'num' },
+                { id: 'ACCOUNT_ID_COST',   label: 'TK kho',        sort: 'ACCOUNT_ID_COST',   th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
+                { id: 'PR_DETAIL_ID',      label: 'Mã ĐT',         sort: 'PR_DETAIL_ID',      th: 'border-r w-24',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'PR_DETAIL_NAME',    label: 'Tên đối tượng', sort: 'PR_DETAIL_NAME',    th: 'border-r w-40 px-3', align: 'left',  search: 2, td: 'border-r whitespace-nowrap px-3 italic' },
-                { id: 'EXPENSE_ID',        label: 'Mã MCP',        sort: 'EXPENSE_ID',        th: 'border-r w-24',                      search: 2, td: 'border-r text-center italic' },
+                { id: 'EXPENSE_ID',        label: 'Mã MCP',        sort: 'EXPENSE_ID',        th: 'border-r w-24',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'EXPENSE_NAME',      label: 'Tên MCP',       sort: 'EXPENSE_NAME',      th: 'border-r w-36 px-3', align: 'left',  search: 2, td: 'border-r whitespace-nowrap px-3 italic' },
-                { id: 'JOB_ID',            label: 'Mã CV',         sort: 'JOB_ID',            th: 'border-r w-24',                      search: 2, td: 'border-r text-center italic' },
+                { id: 'JOB_ID',            label: 'Mã CV',         sort: 'JOB_ID',            th: 'border-r w-24',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'JOB_NAME',          label: 'Tên công việc', sort: 'JOB_NAME',          th: 'border-r w-36 px-3', align: 'left',  search: 2, td: 'border-r whitespace-nowrap px-3 italic' },
             ],
         };
@@ -1308,33 +1313,33 @@ window.showConnectionLost = function() {
         const WAREHOUSE_GRID = {
             numTh: 'border-r w-12', numTd: 'border-r text-center', tr: 'hover:bg-indigo-50 border-b border-slate-50', grp: GRP_AMOUNT,
             cols: [
-                { id: 'ISSUE_RECEIVE',        label: 'N/X',           sort: 'ISSUE_RECEIVE',        th: 'border-r w-14', search: 1, sh: 'Gõ N (nhập) hoặc X (xuất)',
+                { id: 'ISSUE_RECEIVE',        label: 'N/X',           sort: 'ISSUE_RECEIVE',        th: 'border-r w-14', search: 1, sh: 'Gõ N (nhập) hoặc X (xuất)', q: 'pre',
                   td: (r, k) => { const ir = r.ISSUE_RECEIVE; return <td key={k} className={`border-r text-center font-black ${ir==='N' ? 'text-emerald-600' : ir==='X' ? 'text-red-600' : ''}`}>{ir}</td>; } },
-                { id: 'ORGANIZATION_ID',      label: 'Mã ĐV',         sort: 'ORGANIZATION_ID',      th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic' },
+                { id: 'ORGANIZATION_ID',      label: 'Mã ĐV',         sort: 'ORGANIZATION_ID',      th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'ORGANIZATION_NAME',    label: 'Tên đơn vị',    sort: 'ORGANIZATION_NAME',    th: 'border-r w-40 px-3', align: 'left',  search: 2, td: 'border-r whitespace-nowrap px-3 font-bold' },
-                { id: 'TRAN_ID',              label: 'Mã CT',         sort: 'TRAN_ID',              th: 'border-r w-16',                      search: 2, td: 'border-r text-center italic' },
+                { id: 'TRAN_ID',              label: 'Mã CT',         sort: 'TRAN_ID',              th: 'border-r w-16',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'TRAN_NAME',            label: 'Tên chứng từ',  sort: 'TRAN_ID',              th: 'border-r w-40 px-3',                 search: 1, td: 'border-r whitespace-nowrap px-3 italic' },
-                { id: 'TRAN_NO',              label: 'Số CT',         sort: 'TRAN_NO',              th: 'border-r w-32 px-3',                 search: 2, td: 'border-r font-black px-3' },
+                { id: 'TRAN_NO',              label: 'Số CT',         sort: 'TRAN_NO',              th: 'border-r w-32 px-3',                 search: 2, td: 'border-r font-black px-3', q: 'pre' },
                 { id: 'TRAN_DATE',            label: 'Ngày CT',       sort: 'TRAN_DATE',            th: 'border-r w-24',                      search: 1, td: 'border-r text-center font-bold' },
-                { id: 'WAREHOUSE_ID',         label: 'Mã kho',        sort: 'WAREHOUSE_ID',         th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic' },
+                { id: 'WAREHOUSE_ID',         label: 'Mã kho',        sort: 'WAREHOUSE_ID',         th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'WAREHOUSE_NAME',       label: 'Tên kho',       sort: 'WAREHOUSE_NAME',       th: 'border-r w-36 px-3', align: 'left',  search: 2, td: 'border-r whitespace-nowrap px-3' },
-                { id: 'WAREHOUSE_ID_ISSUE',   label: 'Mã kho xuất',   sort: 'WAREHOUSE_ID_ISSUE',   th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic' },
+                { id: 'WAREHOUSE_ID_ISSUE',   label: 'Mã kho xuất',   sort: 'WAREHOUSE_ID_ISSUE',   th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'WAREHOUSE_NAME_ISSUE', label: 'Tên kho xuất',  sort: 'WAREHOUSE_NAME_ISSUE', th: 'border-r w-36 px-3', align: 'left',  search: 2, td: 'border-r whitespace-nowrap px-3' },
-                { id: 'ITEM_ID',              label: 'Mã hàng',       sort: 'ITEM_ID',              th: 'border-r w-24',                      search: 2, td: 'border-r text-center font-black text-indigo-600' },
+                { id: 'ITEM_ID',              label: 'Mã hàng',       sort: 'ITEM_ID',              th: 'border-r w-24',                      search: 2, td: 'border-r text-center font-black text-indigo-600', q: 'pre' },
                 { id: 'ITEM_NAME',            label: 'Tên hàng hóa',  sort: 'ITEM_NAME',            th: 'border-r w-44 px-3', align: 'left',  search: 2, td: 'border-r whitespace-nowrap px-3' },
-                { id: 'UNIT_ID_WH',           label: 'ĐVT',           sort: 'UNIT_ID_WH',           th: 'border-r w-16',                      search: 2, td: 'border-r text-center' },
-                { id: 'QUANTITY',             label: 'Số lượng',      sort: 'QUANTITY',             th: 'border-r w-24 px-2', align: 'right',            td: 'border-r text-right font-mono px-2', v: r => fmtNum(r.QUANTITY) },
-                { id: 'UNIT_ID_EXTRA',        label: 'ĐVT QĐ',        sort: 'UNIT_ID_EXTRA',        th: 'border-r w-16',                      search: 2, td: 'border-r text-center' },
-                { id: 'QUANTITY_EXTRA',       label: 'SL QĐ',         sort: 'QUANTITY_EXTRA',       th: 'border-r w-24 px-2', align: 'right',            td: 'border-r text-right font-mono px-2', v: r => fmtNum(r.QUANTITY_EXTRA) },
-                { id: 'UNIT_PRICE',           label: 'Đơn giá',       sort: 'UNIT_PRICE',           th: 'border-r w-28 px-2', align: 'right',            td: 'border-r text-right font-mono px-2', v: r => fmtNum(r.UNIT_PRICE) },
-                { id: 'AMOUNT',               label: 'Thành tiền',    sort: 'AMOUNT',               th: 'border-r w-32 px-2', align: 'right',            td: 'border-r text-right font-mono font-black px-2 text-emerald-600', v: r => fmtInt(r.AMOUNT) },
-                { id: 'ACCOUNT_ID',           label: 'Tài khoản',     sort: 'ACCOUNT_ID',           th: 'border-r w-24',                      search: 2, td: 'border-r text-center font-black text-indigo-600' },
-                { id: 'ACCOUNT_ID_CONTRA',    label: 'TK đối ứng',    sort: 'ACCOUNT_ID_CONTRA',    th: 'border-r w-24',                      search: 2, td: 'border-r text-center italic' },
-                { id: 'PR_DETAIL_ID',         label: 'Mã ĐT',         sort: 'PR_DETAIL_ID',         th: 'border-r w-24',                      search: 2, td: 'border-r text-center italic' },
+                { id: 'UNIT_ID_WH',           label: 'ĐVT',           sort: 'UNIT_ID_WH',           th: 'border-r w-16',                      search: 2, td: 'border-r text-center', q: 'pre' },
+                { id: 'QUANTITY',             label: 'Số lượng',      sort: 'QUANTITY',             th: 'border-r w-24 px-2', align: 'right', search: 2, td: 'border-r text-right font-mono px-2', v: r => fmtNum(r.QUANTITY), q: 'num' },
+                { id: 'UNIT_ID_EXTRA',        label: 'ĐVT QĐ',        sort: 'UNIT_ID_EXTRA',        th: 'border-r w-16',                      search: 2, td: 'border-r text-center', q: 'pre' },
+                { id: 'QUANTITY_EXTRA',       label: 'SL QĐ',         sort: 'QUANTITY_EXTRA',       th: 'border-r w-24 px-2', align: 'right', search: 2, td: 'border-r text-right font-mono px-2', v: r => fmtNum(r.QUANTITY_EXTRA), q: 'num' },
+                { id: 'UNIT_PRICE',           label: 'Đơn giá',       sort: 'UNIT_PRICE',           th: 'border-r w-28 px-2', align: 'right', search: 2, td: 'border-r text-right font-mono px-2', v: r => fmtNum(r.UNIT_PRICE), q: 'num' },
+                { id: 'AMOUNT',               label: 'Thành tiền',    sort: 'AMOUNT',               th: 'border-r w-32 px-2', align: 'right', search: 2, td: 'border-r text-right font-mono font-black px-2 text-emerald-600', v: r => fmtInt(r.AMOUNT), q: 'num' },
+                { id: 'ACCOUNT_ID',           label: 'Tài khoản',     sort: 'ACCOUNT_ID',           th: 'border-r w-24',                      search: 2, td: 'border-r text-center font-black text-indigo-600', q: 'pre' },
+                { id: 'ACCOUNT_ID_CONTRA',    label: 'TK đối ứng',    sort: 'ACCOUNT_ID_CONTRA',    th: 'border-r w-24',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
+                { id: 'PR_DETAIL_ID',         label: 'Mã ĐT',         sort: 'PR_DETAIL_ID',         th: 'border-r w-24',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'PR_DETAIL_NAME',       label: 'Tên đối tượng', sort: 'PR_DETAIL_NAME',       th: 'border-r w-40 px-3', align: 'left',  search: 2, td: 'border-r whitespace-nowrap px-3 italic' },
-                { id: 'EXPENSE_ID',           label: 'Mã MCP',        sort: 'EXPENSE_ID',           th: 'border-r w-24',                      search: 2, td: 'border-r text-center italic' },
+                { id: 'EXPENSE_ID',           label: 'Mã MCP',        sort: 'EXPENSE_ID',           th: 'border-r w-24',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'EXPENSE_NAME',         label: 'Tên MCP',       sort: 'EXPENSE_NAME',         th: 'border-r w-36 px-3', align: 'left',  search: 2, td: 'border-r whitespace-nowrap px-3 italic' },
-                { id: 'JOB_ID',               label: 'Mã CV',         sort: 'JOB_ID',               th: 'border-r w-24',                      search: 2, td: 'border-r text-center italic' },
+                { id: 'JOB_ID',               label: 'Mã CV',         sort: 'JOB_ID',               th: 'border-r w-24',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'JOB_NAME',             label: 'Tên công việc', sort: 'JOB_NAME',             th: 'border-r w-36 px-3', align: 'left',  search: 2, td: 'border-r whitespace-nowrap px-3 italic' },
             ],
         };
@@ -1344,18 +1349,18 @@ window.showConnectionLost = function() {
             numTh: 'border-r w-12', numTd: 'border-r text-slate-300 font-mono', tr: 'border-b hover:bg-indigo-50/30 text-center',
             cols: [
                 { id: 'TRAN_DATE',         label: 'Ngày',            sort: 'TRAN_DATE',         th: 'border-r w-24',                      search: 1, td: 'border-r' },
-                { id: 'ORGANIZATION_ID',   label: 'Mã ĐV',           sort: 'ORGANIZATION_ID',   th: 'border-r w-20',                      search: 2, td: 'border-r' },
+                { id: 'ORGANIZATION_ID',   label: 'Mã ĐV',           sort: 'ORGANIZATION_ID',   th: 'border-r w-20',                      search: 2, td: 'border-r', q: 'pre' },
                 { id: 'ORGANIZATION_NAME', label: 'Tên đơn vị',      sort: 'ORGANIZATION_NAME', th: 'border-r w-40 px-3', align: 'left',  search: 2, td: 'border-r px-3 text-left' },
-                { id: 'WAREHOUSE_ID',      label: 'Mã kho',          sort: 'WAREHOUSE_ID',      th: 'border-r w-20',                      search: 2, td: 'border-r' },
+                { id: 'WAREHOUSE_ID',      label: 'Mã kho',          sort: 'WAREHOUSE_ID',      th: 'border-r w-20',                      search: 2, td: 'border-r', q: 'pre' },
                 { id: 'WAREHOUSE_NAME',    label: 'Tên kho',         sort: 'WAREHOUSE_NAME',    th: 'border-r w-36 px-3', align: 'left',  search: 2, td: 'border-r px-3 text-left' },
-                { id: 'ITEM_ID',           label: 'Mã hàng',         sort: 'ITEM_ID',           th: 'border-r w-24',                      search: 2, td: 'border-r' },
+                { id: 'ITEM_ID',           label: 'Mã hàng',         sort: 'ITEM_ID',           th: 'border-r w-24',                      search: 2, td: 'border-r', q: 'pre' },
                 { id: 'ITEM_NAME',         label: 'Tên hàng',        sort: 'ITEM_NAME',         th: 'border-r w-44 px-3', align: 'left',  search: 2, td: 'border-r px-3 text-left' },
-                { id: 'UNIT_ID',           label: 'ĐVT',             sort: 'UNIT_ID',           th: 'border-r w-16',                      search: 1, td: 'border-r' },
-                { id: 'QUANTITY',          label: 'Số lượng',        sort: 'QUANTITY',          th: 'border-r w-24 px-2', align: 'right',            td: 'border-r px-2 text-right font-mono', v: r => fmtQty2(r.QUANTITY) },
-                { id: 'QUANTITY_ADJ',      label: 'SL nguyên',       sort: 'QUANTITY_ADJ',      th: 'border-r w-24 px-2', align: 'right',            td: 'border-r px-2 text-right font-mono', v: r => fmtQty2(r.QUANTITY_ADJ) },
-                { id: 'UNIT_ID_ADJ',       label: 'ĐVT nguyên',      sort: 'UNIT_ID_ADJ',       th: 'border-r w-20',                      search: 1, td: 'border-r' },
-                { id: 'USER_ID',           label: 'Người thực hiện', sort: 'USER_ID',           th: 'border-r w-28',                      search: 2, td: 'border-r' },
-                { id: 'ACCOUNT_ID',        label: 'Tài khoản',       sort: 'ACCOUNT_ID',        th: 'border-r w-20',                      search: 2, td: 'border-r' },
+                { id: 'UNIT_ID',           label: 'ĐVT',             sort: 'UNIT_ID',           th: 'border-r w-16',                      search: 1, td: 'border-r', q: 'pre' },
+                { id: 'QUANTITY',          label: 'Số lượng',        sort: 'QUANTITY',          th: 'border-r w-24 px-2', align: 'right', search: 2, td: 'border-r px-2 text-right font-mono', v: r => fmtQty2(r.QUANTITY), q: 'num' },
+                { id: 'QUANTITY_ADJ',      label: 'SL nguyên',       sort: 'QUANTITY_ADJ',      th: 'border-r w-24 px-2', align: 'right', search: 2, td: 'border-r px-2 text-right font-mono', v: r => fmtQty2(r.QUANTITY_ADJ), q: 'num' },
+                { id: 'UNIT_ID_ADJ',       label: 'ĐVT nguyên',      sort: 'UNIT_ID_ADJ',       th: 'border-r w-20',                      search: 1, td: 'border-r', q: 'pre' },
+                { id: 'USER_ID',           label: 'Người thực hiện', sort: 'USER_ID',           th: 'border-r w-28',                      search: 2, td: 'border-r', q: 'pre' },
+                { id: 'ACCOUNT_ID',        label: 'Tài khoản',       sort: 'ACCOUNT_ID',        th: 'border-r w-20',                      search: 2, td: 'border-r', q: 'pre' },
                 { id: 'IS_APPROVED',       label: 'Đã duyệt',        sort: 'IS_APPROVED',       th: 'border-r w-24', search: 1, sv: r => r.IS_APPROVED ? 'Đã duyệt' : 'Chưa duyệt', sh: 'Gõ "đã" hoặc "chưa"',
                   td: (r, k) => <td key={k} className={r.IS_APPROVED ? 'border-r text-emerald-600 font-black' : 'border-r text-amber-600 font-black'}>{r.IS_APPROVED ? 'Đã duyệt' : 'Chưa duyệt'}</td> },
             ],
@@ -1375,7 +1380,7 @@ window.showConnectionLost = function() {
         const PR_DETAIL_GRID = {
             numTh: 'border-r w-12', numTd: 'border-r text-slate-300 font-mono', tr: 'border-b hover:bg-indigo-50/30 text-center',
             cols: [
-                { id: 'PR_DETAIL_ID',         label: 'Mã đối tượng',    sort: 'PR_DETAIL_ID',         th: 'border-r w-32 px-3', align: 'left', search: 2, td: 'border-r px-3 text-left font-mono font-medium text-brand' },
+                { id: 'PR_DETAIL_ID',         label: 'Mã đối tượng',    sort: 'PR_DETAIL_ID',         th: 'border-r w-32 px-3', align: 'left', search: 2, td: 'border-r px-3 text-left font-mono font-medium text-brand', q: 'pre' },
                 { id: 'PR_DETAIL_NAME',       label: 'Tên đối tượng',   sort: 'PR_DETAIL_NAME',       th: 'border-r w-64 px-3', align: 'left', search: 2, td: 'border-r px-3 text-left font-medium' },
                 { id: 'PR_DETAIL_CLASS_NAME', label: 'Nhóm đối tượng',  sort: 'PR_DETAIL_CLASS_NAME', th: 'border-r w-36 px-3', align: 'left', search: 2,
                   td: (r, k) => (
@@ -1387,17 +1392,17 @@ window.showConnectionLost = function() {
                         ) : ''}
                     </td>
                   ) },
-                { id: 'TAX_FILE_NUMBER',      label: 'Mã số thuế',      sort: 'TAX_FILE_NUMBER',      th: 'border-r w-32 px-2',                search: 2, td: 'border-r px-2 font-mono' },
-                { id: 'PHONE',                label: 'Điện thoại',      sort: 'PHONE',                th: 'border-r w-28 px-2',                search: 2, td: 'border-r px-2 font-mono' },
+                { id: 'TAX_FILE_NUMBER',      label: 'Mã số thuế',      sort: 'TAX_FILE_NUMBER',      th: 'border-r w-32 px-2',                search: 2, td: 'border-r px-2 font-mono', q: 'pre' },
+                { id: 'PHONE',                label: 'Điện thoại',      sort: 'PHONE',                th: 'border-r w-28 px-2',                search: 2, td: 'border-r px-2 font-mono', q: 'pre' },
                 { id: 'EMAIL',                label: 'Email',           sort: 'EMAIL',                th: 'border-r w-44 px-3', align: 'left', search: 2, td: 'border-r px-3 text-left' },
                 { id: 'ADDRESS',              label: 'Địa chỉ',         sort: 'ADDRESS',              th: 'border-r w-72 px-3', align: 'left', search: 2,
                   td: (r, k) => <td key={k} className="border-r px-3 text-left truncate max-w-[280px]" title={r.ADDRESS}>{r.ADDRESS}</td> },
-                { id: 'PR_ACCOUNT_ID',        label: 'TK ngầm định',    sort: 'PR_ACCOUNT_ID',        th: 'border-r w-24',                     search: 2, td: 'border-r font-mono' },
+                { id: 'PR_ACCOUNT_ID',        label: 'TK ngầm định',    sort: 'PR_ACCOUNT_ID',        th: 'border-r w-24',                     search: 2, td: 'border-r font-mono', q: 'pre' },
                 { id: 'BANK_NAME',            label: 'Ngân hàng',       sort: 'BANK_NAME',            th: 'border-r w-44 px-3', align: 'left', search: 2, td: 'border-r px-3 text-left' },
-                { id: 'BANK_ACCOUNT',         label: 'Số tài khoản NH', sort: 'BANK_ACCOUNT',         th: 'border-r w-36 px-2',                search: 2, td: 'border-r px-2 font-mono' },
+                { id: 'BANK_ACCOUNT',         label: 'Số tài khoản NH', sort: 'BANK_ACCOUNT',         th: 'border-r w-36 px-2',                search: 2, td: 'border-r px-2 font-mono', q: 'pre' },
                 { id: 'BANK_BRANCH',          label: 'Chi nhánh NH',    sort: 'BANK_BRANCH',          th: 'border-r w-40 px-3', align: 'left', search: 2, td: 'border-r px-3 text-left' },
                 { id: 'BANK_ACCOUNT_HOLDER',  label: 'Chủ tài khoản',   sort: 'BANK_ACCOUNT_HOLDER',  th: 'border-r w-44 px-3', align: 'left', search: 2, td: 'border-r px-3 text-left' },
-                { id: 'PR_DETAIL_TYPE_ID',    label: 'Loại đối tượng',  sort: 'PR_DETAIL_TYPE_ID',    th: 'border-r w-40 px-2', align: 'left', search: 2, exp: ['PR_DETAIL_TYPE_ID', 'PR_DETAIL_TYPE_NAME'],
+                { id: 'PR_DETAIL_TYPE_ID',    label: 'Loại đối tượng',  sort: 'PR_DETAIL_TYPE_ID',    th: 'border-r w-40 px-2', align: 'left', search: 2, exp: ['PR_DETAIL_TYPE_ID', 'PR_DETAIL_TYPE_NAME'], q: 'pre',
                   td: (r, k) => (
                     <td key={k} className="border-r px-2 text-left whitespace-nowrap">
                         {r.PR_DETAIL_TYPE_ID ? (
@@ -1418,16 +1423,27 @@ window.showConnectionLost = function() {
                         )}
                     </td>
                   ) },
-                { id: 'USER_ID',              label: 'Người tạo',       sort: 'USER_ID',              th: 'border-r w-24',                     search: 2, td: 'border-r text-ink-3' },
+                { id: 'USER_ID',              label: 'Người tạo',       sort: 'USER_ID',              th: 'border-r w-24',                     search: 2, td: 'border-r text-ink-3', q: 'pre' },
             ],
         };
 
         [LEDGER_GRID, SALE_GRID, INCOME_ALLOC_GRID, VOUCHER_GRID, PURCHASE_GRID, WAREHOUSE_GRID, WAREHOUSE_BALANCE_GRID, PR_DETAIL_GRID]
             .forEach(g => { g.byId = {}; g.cols.forEach(c => { g.byId[c.id] = c; }); });
-        // Lọc theo cột trên trang đang tải: chữ thường của giá trị ô (cột có `sv` → chữ đang hiện, vd "Trả", "Chưa duyệt")
-        const gridSearchText = (grid, k, row) => {
+        // Lọc theo cột trên trang đang tải (q = chữ thường đã trim). Cột số (q: 'num'): số ĐANG HIỆN bỏ dấu phẩy/% phải BẮT ĐẦU
+        // bằng chữ số đã gõ (145 → 145; 1,450; 145,000 — không ra 2,145; số âm phải gõ "-"). Cột mã (q: 'pre'): bắt đầu bằng.
+        // Cột khác: chứa. Cột có `sv` so theo chữ đang hiện (vd "Trả", "Chưa duyệt"). Server lọc cùng luật (n_<ID>, s_* LIKE 'x%').
+        const numKey = v => String(v == null ? '' : v).replace(/[,\s%]/g, '').toLowerCase();
+        const gridMatch = (grid, k, row, q) => {
             const c = grid.byId[k];
-            return String((c && c.sv ? c.sv(row) : row[k]) || '').toLowerCase();
+            if (c && c.q === 'num') return numKey(c.v ? c.v(row) : row[k]).startsWith(numKey(q));
+            const t = String((c && c.sv ? c.sv(row) : row[k]) || '').toLowerCase();
+            return c && c.q === 'pre' ? t.trim().startsWith(q) : t.includes(q);
+        };
+        // Tham số lọc SQL cho cột số có search 2: n_<ID> = chữ số đã gõ (bỏ dấu phẩy/%)
+        const gridNumParams = (grid, cs) => {
+            const o = {};
+            grid.cols.forEach(c => { if (c.q === 'num' && c.search === 2) { const v = numKey(cs[c.id]); if (v) o['n_' + c.id] = v; } });
+            return o;
         };
 
         // Debounce hook — trì hoãn callback cho đến khi người dùng ngừng gõ
@@ -1634,7 +1650,9 @@ window.showConnectionLost = function() {
             );
         };
 
-        const PremiumDropdown = ({ label, items, selectedItems, onSelect, isActive, onToggle, align = "left" }) => {
+        // codePrefix (ô tài khoản, v1.10.2): mã BẮT ĐẦU bằng chữ đã gõ (111 → 111, 1111 — không ra 3111); gõ toàn chữ số thì
+        // chỉ so mã, gõ có chữ cái thì tìm thêm tên kiểu "chứa". Ô khác giữ: mã hoặc tên chứa chữ đã gõ.
+        const PremiumDropdown = ({ label, items, selectedItems, onSelect, isActive, onToggle, align = "left", codePrefix = false }) => {
             const dropdownRef = useRef(null);
             const [search, setSearch] = useState("");
             useEffect(() => {
@@ -1643,7 +1661,10 @@ window.showConnectionLost = function() {
                 return () => document.removeEventListener("mousedown", handleClickOutside);
             }, [isActive]);
             const q = search.toLowerCase();
-            const filtered = (items || []).filter(i => (i.name || '').toLowerCase().includes(q) || (i.id || '').toLowerCase().includes(q));
+            const qNum = /^[\d.\s]+$/.test(q);
+            const filtered = (items || []).filter(i => codePrefix
+                ? (i.id || '').toLowerCase().trim().startsWith(q.trim()) || (!qNum && (i.name || '').toLowerCase().includes(q))
+                : (i.name || '').toLowerCase().includes(q) || (i.id || '').toLowerCase().includes(q));
             // Danh mục có thể tới hàng nghìn mục → chỉ render tối đa RENDER_CAP để khỏi lag.
             // Tìm kiếm vẫn lọc trên TOÀN BỘ danh sách; gõ thêm để thu hẹp.
             const RENDER_CAP = 200;
@@ -2869,7 +2890,7 @@ window.showConnectionLost = function() {
                             </div>
                             <div className="ds-slot"><PremiumDropdown label="Đơn vị" items={meta.orgs} selectedItems={filters.org_ids} onSelect={id => onToggleFilter('org_ids', id)} isActive={activeDropdown === 'Đơn vị'} onToggle={setActiveDropdown} /></div>
                             {(reportType === 'BC008' || reportType === 'BC011' || reportType === 'BC012' || reportType === 'BC013') ? (
-                                <div className="ds-slot"><PremiumDropdown label="Tài khoản" items={meta.accounts} selectedItems={filters.acc_ids} onSelect={id => onToggleFilter('acc_ids', id)} isActive={activeDropdown === 'Tài khoản'} onToggle={setActiveDropdown} /></div>
+                                <div className="ds-slot"><PremiumDropdown label="Tài khoản" items={meta.accounts} codePrefix selectedItems={filters.acc_ids} onSelect={id => onToggleFilter('acc_ids', id)} isActive={activeDropdown === 'Tài khoản'} onToggle={setActiveDropdown} /></div>
                             ) : null}
                             {reportType === 'BC007' && (
                                 <div className="ds-seg">
@@ -2888,7 +2909,7 @@ window.showConnectionLost = function() {
                             ) : null}
                             {reportType === 'BC012' ? (
                                 <>
-                                <div className="ds-slot"><PremiumDropdown label="TK đối ứng" items={meta.accounts} selectedItems={filters.contra_acc_ids} onSelect={id => onToggleFilter('contra_acc_ids', id)} isActive={activeDropdown === 'TK đối ứng'} onToggle={setActiveDropdown} /></div>
+                                <div className="ds-slot"><PremiumDropdown label="TK đối ứng" items={meta.accounts} codePrefix selectedItems={filters.contra_acc_ids} onSelect={id => onToggleFilter('contra_acc_ids', id)} isActive={activeDropdown === 'TK đối ứng'} onToggle={setActiveDropdown} /></div>
                                 {/* tran_no là CHUỖI (server lọc TRAN_NO LIKE %...%). Trước 27/09/2026 gọi nhầm onToggleFilter — hàm bật/tắt
                                     phần tử MẢNG — gõ "PC1" thành ['P','PC','P,PC1'] → gửi tran_no=P,PC,P,PC1. */}
                                 <input value={filters.tran_no || ''} onChange={e => { const v = e.target.value; setFilters(p => ({ ...p, tran_no: v })); }} placeholder="Số chứng từ" className="ds-input w-36" />
@@ -4088,6 +4109,7 @@ window.showConnectionLost = function() {
                 };
                 const cleanSearch = {};
                 Object.keys(searchParams).forEach(k => { if(searchParams[k]) cleanSearch[k] = searchParams[k]; });
+                Object.assign(cleanSearch, gridNumParams(LEDGER_GRID, cs));
 
                 const isGrouped = groupByLedger.length > 0;
                 const isSearched = Object.keys(cleanSearch).length > 0;
@@ -4168,11 +4190,7 @@ window.showConnectionLost = function() {
                 const searchKeys = Object.keys(purchaseColSearch).filter(k => (purchaseColSearch[k] || '').trim() !== '');
                 if (searchKeys.length > 0) {
                     filteredData = filteredData.filter(row => {
-                        return searchKeys.every(k => {
-                            const val = String(row[k] || '').toLowerCase();
-                            const query = purchaseColSearch[k].trim().toLowerCase();
-                            return val.includes(query);
-                        });
+                        return searchKeys.every(k => gridMatch(PURCHASE_GRID, k, row, purchaseColSearch[k].trim().toLowerCase()));
                     });
                 }
                 return buildGroupedData(filteredData, groupByPurchase, ['TOTAL_AMOUNT']);
@@ -4205,11 +4223,7 @@ window.showConnectionLost = function() {
                 const searchKeys = Object.keys(saleColSearch).filter(k => (saleColSearch[k] || '').trim() !== '');
                 if (searchKeys.length > 0) {
                     filteredData = filteredData.filter(row => {
-                        return searchKeys.every(k => {
-                            const val = gridSearchText(SALE_GRID, k, row);
-                            const query = saleColSearch[k].trim().toLowerCase();
-                            return val.includes(query);
-                        });
+                        return searchKeys.every(k => gridMatch(SALE_GRID, k, row, saleColSearch[k].trim().toLowerCase()));
                     });
                 }
                 return buildGroupedData(filteredData, groupBySale, ['TOTAL_AMOUNT']);
@@ -4271,6 +4285,7 @@ window.showConnectionLost = function() {
                 if (retQ) sp.s_return = 'trả'.includes(retQ) ? '1' : 'none';
                 if (saleFilters.tran_no_search?.trim()) sp.tran_no = saleFilters.tran_no_search.trim();
                 const clean = {};
+                Object.assign(sp, gridNumParams(SALE_GRID, cs));
                 Object.keys(sp).forEach(k => { if(sp[k]) clean[k] = sp[k]; });
                 const query = new URLSearchParams({ ...filters, ...clean, ...extra, page: targetPage, page_size: targetPageSize });
                 Object.keys(filters).forEach(k => { if(Array.isArray(filters[k])) query.set(k, filters[k].join(',')); });
@@ -4331,8 +4346,7 @@ window.showConnectionLost = function() {
             const incomeAllocFlatData = useMemo(() => {
                 const searchKeys = Object.keys(incomeAllocColSearch).filter(k => (incomeAllocColSearch[k] || '').trim() !== '');
                 if (searchKeys.length === 0) return incomeAllocData;
-                return incomeAllocData.filter(row => searchKeys.every(k =>
-                    gridSearchText(INCOME_ALLOC_GRID, k, row).includes(incomeAllocColSearch[k].trim().toLowerCase())));
+                return incomeAllocData.filter(row => searchKeys.every(k => gridMatch(INCOME_ALLOC_GRID, k, row, incomeAllocColSearch[k].trim().toLowerCase())));
             }, [incomeAllocData, incomeAllocColSearch]);
 
             const toggleIncomeAllocFilter = (key, id) => {
@@ -4413,10 +4427,7 @@ window.showConnectionLost = function() {
                 let filteredData = voucherData;
                 const searchKeys = Object.keys(voucherColSearch).filter(k => (voucherColSearch[k] || '').trim() !== '');
                 if (searchKeys.length > 0) {
-                    filteredData = filteredData.filter(row => searchKeys.every(k => {
-                        const val = String(row[k] || '').toLowerCase();
-                        return val.includes(voucherColSearch[k].trim().toLowerCase());
-                    }));
+                    filteredData = filteredData.filter(row => searchKeys.every(k => gridMatch(VOUCHER_GRID, k, row, voucherColSearch[k].trim().toLowerCase())));
                 }
                 return buildGroupedData(filteredData, groupByVoucher, ['AMOUNT']);
                 // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -4457,6 +4468,7 @@ window.showConnectionLost = function() {
                 };
                 if (voucherFilters.tran_no_search?.trim()) sp.tran_no = voucherFilters.tran_no_search.trim();
                 const clean = {};
+                Object.assign(sp, gridNumParams(VOUCHER_GRID, cs));
                 Object.keys(sp).forEach(k => { if(sp[k]) clean[k] = sp[k]; });
                 const query = new URLSearchParams({ ...filters, ...clean, ...extra, page: targetPage, page_size: targetPageSize });
                 Object.keys(filters).forEach(k => { if(Array.isArray(filters[k])) query.set(k, filters[k].join(',')); });
@@ -4515,11 +4527,7 @@ window.showConnectionLost = function() {
                 const searchKeys = Object.keys(warehouseColSearch).filter(k => (warehouseColSearch[k] || '').trim() !== '');
                 if (searchKeys.length > 0) {
                     filteredData = filteredData.filter(row => {
-                        return searchKeys.every(k => {
-                            const val = String(row[k] || '').toLowerCase();
-                            const query = warehouseColSearch[k].trim().toLowerCase();
-                            return val.includes(query);
-                        });
+                        return searchKeys.every(k => gridMatch(WAREHOUSE_GRID, k, row, warehouseColSearch[k].trim().toLowerCase()));
                     });
                 }
                 return buildGroupedData(filteredData, groupByWarehouse, ['AMOUNT']);
@@ -4582,6 +4590,7 @@ window.showConnectionLost = function() {
                 // Filter bổ sung: số CT (text), kho nhập (multi)
                 if (purchaseFilters.tran_no_search?.trim()) sp.tran_no = purchaseFilters.tran_no_search.trim();
                 const clean = {};
+                Object.assign(sp, gridNumParams(PURCHASE_GRID, cs));
                 Object.keys(sp).forEach(k => { if(sp[k]) clean[k] = sp[k]; });
                 const query = new URLSearchParams({ ...filters, ...clean, ...extra, page: targetPage, page_size: targetPageSize });
                 Object.keys(filters).forEach(k => { if(Array.isArray(filters[k])) query.set(k, filters[k].join(',')); });
@@ -4650,6 +4659,7 @@ window.showConnectionLost = function() {
                     s_unit_id_wh:  take('s_unit_id_wh',  cs.UNIT_ID_WH),
                 };
                 if (purchaseFilters.tran_no_search?.trim()) sp.tran_no = purchaseFilters.tran_no_search.trim();
+                Object.assign(sp, gridNumParams(PURCHASE_GRID, cs));
                 Object.keys(sp).forEach(k => { if(sp[k]) query.set(k, sp[k]); });
                 Object.keys(extras).forEach(k => { query.set(k, extras[k]); });
                 
@@ -4726,6 +4736,7 @@ window.showConnectionLost = function() {
                 if (warehouseFilters.tran_no_search?.trim()) sp.tran_no = warehouseFilters.tran_no_search.trim();
                 if (warehouseFilters.issue_receive)          sp.issue_receive = warehouseFilters.issue_receive;
                 const clean = {};
+                Object.assign(sp, gridNumParams(WAREHOUSE_GRID, cs));
                 Object.keys(sp).forEach(k => { if(sp[k]) clean[k] = sp[k]; });
                 const query = new URLSearchParams({ ...filters, ...clean, ...extra, page: targetPage, page_size: targetPageSize });
                 Object.keys(filters).forEach(k => { if(Array.isArray(filters[k])) query.set(k, filters[k].join(',')); });
@@ -4795,6 +4806,7 @@ window.showConnectionLost = function() {
                 };
                 if (warehouseFilters.tran_no_search?.trim()) sp.tran_no = warehouseFilters.tran_no_search.trim();
                 if (warehouseFilters.issue_receive)          sp.issue_receive = warehouseFilters.issue_receive;
+                Object.assign(sp, gridNumParams(WAREHOUSE_GRID, cs));
                 Object.keys(sp).forEach(k => { if(sp[k]) query.set(k, sp[k]); });
                 Object.keys(extras).forEach(k => { query.set(k, extras[k]); });
 
@@ -4848,9 +4860,7 @@ window.showConnectionLost = function() {
                 const searchKeys = Object.keys(warehouseBalanceColSearch).filter(k => (warehouseBalanceColSearch[k] || '').trim() !== '');
                 if (searchKeys.length === 0) return warehouseBalanceData;
                 return warehouseBalanceData.filter(row => searchKeys.every(k => {
-                    const val = gridSearchText(WAREHOUSE_BALANCE_GRID, k, row);
-                    const query = warehouseBalanceColSearch[k].trim().toLowerCase();
-                    return val.includes(query);
+                    return gridMatch(WAREHOUSE_BALANCE_GRID, k, row, warehouseBalanceColSearch[k].trim().toLowerCase());
                 }));
             }, [warehouseBalanceData, warehouseBalanceColSearch]);
 
@@ -4879,6 +4889,7 @@ window.showConnectionLost = function() {
                     s_user_id:   take(cs.USER_ID),
                     s_acc_id:    take(cs.ACCOUNT_ID),
                 };
+                Object.assign(sp, gridNumParams(WAREHOUSE_BALANCE_GRID, cs));
                 Object.keys(sp).forEach(k => { if (sp[k]) query.set(k, sp[k]); });
                 if (warehouseBalanceSort.field) { query.set('order_by', warehouseBalanceSort.field); query.set('order_dir', warehouseBalanceSort.dir); }
                 Object.keys(extra).forEach(k => query.set(k, extra[k]));
@@ -4954,9 +4965,7 @@ window.showConnectionLost = function() {
                 const searchKeys = Object.keys(prDetailColSearch).filter(k => (prDetailColSearch[k] || '').trim() !== '');
                 if (searchKeys.length === 0) return prDetailData;
                 return prDetailData.filter(row => searchKeys.every(k => {
-                    const val = gridSearchText(PR_DETAIL_GRID, k, row);
-                    const query = prDetailColSearch[k].trim().toLowerCase();
-                    return val.includes(query);
+                    return gridMatch(PR_DETAIL_GRID, k, row, prDetailColSearch[k].trim().toLowerCase());
                 }));
             }, [prDetailData, prDetailColSearch]);
 
@@ -5417,6 +5426,7 @@ window.showConnectionLost = function() {
                         s_prod_name:cs.PRODUCT_NAME
                     };
                     Object.keys(map).forEach(k => { if((map[k]||'').trim()) query.set(k, map[k].trim()); });
+                    Object.entries(gridNumParams(LEDGER_GRID, cs)).forEach(([k, v]) => query.set(k, v));
                     if (ledgerSort.field) { query.set('order_by', ledgerSort.field); query.set('order_dir', ledgerSort.dir); }
                     return query;
                 }
@@ -5795,11 +5805,7 @@ window.showConnectionLost = function() {
                 const searchKeys = Object.keys(colSearch).filter(k => (colSearch[k] || '').trim() !== '');
                 if (searchKeys.length > 0) {
                     filteredData = filteredData.filter(row => {
-                        return searchKeys.every(k => {
-                            const val = String(row[k] || '').toLowerCase();
-                            const query = colSearch[k].trim().toLowerCase();
-                            return val.includes(query);
-                        });
+                        return searchKeys.every(k => gridMatch(LEDGER_GRID, k, row, colSearch[k].trim().toLowerCase()));
                     });
                 }
                 return buildGroupedData(filteredData, groupByLedger, ['DEBIT', 'CREDIT']);
@@ -5951,7 +5957,7 @@ window.showConnectionLost = function() {
                                             { key: 'filters.org_ids', label: 'Đơn vị', active: filters.org_ids.length > 0, clear: () => setFilters(p => ({ ...p, org_ids: [] })),
                                               node: <PremiumDropdown label="Đơn vị" items={meta.orgs} selectedItems={filters.org_ids} onSelect={id => toggleFilter('org_ids', id)} isActive={activeDropdown === 'Đơn vị'} onToggle={setActiveDropdown} align="right" /> },
                                             { key: 'filters.acc_ids', label: 'Tài khoản', active: filters.acc_ids.length > 0, clear: () => setFilters(p => ({ ...p, acc_ids: [] })),
-                                              node: <PremiumDropdown label="Tài khoản" items={meta.accounts} selectedItems={filters.acc_ids} onSelect={id => toggleFilter('acc_ids', id)} isActive={activeDropdown === 'Tài khoản'} onToggle={setActiveDropdown} /> },
+                                              node: <PremiumDropdown label="Tài khoản" items={meta.accounts} codePrefix selectedItems={filters.acc_ids} onSelect={id => toggleFilter('acc_ids', id)} isActive={activeDropdown === 'Tài khoản'} onToggle={setActiveDropdown} /> },
                                             { key: 'filters.pr_detail_ids', label: 'Đối tượng', active: filters.pr_detail_ids.length > 0, clear: () => setFilters(p => ({ ...p, pr_detail_ids: [] })),
                                               node: <PremiumDropdown label="Đối tượng" items={meta.pr_details} selectedItems={filters.pr_detail_ids} onSelect={id => toggleFilter('pr_detail_ids', id)} isActive={activeDropdown === 'Đối tượng'} onToggle={setActiveDropdown} /> },
                                             { key: 'filters.job_ids', label: 'Công việc', active: filters.job_ids.length > 0, clear: () => setFilters(p => ({ ...p, job_ids: [] })),
@@ -6252,7 +6258,7 @@ window.showConnectionLost = function() {
                                             { key: 'filters.pr_detail_ids', label: 'Đối tượng', active: filters.pr_detail_ids.length > 0, clear: () => setFilters(p => ({ ...p, pr_detail_ids: [] })),
                                               node: <PremiumDropdown label="Đối tượng" items={meta.pr_details} selectedItems={filters.pr_detail_ids} onSelect={id => toggleFilter('pr_detail_ids', id)} isActive={activeDropdown === 'Đối tượng'} onToggle={setActiveDropdown} /> },
                                             { key: 'incomeAllocFilters.acc_des_ids', label: 'TK đích', active: incomeAllocFilters.acc_des_ids.length > 0, clear: () => setIncomeAllocFilters(p => ({ ...p, acc_des_ids: [] })),
-                                              node: <PremiumDropdown label="TK đích" items={meta.accounts} selectedItems={incomeAllocFilters.acc_des_ids} onSelect={id => toggleIncomeAllocFilter('acc_des_ids', id)} isActive={activeDropdown === 'TK đích'} onToggle={setActiveDropdown} align="right" /> },
+                                              node: <PremiumDropdown label="TK đích" items={meta.accounts} codePrefix selectedItems={incomeAllocFilters.acc_des_ids} onSelect={id => toggleIncomeAllocFilter('acc_des_ids', id)} isActive={activeDropdown === 'TK đích'} onToggle={setActiveDropdown} align="right" /> },
                                             { key: 'filters.tran_ids', label: 'Loại CT', active: filters.tran_ids.length > 0, clear: () => setFilters(p => ({ ...p, tran_ids: [] })),
                                               node: <PremiumDropdown label="Loại CT" items={meta.tran_ids} selectedItems={filters.tran_ids} onSelect={id => toggleFilter('tran_ids', id)} isActive={activeDropdown === 'Loại CT'} onToggle={setActiveDropdown} align="right" /> },
                                         ]} />
@@ -6348,7 +6354,7 @@ window.showConnectionLost = function() {
                                             { key: 'filters.tran_ids', label: 'Loại CT', active: filters.tran_ids.length > 0, clear: () => setFilters(p => ({ ...p, tran_ids: [] })),
                                               node: <PremiumDropdown label="Loại CT" items={meta.tran_ids} selectedItems={filters.tran_ids} onSelect={id => toggleFilter('tran_ids', id)} isActive={activeDropdown === 'Loại CT'} onToggle={setActiveDropdown} /> },
                                             { key: 'filters.acc_ids', label: 'Tài khoản', active: filters.acc_ids.length > 0, clear: () => setFilters(p => ({ ...p, acc_ids: [] })),
-                                              node: <PremiumDropdown label="Tài khoản" items={meta.accounts} selectedItems={filters.acc_ids} onSelect={id => toggleFilter('acc_ids', id)} isActive={activeDropdown === 'Tài khoản'} onToggle={setActiveDropdown} /> },
+                                              node: <PremiumDropdown label="Tài khoản" items={meta.accounts} codePrefix selectedItems={filters.acc_ids} onSelect={id => toggleFilter('acc_ids', id)} isActive={activeDropdown === 'Tài khoản'} onToggle={setActiveDropdown} /> },
                                             { key: 'filters.pr_detail_ids', label: 'Đối tượng', active: filters.pr_detail_ids.length > 0, clear: () => setFilters(p => ({ ...p, pr_detail_ids: [] })),
                                               node: <PremiumDropdown label="Đối tượng" items={meta.pr_details} selectedItems={filters.pr_detail_ids} onSelect={id => toggleFilter('pr_detail_ids', id)} isActive={activeDropdown === 'Đối tượng'} onToggle={setActiveDropdown} /> },
                                             { key: 'filters.expense_ids', label: 'Mục chi phí', active: filters.expense_ids.length > 0, clear: () => setFilters(p => ({ ...p, expense_ids: [] })),
@@ -6771,7 +6777,7 @@ window.showConnectionLost = function() {
                                             { key: 'filters.item_ids', label: 'Hàng hóa', active: filters.item_ids.length > 0, clear: () => setFilters(p => ({ ...p, item_ids: [] })),
                                               node: <PremiumDropdown label="Hàng hóa" items={meta.items} selectedItems={filters.item_ids} onSelect={id => toggleFilter('item_ids', id)} isActive={activeDropdown === 'Hàng hóa'} onToggle={setActiveDropdown} /> },
                                             { key: 'filters.acc_ids', label: 'Tài khoản', active: filters.acc_ids.length > 0, clear: () => setFilters(p => ({ ...p, acc_ids: [] })),
-                                              node: <PremiumDropdown label="Tài khoản" items={meta.accounts} selectedItems={filters.acc_ids} onSelect={id => toggleFilter('acc_ids', id)} isActive={activeDropdown === 'Tài khoản'} onToggle={setActiveDropdown} align="right" /> },
+                                              node: <PremiumDropdown label="Tài khoản" items={meta.accounts} codePrefix selectedItems={filters.acc_ids} onSelect={id => toggleFilter('acc_ids', id)} isActive={activeDropdown === 'Tài khoản'} onToggle={setActiveDropdown} align="right" /> },
                                         ]} />
                                         <div className="ml-auto flex items-center gap-2">
                                             <PageSizeDropdown

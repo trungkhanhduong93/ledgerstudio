@@ -2,7 +2,7 @@
 
 > Toàn bộ những gì đã làm với **LedgerStudio**, và **vì sao**. Đọc file này trước khi sửa tiếp.
 > Kiến trúc và ma trận báo cáo: [CLAUDE.md](CLAUDE.md).
-> Phiên gần nhất: **28/09/2026** · EXE build mới nhất: **iPOS_Ledger_Studio v1.10.1** (đã phát hành 28/09, mục 25) — tên hiển thị DataStudio · v1.9.6–1.9.9 do Gemini làm, ghi ở GEMINI.md
+> Phiên gần nhất: **28/09/2026** · EXE build mới nhất: **iPOS_Ledger_Studio v1.10.2** (mục 26) — tên hiển thị DataStudio · v1.9.6–1.9.9 do Gemini làm, ghi ở GEMINI.md
 
 ---
 
@@ -926,3 +926,32 @@ lại). API công khai trả `v1.10.1`, digest exe = SHA-256 file build `ff275d1
 
 **Test cập nhật thật:** EXE release v1.10.0 (SHA = asset) ở thư mục tạm → hộp bắt buộc cập nhật "v1.10.0 → v1.10.1" → bấm → 1.10.1
 lên sau 4,7 s, thư mục còn 1 file, SHA = asset, bản mới `has_update=False`. Đã tắt EXE test + 9 tiến trình Chrome.
+
+## 26. v1.10.2: ô lọc cột số + lọc "bắt đầu bằng" cho cột số, cột mã/tài khoản, ô Tài khoản trên thanh lọc *(28/09/2026)*
+
+**Yêu cầu Trum:** cho lọc cả số lượng, tỷ lệ %, tiền; gõ 145 thì ra các số BẮT ĐẦU bằng 145, không lấy 145 nằm giữa; sửa luôn logic đó
+ở ô bộ lọc tài khoản trên thanh lọc và dòng lọc ở các cột. Trum chốt: sổ cái/bán hàng/tiền/nhập kho/kho/tồn kho bấm Truy vấn lọc SQL
+toàn bộ (DT chờ phân bổ chỉ lọc trang); so theo số đang hiện (tiền làm tròn tới đồng); số âm gõ `-`; ô "Số tiền" tab tiền đổi sang
+bắt đầu bằng; dòng lọc cột: **mọi cột mã + tài khoản** bắt đầu bằng (cột tên giữ "chứa"); thanh lọc: **chỉ ô Tài khoản**; phát luôn.
+
+**Đã sửa:**
+- `index.html`: `q: 'num'` 32 cột số (có ô lọc), `q: 'pre'` 101 cột mã; `gridMatch` thay `gridSearchText` ở 8 bộ lọc; `gridNumParams` gửi
+  `n_<ID>` (sổ cái: tải + xuất; bán hàng, tiền, tồn kho: `build…Query`; nhập kho, kho: CẢ `build…Query` lẫn `load…Data` — 2 bản danh sách
+  tham số, so 21/21 khoá trùng nhau); tooltip thêm luật so; `PremiumDropdown codePrefix` cho 6 ô tài khoản.
+- `server.py`: `_num_prefix_where` + `LEDGER/SALE/PURCHASE/WAREHOUSE/WAREHOUSE_BALANCE/VOUCHER_NUM_SEARCH` gắn cuối 6 hàm `_build_…_where`;
+  bán hàng: Doanh thu 511 / trước thuế là cột phụ → DB không có thì 1=0. `import re` lên đầu file.
+- **Lỗi bắt được trước khi build:** `_NUM_PREFIX_RE = re.compile(...)` chạy lúc nạp module (dòng 699) mà `import re` nằm ở dòng 6487 →
+  `NameError`, EXE sẽ sập ngay khi mở. `ast.parse` đạt nên không thấy; lộ ra khi bài kiểm SQL `import server`. CLAUDE.md Bước 1 đã ghi.
+
+**Verify:**
+
+| Mức | Nội dung | Kết quả |
+|---|---|---|
+| M1 | `ast.parse` + `import server` thật · `webbuild/build.js` | đạt; app.js 466.564 → 470.159 byte |
+| M3 giao diện | `num.js` (API giả): cột số gõ chuỗi có dòng khớp đầu VÀ dòng chứa ở giữa → chỉ ra dòng bắt đầu bằng (gõ kèm dấu phẩy), gửi `n_<ID>` bỏ dấu phẩy, thuế % gõ `10`/`10%`, gõ chữ vào cột số → 0 dòng, cột mã `id-12` → 0 còn `item_id-12` → 11, cột tên vẫn "chứa", xuất file mang `n_`, ô Tài khoản: 111 → 111/1111/1112 (không 3111), 511 → không 1511/3511, gõ chữ vẫn tìm tên, DT chờ phân bổ không gửi `n_` | **52/52** |
+| M3 giao diện | `search.js`: mọi cột có ô (trừ #), tooltip, hàng tiêu đề trùng v1.10.0 (ô mới không nong cột) · `behave.js` | 86/87 (1 = `/icon.svg` 404 có sẵn) · 42/42 |
+| M3 SQL thật | TRUNGDEMO (CHỈ SELECT): 6 tab 176–3.011 dòng × 27 cột số × ~6 chuỗi (1–4 chữ số, `-`, có dấu `.`, chữ) — server so với tự tính số đang hiện như trình duyệt | **156/156**; bài lọc bán hàng v1.10.1 vẫn đạt |
+| M3 EXE | `build_exe.py` → 1.10.2, 16.556.895 byte | `/api/version` 1.10.2, app.js trùng SHA-1 `build_web`, `/api/ledger` chưa đăng nhập 401 |
+
+- So tập dòng phải bỏ trường `RowNum` (số thứ tự do câu phân trang ROW_NUMBER sinh ra, đổi theo bộ lọc).
+- Còn lệch lý thuyết, chưa gặp trong dữ liệu: số âm đúng .5 (JS `Math.round(-1.5)` = -1, SQL `ROUND` = -2); giá trị nhị phân sát ranh .xx5.
