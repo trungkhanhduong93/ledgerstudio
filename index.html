@@ -166,7 +166,18 @@ window.showConnectionLost = function() {
         .ds-brand b { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; color: var(--ds-ink); white-space: nowrap; }
         .ds-toggle { margin-left: auto; width: 28px; height: 28px; flex: none; border-radius: 7px; display: grid; place-items: center; color: var(--ds-ink-3); transition: background-color .12s, color .12s; }
         .ds-toggle:hover { background: var(--ds-tint); color: var(--ds-ink); }
-        .ds-group { font-size: 11.5px; font-weight: 500; color: var(--ds-ink-3); padding: 12px 8px 5px; white-space: nowrap; }
+        /* 2 thẻ Dữ liệu | Báo cáo (v1.10.4): chỉ đổi danh sách đang xem, không đổi trang đang mở.
+           has-page = trang đang mở nằm ở thẻ KIA → chấm xanh để biết đường quay lại. */
+        .ds-navtabs { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; padding: 2px; margin: 2px 0 8px; border-radius: 8px; background: var(--ds-line-soft); flex: none; }
+        .ds-navtabs button { position: relative; display: flex; align-items: center; justify-content: center; gap: 6px; height: 28px; border-radius: 6px; font-size: 12.5px; color: var(--ds-ink-2); white-space: nowrap; transition: background-color .12s, color .12s, box-shadow .12s; }
+        .ds-navtabs button svg { flex: none; color: var(--ds-ink-3); transition: color .12s; }
+        .ds-navtabs button:hover { color: var(--ds-ink); }
+        .ds-navtabs button:focus-visible { outline: 2px solid var(--ds-brand); outline-offset: 1px; }
+        .ds-navtabs button.is-on { background: #fff; color: var(--ds-brand); font-weight: 500; box-shadow: 0 1px 2px rgba(14,26,43,.08), 0 0 0 1px var(--ds-line); }
+        .ds-navtabs button.is-on svg { color: var(--ds-brand); }
+        .ds-navtabs button.has-page::after { content: ''; position: absolute; top: 5px; right: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--ds-brand); box-shadow: 0 0 0 2px var(--ds-line-soft); }
+        .ds-navlist { display: flex; flex-direction: column; gap: 1px; flex: none; animation: dsNavIn .16s cubic-bezier(.2, 0, 0, 1); }
+        @keyframes dsNavIn { from { opacity: 0; transform: translateY(3px); } }
         .ds-nav { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 30px; padding: 0 8px; border-radius: 7px; text-align: left; white-space: nowrap; color: var(--ds-ink-2); transition: background-color .12s, color .12s; }
         .ds-nav:hover { background: var(--ds-tint); color: var(--ds-ink); }
         .ds-nav:disabled { opacity: .6; cursor: default; }
@@ -179,9 +190,46 @@ window.showConnectionLost = function() {
         .ds-rail.is-collapsed .ds-brand { flex-direction: column; gap: 6px; padding: 0; }
         .ds-rail.is-collapsed .ds-brand b, .ds-rail.is-collapsed .ds-label { display: none; }
         .ds-rail.is-collapsed .ds-toggle { margin-left: 0; }
-        .ds-rail.is-collapsed .ds-group { height: 1px; padding: 0; margin: 8px 6px; font-size: 0; background: var(--ds-line); }
+        .ds-rail.is-collapsed .ds-navtabs { grid-template-columns: 1fr; }
+        .ds-rail.is-collapsed .ds-navtabs button.has-page::after { top: 4px; right: 4px; }
         .ds-rail.is-collapsed .ds-nav { justify-content: center; padding: 0; }
         .ds-rail.is-collapsed .ds-code { width: auto; font-size: 11px; }
+        /* Nút "Tải lại danh mục" (v1.10.4): đang tải = icon xoay; xong = nền xanh lá + dấu ✓ tự vẽ; lỗi = nền đỏ nhạt.
+           Kèm thẻ .ds-toast cạnh nút: số danh mục vừa nạp / lý do lỗi. Trạng thái giữ ở App (metaRefresh). */
+        .ds-nav.is-busy:disabled { opacity: 1; }
+        .ds-nav.is-busy svg { color: var(--ds-brand); animation: dsSpin .9s linear infinite; }
+        .ds-nav.is-done { background: var(--ds-ok-soft); color: var(--ds-ok-ink); font-weight: 500; }
+        .ds-nav.is-fail { background: var(--ds-bad-soft); color: var(--ds-bad-ink); font-weight: 500; }
+        .ds-nav.is-fail svg { color: var(--ds-bad-ink); }
+        .ds-okdot { flex: none; width: 16px; height: 16px; display: grid; place-items: center; border-radius: 50%; background: var(--ds-ok); color: #fff; animation: dsOkPop .32s cubic-bezier(.34, 1.56, .64, 1); }
+        .ds-nav .ds-okdot svg { color: #fff; }
+        .ds-draw polyline { stroke-dasharray: 23; stroke-dashoffset: 23; animation: dsDraw .3s .12s cubic-bezier(.65, 0, .35, 1) forwards; }
+        @keyframes dsSpin { to { transform: rotate(360deg); } }
+        @keyframes dsOkPop { from { transform: scale(.4); opacity: 0; } }
+        @keyframes dsDraw { to { stroke-dashoffset: 0; } }
+        .ds-toast { position: fixed; bottom: 38px; z-index: 4000; display: flex; align-items: flex-start; gap: 10px; width: 320px; padding: 11px 10px 12px 12px; overflow: hidden;
+            background: #fff; border: 1px solid var(--ds-line); border-radius: 10px; box-shadow: 0 10px 28px -8px rgba(14,26,43,.22), 0 2px 6px rgba(14,26,43,.06);
+            animation: dsToastIn .22s cubic-bezier(.2, 0, 0, 1), dsToastOut .2s ease-in var(--ds-toast-out, 3.3s) forwards; }
+        .ds-toast-ic { flex: none; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; margin-top: 1px; }
+        .ds-toast.is-ok .ds-toast-ic { background: var(--ds-ok); color: #fff; animation: dsOkPop .32s .05s cubic-bezier(.34, 1.56, .64, 1) backwards; }
+        .ds-toast.is-bad .ds-toast-ic { background: var(--ds-bad-soft); color: var(--ds-bad-ink); }
+        .ds-toast-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .ds-toast-body b { font-size: 13px; font-weight: 600; color: var(--ds-ink); }
+        .ds-toast-body span { font-size: 12px; line-height: 17px; color: var(--ds-ink-2); overflow-wrap: anywhere; }
+        .ds-toast-body em { font-style: normal; white-space: nowrap; }
+        .ds-toast-body small { font-size: 11px; color: var(--ds-ink-4); font-variant-numeric: tabular-nums; }
+        .ds-toast-x { flex: none; width: 24px; height: 24px; margin: -3px -2px 0 0; display: grid; place-items: center; border-radius: 6px; color: var(--ds-ink-4); }
+        .ds-toast-x:hover { background: var(--ds-tint); color: var(--ds-ink); }
+        .ds-toast-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--ds-ok); transform-origin: left; animation: dsToastBar linear forwards; }
+        .ds-toast.is-bad .ds-toast-bar { background: var(--ds-bad-ink); opacity: .5; }
+        @keyframes dsToastIn { from { opacity: 0; transform: translateY(8px) scale(.98); } }
+        @keyframes dsToastOut { to { opacity: 0; transform: translateY(4px); } }
+        @keyframes dsToastBar { to { transform: scaleX(0); } }
+        @media (prefers-reduced-motion: reduce) {
+            .ds-navlist, .ds-okdot, .ds-toast, .ds-toast.is-ok .ds-toast-ic, .ds-toast-bar { animation: none; }
+            .ds-draw polyline { animation: none; stroke-dashoffset: 0; }
+            .ds-nav.is-busy svg { animation-duration: 2.4s; }
+        }
         .ds-head { display: flex; align-items: baseline; gap: 10px; flex: none; padding: 12px 24px 0; background: #fff; }
         .ds-head h1 { margin: 0; font-size: 16px; line-height: 22px; font-weight: 600; letter-spacing: -0.01em; color: var(--ds-ink); }
         .ds-head span { font-size: 12px; color: var(--ds-ink-3); }
@@ -548,7 +596,7 @@ window.showConnectionLost = function() {
                :not(.app-shell) — con đầu của #root > div là banner cập nhật (nếu có), còn không thì là cả khung app:
                thiếu :not là bản in trắng trơn. */
             #root > div > div:first-child:not(.app-shell),
-            .app-sidebar, .app-pagehead, .app-statusbar, .app-reportbar,
+            .app-sidebar, .app-pagehead, .app-statusbar, .app-reportbar, .ds-toast,
             .bg-white.border-b,
             button, 
             .label-text, 
@@ -3844,12 +3892,14 @@ window.showConnectionLost = function() {
 
         const DOC_TABS = [
             { id: 'ledger',    name: 'Danh sách chứng từ tổng hợp' },
-            { id: 'sale',      name: 'Danh sách chứng từ bán hàng' },
+            { id: 'sale',      name: 'Danh sách chứng từ xuất - bán hàng' },
             { id: 'voucher',   name: 'Danh sách chứng từ tiền' },
-            { id: 'purchase',  name: 'Danh sách chứng từ nhập kho' },
+            { id: 'purchase',  name: 'Danh sách chứng từ nhập - mua hàng' },
             { id: 'warehouse', name: 'Danh sách chứng từ kho' },
             { id: 'income_alloc', name: 'Danh sách doanh thu chờ phân bổ' },
-            { id: 'warehouse_balance', name: 'Danh sách tồn kho thực tế' },
+            // Tồn kho thực tế: ẩn khỏi thanh bên theo Trum (28/09/2026, v1.10.4). Code tab + /api/warehouse_balance giữ nguyên
+            // — bật lại = bỏ comment dòng dưới. activeTab không nhớ qua lần mở app nên không máy nào kẹt ở tab đã ẩn.
+            // { id: 'warehouse_balance', name: 'Danh sách tồn kho thực tế' },
             { id: 'pr_detail', name: 'Danh mục đối tượng' },
         ];
 
@@ -3859,9 +3909,9 @@ window.showConnectionLost = function() {
         // tự hiện ở đây); map dưới chỉ thêm tên ngắn + icon. CSS: class ds-* trong <style> đầu file.
         const NAV_DOC_META = {
             ledger:            ['Chứng từ tổng hợp', 'table'],
-            sale:              ['Chứng từ bán hàng', 'receipt'],
+            sale:              ['Chứng từ xuất - bán hàng', 'receipt'],
             voucher:           ['Chứng từ tiền', 'wallet'],
-            purchase:          ['Chứng từ nhập kho', 'shopping-cart'],
+            purchase:          ['Chứng từ nhập - mua hàng', 'shopping-cart'],
             warehouse:         ['Chứng từ kho', 'package'],
             income_alloc:      ['Doanh thu chờ phân bổ', 'clock'],
             warehouse_balance: ['Tồn kho thực tế', 'layers'],
@@ -3882,41 +3932,89 @@ window.showConnectionLost = function() {
         const NAV_REPORTS = [...REPORT_TYPES].sort((a, b) => a.id.localeCompare(b.id))
             .map(r => ({ id: r.id, label: (NAV_REPORT_META[r.id] || [r.name])[0], full: (NAV_REPORT_META[r.id] || [])[1] || r.name }));
 
-        const AppSidebar = ({ collapsed, onToggleCollapsed, activeTab, reportType, onPickTab, onPickReport, refreshing, onRefresh, onLogout }) => (
-            <aside className={`app-sidebar ds-rail ${collapsed ? 'is-collapsed' : ''}`}>
-                <div className="ds-brand">
-                    <svg viewBox="0 0 200 200" width="22" height="22" className="shrink-0" aria-hidden="true">
-                        <rect width="200" height="200" rx="45" fill="#FF9D3D"/>
-                        <rect x="40" y="40" width="120" height="120" rx="30" fill="none" stroke="white" strokeWidth="20"/>
-                    </svg>
-                    <b>{APP_NAME}</b>
-                    <button type="button" className="ds-toggle" onClick={onToggleCollapsed} title={collapsed ? 'Mở rộng thanh bên' : 'Thu gọn thanh bên'}>
-                        <Icon name="panel-left" size={16} stroke={1.75} />
+        const NAV_SECS = [
+            { id: 'data',   label: 'Dữ liệu', icon: 'table' },
+            { id: 'report', label: 'Báo cáo', icon: 'file-text' },
+        ];
+        // refresh = metaRefresh của App: null | { phase: 'busy' | 'ok' | 'err', title, text, ms, id }
+        const AppSidebar = ({ collapsed, onToggleCollapsed, activeTab, reportType, onPickTab, onPickReport, refresh, onRefresh, onLogout }) => {
+            // Thẻ Dữ liệu / Báo cáo chỉ đổi DANH SÁCH đang xem — trang đang mở giữ nguyên tới khi bấm 1 mục.
+            // Trang đang mở chuyển nhóm (chọn báo cáo, chọn tab dữ liệu) → thẻ đi theo.
+            const pageSec = activeTab === 'report' ? 'report' : 'data';
+            const [sec, setSec] = useState(pageSec);
+            useEffect(() => { setSec(pageSec); }, [pageSec]);
+            const phase = refresh ? refresh.phase : null;
+            const refreshTitle = phase === 'busy' ? 'Đang tải lại danh mục…'
+                : phase ? `${refresh.title}${refresh.text ? '\n' + refresh.text : ''}`
+                : 'Tải lại danh mục (Tài khoản, Đơn vị, Đối tượng, Hàng hóa…)';
+            return (
+                <aside className={`app-sidebar ds-rail ${collapsed ? 'is-collapsed' : ''}`}>
+                    <div className="ds-brand">
+                        <svg viewBox="0 0 200 200" width="22" height="22" className="shrink-0" aria-hidden="true">
+                            <rect width="200" height="200" rx="45" fill="#FF9D3D"/>
+                            <rect x="40" y="40" width="120" height="120" rx="30" fill="none" stroke="white" strokeWidth="20"/>
+                        </svg>
+                        <b>{APP_NAME}</b>
+                        <button type="button" className="ds-toggle" onClick={onToggleCollapsed} title={collapsed ? 'Mở rộng thanh bên' : 'Thu gọn thanh bên'}>
+                            <Icon name="panel-left" size={16} stroke={1.75} />
+                        </button>
+                    </div>
+                    <div className="ds-navtabs" role="tablist" aria-label="Nhóm chức năng">
+                        {NAV_SECS.map(s => (
+                            <button key={s.id} type="button" role="tab" aria-selected={sec === s.id} onClick={() => setSec(s.id)}
+                                title={pageSec === s.id && sec !== s.id ? `${s.label} — trang đang mở nằm ở đây` : s.label}
+                                className={`${sec === s.id ? 'is-on' : ''} ${pageSec === s.id && sec !== s.id ? 'has-page' : ''}`}>
+                                <Icon name={s.icon} size={15} stroke={1.75} /><span className="ds-label">{s.label}</span>
+                            </button>
+                        ))}
+                    </div>
+                    {/* key={sec}: đổi thẻ là lắp lại danh sách → chạy hiệu ứng hiện (dsNavIn) */}
+                    <div key={sec} className="ds-navlist" role="tabpanel">
+                        {sec === 'data' ? NAV_DOCS.map(t => (
+                            <button key={t.id} type="button" title={t.label} onClick={() => onPickTab(t.id)} className={`ds-nav ${activeTab === t.id ? 'is-on' : ''}`}>
+                                <Icon name={t.icon} size={16} stroke={1.75} /><span className="ds-label">{t.label}</span>
+                            </button>
+                        )) : NAV_REPORTS.map(r => (
+                            <button key={r.id} type="button" title={`${r.id} · ${r.full}`} onClick={() => onPickReport(r.id)} className={`ds-nav ${activeTab === 'report' && reportType === r.id ? 'is-on' : ''}`}>
+                                <span className="ds-code">{r.id}</span><span className="ds-label">{r.label}</span>
+                            </button>
+                        ))}
+                    </div>
+                    <div className="ds-spacer"></div>
+                    <button id="btn-refresh-meta" type="button" onClick={onRefresh} disabled={phase === 'busy'} title={refreshTitle}
+                        className={`ds-nav ${phase === 'busy' ? 'is-busy' : phase === 'ok' ? 'is-done' : phase === 'err' ? 'is-fail' : ''}`}>
+                        {phase === 'ok' ? <span key={refresh.id} className="ds-okdot"><Icon name="check" size={11} stroke={3} className="ds-draw" /></span>
+                            : <Icon name={phase === 'err' ? 'alert-circle' : 'refresh-cw'} size={16} stroke={1.75} />}
+                        <span className="ds-label">{phase === 'busy' ? 'Đang tải danh mục…' : phase === 'ok' ? 'Đã cập nhật danh mục' : phase === 'err' ? 'Tải danh mục lỗi' : 'Tải lại danh mục'}</span>
                     </button>
+                    <button type="button" onClick={onLogout} title="Đăng xuất" className="ds-nav">
+                        <Icon name="log-out" size={16} stroke={1.75} /><span className="ds-label">Đăng xuất</span>
+                    </button>
+                </aside>
+            );
+        };
+
+        // Thẻ báo kết quả "Tải lại danh mục" — đứng cạnh nút, trên thanh trạng thái. Tự ẩn do App (hẹn giờ theo metaRefresh);
+        // --ds-toast-out cho hiệu ứng mờ dần chạy ngay trước lúc App gỡ thẻ.
+        const META_TOAST_MS = { ok: 3600, err: 8000 };
+        const MetaToast = ({ refresh, collapsed, onClose }) => {
+            if (!refresh || refresh.phase === 'busy') return null;
+            const ok = refresh.phase === 'ok', life = META_TOAST_MS[refresh.phase];
+            return (
+                <div key={refresh.id} className={`ds-toast ${ok ? 'is-ok' : 'is-bad'}`} role={ok ? 'status' : 'alert'}
+                    style={{ left: (collapsed ? 56 : 216) + 12, '--ds-toast-out': (life - 200) + 'ms' }}>
+                    <span className="ds-toast-ic">{ok ? <Icon name="check" size={13} stroke={3} className="ds-draw" /> : <Icon name="alert-circle" size={15} stroke={2} />}</span>
+                    <div className="ds-toast-body">
+                        <b>{refresh.title}</b>
+                        {refresh.parts ? <span>{refresh.parts.map((p, i) => <React.Fragment key={i}>{i ? ' · ' : ''}<em>{p}</em></React.Fragment>)}</span>
+                            : refresh.text && <span>{refresh.text}</span>}
+                        {ok && refresh.ms != null && <small>Xong sau {fmtSec(refresh.ms)}</small>}
+                    </div>
+                    <button type="button" className="ds-toast-x" onClick={onClose} title="Đóng"><Icon name="x" size={14} stroke={2} /></button>
+                    <i className="ds-toast-bar" style={{ animationDuration: life + 'ms' }} />
                 </div>
-                <div className="ds-group">Dữ liệu</div>
-                {NAV_DOCS.map(t => (
-                    <button key={t.id} type="button" title={t.label} onClick={() => onPickTab(t.id)} className={`ds-nav ${activeTab === t.id ? 'is-on' : ''}`}>
-                        <Icon name={t.icon} size={16} stroke={1.75} /><span className="ds-label">{t.label}</span>
-                    </button>
-                ))}
-                <div className="ds-group">Báo cáo</div>
-                {NAV_REPORTS.map(r => (
-                    <button key={r.id} type="button" title={`${r.id} · ${r.full}`} onClick={() => onPickReport(r.id)} className={`ds-nav ${activeTab === 'report' && reportType === r.id ? 'is-on' : ''}`}>
-                        <span className="ds-code">{r.id}</span><span className="ds-label">{r.label}</span>
-                    </button>
-                ))}
-                <div className="ds-spacer"></div>
-                {/* id btn-refresh-meta: refreshMeta() tô xanh nút này 2 giây khi tải xong */}
-                <button id="btn-refresh-meta" type="button" onClick={onRefresh} disabled={refreshing} title="Tải lại danh mục (Tài khoản, Đơn vị...)" className="ds-nav">
-                    <Icon name={refreshing ? 'loader' : 'refresh-cw'} size={16} stroke={1.75} className={refreshing ? 'animate-spin' : ''} />
-                    <span className="ds-label">{refreshing ? 'Đang tải danh mục...' : 'Tải lại danh mục'}</span>
-                </button>
-                <button type="button" onClick={onLogout} title="Đăng xuất" className="ds-nav">
-                    <Icon name="log-out" size={16} stroke={1.75} /><span className="ds-label">Đăng xuất</span>
-                </button>
-            </aside>
-        );
+            );
+        };
 
         const AppPageHeader = ({ activeTab, reportType }) => {
             if (activeTab === 'report') {
@@ -4057,7 +4155,13 @@ window.showConnectionLost = function() {
             const [pagination, setPagination] = useState({ total_rows: 0, total_pages: 1, page: 1 });
             const [summary, setSummary] = useState({ total_debit: 0, total_credit: 0 });
             const [colSearch, setColSearch] = useState({});
-            const [refreshing, setRefreshing] = useState(false);
+            // "Tải lại danh mục": null | { phase: 'busy' | 'ok' | 'err', title, text, ms, id } — nút ở thanh bên + thẻ MetaToast đọc chung
+            const [metaRefresh, setMetaRefresh] = useState(null);
+            useEffect(() => {
+                if (!metaRefresh || metaRefresh.phase === 'busy') return;
+                const t = setTimeout(() => setMetaRefresh(null), META_TOAST_MS[metaRefresh.phase]);
+                return () => clearTimeout(t);
+            }, [metaRefresh]);
             // Thanh bên thu gọn: nhớ theo máy (localStorage có thể bị chặn → bọc try)
             const [sidebarCollapsed, setSidebarCollapsed] = useState(() => { try { return localStorage.getItem('ds_sidebar_collapsed') === '1'; } catch (e) { return false; } });
             const toggleSidebar = useCallback(() => setSidebarCollapsed(v => {
@@ -4165,21 +4269,20 @@ window.showConnectionLost = function() {
             };
 
             const refreshMeta = async () => {
-                setRefreshing(true);
+                const t0 = performance.now();
+                setMetaRefresh({ phase: 'busy', id: t0 });
                 try {
                     await fetch('/api/metadata/refresh', { method: 'POST' });
                     const res = await fetch('/api/metadata').then(r => r.json());
-                    if (res.status === 'ok') {
-                        setMeta(res);
-                        // Hiệu ứng "Done" nhẹ
-                        const btn = document.getElementById('btn-refresh-meta');
-                        if(btn) {
-                            btn.classList.add('bg-emerald-500/20', 'text-emerald-400');
-                            setTimeout(() => btn.classList.remove('bg-emerald-500/20', 'text-emerald-400'), 2000);
-                        }
-                    }
-                } finally {
-                    setRefreshing(false);
+                    if (res.status !== 'ok') throw new Error(res.message || 'Máy chủ không trả về danh mục.');
+                    setMeta(res);
+                    const n = a => (a || []).length.toLocaleString('vi-VN');
+                    const parts = [`${n(res.accounts)} tài khoản`, `${n(res.orgs)} đơn vị`, `${n(res.pr_details)} đối tượng`, `${n(res.items)} hàng hóa`, `${n(res.warehouses)} kho`];
+                    setMetaRefresh({ phase: 'ok', id: t0, ms: performance.now() - t0, title: 'Đã cập nhật danh mục', parts, text: parts.join(' · ') });
+                } catch (e) {
+                    // fetch lỗi mạng = TypeError ("Failed to fetch") → câu dễ hiểu; lỗi từ server giữ nguyên văn
+                    setMetaRefresh({ phase: 'err', id: t0, title: 'Chưa tải lại được danh mục',
+                        text: e instanceof TypeError ? 'Không kết nối được tới máy chủ ứng dụng. Danh mục cũ vẫn dùng được.' : String(e.message || e) });
                 }
             };
 
@@ -6009,7 +6112,8 @@ window.showConnectionLost = function() {
                     {!autoUpdate.isUpdating && <ForceUpdateModal updateInfo={autoUpdate.updateInfo} onStartUpdate={autoUpdate.startUpdate} />}
                     <div className="app-shell flex flex-1 min-h-0">
                     <AppSidebar collapsed={sidebarCollapsed} onToggleCollapsed={toggleSidebar} activeTab={activeTab} reportType={reportType}
-                        onPickTab={setActiveTab} onPickReport={pickReport} refreshing={refreshing} onRefresh={refreshMeta} onLogout={handleLogout} />
+                        onPickTab={setActiveTab} onPickReport={pickReport} refresh={metaRefresh} onRefresh={refreshMeta} onLogout={handleLogout} />
+                    <MetaToast refresh={metaRefresh} collapsed={sidebarCollapsed} onClose={() => setMetaRefresh(null)} />
                     <div className="app-main flex-1 min-w-0 flex flex-col">
                     <AppPageHeader activeTab={activeTab} reportType={reportType} />
 
