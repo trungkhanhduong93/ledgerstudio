@@ -965,3 +965,45 @@ trả `v1.10.2`, digest exe = SHA-256 file build `85205943…c382b`.
 
 **Test cập nhật thật:** EXE v1.10.1 (SHA = asset) → hộp bắt buộc cập nhật → bấm → 1.10.2 lên sau 9,4 s, còn 1 file, SHA = asset, bản mới
 `has_update=False`. Đã tắt EXE test + Chrome.
+
+## 27. v1.10.3: mọi dòng cùng chiều cao (hết trắng bảng / giật khi kéo thanh cuộn) + dòng tổng đủ cột + cột Địa chỉ bán hàng *(28/09/2026)*
+
+**Yêu cầu Trum:** (1) lọc ở dòng lọc cột rồi lướt danh sách thì giật; (2) kéo thanh cuộn, buông chuột thì bảng tự chạy vèo xuống
+cuối; (3) cột số lượng/tiền nào cũng có tổng ở dòng cuối; (4) thêm cột Địa chỉ ở chứng từ bán hàng — Trum chốt lấy
+`SALE_VIEW.ADDRESS` (địa chỉ trên chứng từ), không phải địa chỉ trong danh mục đối tượng. Chốt mục (3): cộng toàn bộ truy vấn như
+cũ; ô lọc loại bớt dòng trên trang thì cộng đúng các dòng đang hiện; dòng gom nhóm giữ nguyên. "phát hành".
+
+**Tìm nguyên nhân (1)(2):** bài thử API giả 10.000 dòng (kéo thanh cuộn bằng chuột giả lập, CPU ×1/×4/×6, DPR 1/1,25/1,5,
+có/không lọc) KHÔNG tái hiện: dữ liệu giả có gạch nối ở MỌI ô ("pr_detail-12") → mọi ô xuống dòng như nhau → mọi dòng 39px đều.
+Video Trum (Snagit, tab bán hàng 44.223 dòng, lọc Tên kho "online") cho thấy: cột Mã ĐT (w-24, không nowrap) có mã
+"KL-CRM.CALCENTER" xuống 2 dòng → dòng 39px xen dòng 31px; lúc kéo có đoạn bảng trắng, chỉ còn 1–2 dòng trên cùng. Đo chiều cao dòng
+8 tab với dữ liệu kiểu thật (`pt/heights.js`): tab nào cũng lệch — 21px (ô Diễn giải `py-1.5` trống), 39px (mã có gạch nối), 57–111px
+(tên dài ở cột không nowrap), 23,5px (nhãn nhóm đối tượng). Bảng ảo đặt dòng theo 1 chiều cao → sai vị trí.
+
+**Đã sửa:**
+- `index.html` CSS `.ds-grid tbody td { white-space: nowrap }`; `gridCell` vẽ `'\u00a0'` cho ô trống; nhãn nhóm đối tượng
+  `leading-[18px] align-top`; `useVirtualScroll` đo chiều cao chỉ trên dòng thường (bỏ `.ds-grp`). Đã thử `td:empty::after` thay
+  cho `'\u00a0'`: chậm thêm 3–11 ms mỗi bước cuộn → bỏ.
+- `VirtualRows`: tiêu đề cột giữ `min-width` = bề rộng lớn nhất đã thấy (chỉ rộng thêm), đổi `data` thì thả.
+- Dòng tổng: `grid.foot` + `footCells` + `gridFilter`/`footRowSums`/`footShownLabel` (7 tab); `GridFoot` đặt nhãn vào đoạn cột trống
+  dài nhất khi ô tổng bị kéo lên sát đầu; tab tồn kho thực tế thêm dòng tổng + `known_sums`.
+- `server.py`: bán hàng SUM `INCOME_AMOUNT`/`VAT_INCOME_AMOUNT` chỉ khi SALE_VIEW có cột; nhập kho SUM `PURCHASE_COST`; tồn kho
+  thực tế COUNT + SUM `ISNULL(QUANTITY/QUANTITY_ADJ,0)` + dùng lại `known_sums`; `s_address` → `S.ADDRESS LIKE '%x%'` (`_like_literal`).
+- Cột Địa chỉ: `SALE_GRID` sau Tên đối tượng, `search: 2`, sắp xếp `ADDRESS` (đã có trong whitelist), `truncate max-w-[280px]` + `title`.
+
+**Verify:**
+
+| Mức | Nội dung | Kết quả |
+|---|---|---|
+| M1 | `ast.parse` + `import server` thật · `webbuild/build.js` | đạt |
+| M3 chiều cao | `heights.js`: 8 tab × dữ liệu kiểu thật (mã gạch nối, ô trống, emoji, tên dài) | trước: 8/8 tab lệch 2–5 mức · sau: 8/8 đều (31px; kho/tồn kho/danh mục 21px) |
+| M3 kéo thanh cuộn | `realistic.js`: bán hàng 10.000 dòng kiểu video, kéo con trượt bằng chuột, có/không lọc "online", CPU ×1/×4 | v1.10.2: trắng tới 100%, scrollHeight 117 giá trị, trôi 230px · mới: trắng 0%, scrollHeight cố định, trôi ≤ 1px |
+| M3 giật | `jitter.js`: 250 bước × 240px, dòng mốc phải đi đúng khoảng cuộn | v1.10.2 giật dọc 77–129 bước (tới 216px), xô ngang 14–26 · mới 0 giật dọc (bán hàng, sổ cái, tiền, kho), xô ngang 4–7 |
+| M3 tốc độ | `perf4.js` so v1.10.2, 3 vòng xen kẽ, trung vị | cuộn 300px/bước: +2–3 ms (~10%); kéo nhanh 1.500px: trong độ nhiễu (v1.10.2 tự dao động 31–56 ms) |
+| M3 giao diện | `foot.js` (dòng tổng 7 tab: số server, đứng đúng cột, lọc bớt dòng → cộng dòng đang hiện, gõ không loại dòng → giữ tổng server; cột Địa chỉ: vị trí, tooltip, chứa, `_` là chữ, `title`, gửi `s_address`) · `num.js` · `behave.js` | **47/47** · 52/52 · 42/42 (3 kỳ vọng sửa: 43/44 cột, nhãn tổng sang đoạn trống) |
+| M3 giao diện | `search.js` so tiêu đề v1.10.0 | 82/87: `/icon.svg` 404 có sẵn; bán hàng thêm cột; 3 tab cột rộng thêm 7–13px (dữ liệu giả có gạch nối nay không xuống dòng) |
+| M3 SQL thật | `test_v1103_db.py` TRUNGDEMO (CHỈ SELECT): tổng mới = cộng tay, trang 2 `known_sums`, giả lập DB thiếu cột Doanh thu 511, `s_address` 9 chuỗi (có `%`, `_`) = lọc tay, sắp xếp ADDRESS | **24/24**; `test_num_db.py` 156/156, `test_sale_search_db.py` đạt |
+
+- Thay đổi nhìn thấy: cột có chữ dài hơn bề ngang giờ rộng ra thay vì xuống dòng (vd Mã ĐT ở đoạn có "KL-CRM.CALCENTER").
+- Chưa tái hiện 1:1 cảnh "tự chạy tới cuối trang" (máy dev chỉ thấy trôi 230px); nguyên nhân khả dĩ nhất — scrollHeight đổi liên tục
+  khi chiều cao dòng đo lại — đã hết. Cần Trum thử trên máy thật sau khi cập nhật.

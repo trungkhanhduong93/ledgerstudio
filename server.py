@@ -1334,7 +1334,8 @@ def get_purchase():
             SUM(ISNULL(P.QUANTITY_WH,0))     AS S_QUANTITY_WH,
             SUM(ISNULL(P.DISCOUNT_AMOUNT,0)) AS S_DISCOUNT,
             SUM(ISNULL(P.VAT_TAX_AMOUNT,0))  AS S_VAT_TAX,
-            SUM(ISNULL(P.TOTAL_AMOUNT,0))    AS S_TOTAL
+            SUM(ISNULL(P.TOTAL_AMOUNT,0))    AS S_TOTAL,
+            SUM(ISNULL(P.PURCHASE_COST,0))   AS S_PURCHASE_COST
         """
 
         if export_all:
@@ -1348,7 +1349,7 @@ def get_purchase():
             columns  = [c[0] for c in cursor.description]
             raw_rows = cursor.fetchall()
             total_rows = len(raw_rows)
-            summary = {"quantity": 0, "quantity_wh": 0, "discount": 0, "vat_tax": 0, "total": 0}
+            summary = {"quantity": 0, "quantity_wh": 0, "discount": 0, "vat_tax": 0, "total": 0, "purchase_cost": 0}
             qi = {c: i for i, c in enumerate(columns)}
             for r in raw_rows:
                 summary["quantity"]    += float(r[qi.get("QUANTITY")]        or 0) if "QUANTITY"        in qi else 0
@@ -1356,12 +1357,13 @@ def get_purchase():
                 summary["discount"]    += float(r[qi.get("DISCOUNT_AMOUNT")] or 0) if "DISCOUNT_AMOUNT" in qi else 0
                 summary["vat_tax"]     += float(r[qi.get("VAT_TAX_AMOUNT")]  or 0) if "VAT_TAX_AMOUNT"  in qi else 0
                 summary["total"]       += float(r[qi.get("TOTAL_AMOUNT")]    or 0) if "TOTAL_AMOUNT"    in qi else 0
+                summary["purchase_cost"] += float(r[qi.get("PURCHASE_COST")] or 0) if "PURCHASE_COST"  in qi else 0
         else:
             if skip_count:
                 import json as _json
                 total_rows = int(known_total)
                 try:    summary = _json.loads(known_sums)
-                except: summary = {"quantity":0,"quantity_wh":0,"discount":0,"vat_tax":0,"total":0}
+                except: summary = {"quantity":0,"quantity_wh":0,"discount":0,"vat_tax":0,"total":0,"purchase_cost":0}
             else:
                 cursor.execute(f"SELECT COUNT(*), {SUM_SQL} {JOIN_SQL} WHERE {where_sql}", params)
                 row = cursor.fetchone()
@@ -1372,6 +1374,7 @@ def get_purchase():
                     "discount":    float(row[3] or 0),
                     "vat_tax":     float(row[4] or 0),
                     "total":       float(row[5] or 0),
+                    "purchase_cost": float(row[6] or 0),
                 }
 
             offset = (page - 1) * page_size
@@ -2417,7 +2420,8 @@ def get_warehouse_balance():
         page_size = int(request.args.get("page_size", 100))
         export_all  = request.args.get("export_all") == "1"
         known_total = request.args.get("known_total")
-        skip_count  = page > 1 and known_total is not None and not export_all
+        known_sums  = request.args.get("known_sums")   # JSON dòng tổng lần đếm trước (v1.10.3)
+        skip_count  = page > 1 and known_total is not None and known_sums is not None and not export_all
 
         where_sql, params = _build_warehouse_balance_where(request.args)
         order_by_sql = _resolve_order_by(
@@ -2435,12 +2439,21 @@ def get_warehouse_balance():
             columns  = [c[0] for c in cursor.description]
             raw_rows = cursor.fetchall()
             total_rows = len(raw_rows)
+            qi = {c: i for i, c in enumerate(columns)}
+            summary = {k: sum(float(r[qi[c]] or 0) for r in raw_rows) if c in qi else 0
+                       for c, k in (("QUANTITY", "quantity"), ("QUANTITY_ADJ", "quantity_adj"))}
         else:
             if skip_count:
+                import json as _json
                 total_rows = int(known_total)
+                try:    summary = _json.loads(known_sums)
+                except: summary = {"quantity": 0, "quantity_adj": 0}
             else:
-                cursor.execute(f"SELECT COUNT(*) {_WBA_JOIN_SQL} WHERE {where_sql}", params)
-                total_rows = cursor.fetchone()[0] or 0
+                # Dòng tổng (v1.10.3): màn hình hiện ô trống là 0.00 → cộng ISNULL(…,0), cùng cách lọc số ở WAREHOUSE_BALANCE_NUM_SEARCH
+                cursor.execute(f"SELECT COUNT(*), SUM(ISNULL(WBA.QUANTITY,0)), SUM(ISNULL(WBA.QUANTITY_ADJ,0)) {_WBA_JOIN_SQL} WHERE {where_sql}", params)
+                row = cursor.fetchone()
+                total_rows = row[0] or 0
+                summary = {"quantity": float(row[1] or 0), "quantity_adj": float(row[2] or 0)}
 
             offset = (page - 1) * page_size
             sql = f"""
@@ -2476,7 +2489,8 @@ def get_warehouse_balance():
                 "total_rows": total_rows,
                 "total_pages": max(1, (total_rows + page_size - 1) // page_size),
                 "page": page if not export_all else 1
-            }
+            },
+            "summary": summary
         })
     except Exception as e:
         msg = str(e)
@@ -2884,6 +2898,12 @@ def _build_sale_where(request_args):
             clauses.append(f"{field} LIKE ?")
             params.append(f"%{val}%")
 
+    # Ô Địa chỉ (v1.10.3): SALE_VIEW.ADDRESS — cột gốc (SALE_BASE_COLUMNS), chứa chữ đã gõ; % _ [ là chữ thường như lọc trên trang
+    addr = request_args.get("s_address", "").strip()
+    if addr:
+        clauses.append("S.ADDRESS LIKE ?")
+        params.append(f"%{_like_literal(addr)}%")
+
     # Ô lọc cột v1.10.1 — HTTT, nguồn đơn, ghi chú: cột phụ của SALE_VIEW, chỉ lọc khi DB có cột đó (Bẫy 5). DB không có →
     # màn hình để trống cả cột → không dòng nào khớp → 1=0. Tên HTTT/nguồn không nằm trong SALE_VIEW (map ở Python từ
     # DM_PAYMENT_METHOD / DM_EXTRA_2) → dò tên trong danh mục ra danh sách mã rồi IN, khớp đúng chữ đang hiện trên màn hình.
@@ -3070,6 +3090,10 @@ def get_sale():
             SUM(ISNULL(S.TOTAL_AMOUNT,0))    AS S_TOTAL,
             SUM(ISNULL(S.COG_AMOUNT,0))      AS S_COG
         """
+        # Tổng cột phụ (v1.10.3): Doanh thu 511 / Doanh thu trước thuế — chỉ khi SALE_VIEW có cột (Bẫy 5). Thiếu cột → summary không có
+        # khoá → ô tổng trên màn hình để trống.
+        sum_extra = [(c, k) for c, k in (("INCOME_AMOUNT", "income_amount"), ("VAT_INCOME_AMOUNT", "vat_income_amount")) if c in extra_cols]
+        SUM_SQL += "".join(f", SUM(ISNULL(S.{c},0)) AS S_{c}" for c, _ in sum_extra)
 
         if export_all:
             sql = f"SELECT {select_list} {join_sql} WHERE {where_sql} ORDER BY {order_by_sql} OPTION (RECOMPILE)"
@@ -3086,6 +3110,8 @@ def get_sale():
                 summary["vat_tax"]  += float(r[qi.get("VAT_TAX_AMOUNT")]  or 0) if "VAT_TAX_AMOUNT"  in qi else 0
                 summary["total"]    += float(r[qi.get("TOTAL_AMOUNT")]    or 0) if "TOTAL_AMOUNT"    in qi else 0
                 summary["cog"]      += float(r[qi.get("COG_AMOUNT")]      or 0) if "COG_AMOUNT"      in qi else 0
+            for c, k in sum_extra:
+                summary[k] = sum(float(r[qi[c]] or 0) for r in raw_rows) if c in qi else 0
         else:
             if skip_count:
                 import json as _json
@@ -3104,6 +3130,8 @@ def get_sale():
                     "total":    float(row[5] or 0),
                     "cog":      float(row[6] or 0),
                 }
+                for i, (_, k) in enumerate(sum_extra):
+                    summary[k] = float(row[7 + i] or 0)
 
             offset = (page - 1) * page_size
             sql = f"""

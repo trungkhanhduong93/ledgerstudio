@@ -290,6 +290,11 @@ window.showConnectionLost = function() {
         table.ds-grid { border-collapse: separate; border-spacing: 0; }
         .ds-grid tbody td { border-bottom: 1px solid var(--ds-line-soft); }
         .ds-grid tbody td { border-color: var(--ds-line-soft); font-weight: 400; font-style: normal; }
+        /* MỌI DÒNG CÙNG CHIỀU CAO (v1.10.3): bảng ảo đặt vị trí dòng theo 1 chiều cao đo được. Trước đây ô xuống dòng (mã có gạch nối
+           "KL-CRM.CALCENTER" ở cột hẹp, tên dài) cao 39–111px, dòng có Diễn giải trống thấp 21px thay vì 31px → kéo thanh cuộn thấy
+           bảng trắng, cuộn giật (video Trum 28/09). Ô 1 dòng ở đây; ô trống vẽ 1 dấu cách không ngắt (gridCell) để cao bằng ô có chữ.
+           KHÔNG dùng td:empty::after cho việc này: đo 28/09 mỗi bước cuộn chậm thêm 3–11 ms (Chrome dò lại :empty mỗi lần chữ trong ô đổi). */
+        .ds-grid tbody td { white-space: nowrap; }
         .ds-grid tbody tr:hover > td { background: var(--ds-wash); }
         .ds-grid tbody td.font-black, .ds-grid tbody td.font-bold { font-weight: 500; color: var(--ds-ink); }
         .ds-grid tbody td.italic { color: var(--ds-ink-2); }
@@ -660,7 +665,11 @@ window.showConnectionLost = function() {
                 // -> chặn crash "Maximum update depth exceeded" (React ném ra 'Script error' qua CDN). Reset khi đổi data.
                 if (calibRef.current > 12) return;
                 calibRef.current += 1;
-                const rows = [...c.querySelectorAll('tbody tr')].filter(tr => tr.children.length > 1);
+                // Đo dòng dữ liệu, bỏ dòng gom nhóm (tab kho: dòng nhóm 31px, dòng thường 21px) — trừ khi chỉ còn dòng nhóm (thu gọn hết).
+                // Dòng thật cao hơn số đo thì vẫn phủ kín khung; thấp hơn mới hở trắng → đo theo dòng thường.
+                const all = [...c.querySelectorAll('tbody tr')].filter(tr => tr.children.length > 1);
+                const plain = all.filter(tr => !tr.classList.contains('ds-grp'));
+                const rows = plain.length ? plain : all;
                 const hs = rows.slice(0, 16).map(tr => tr.getBoundingClientRect().height).filter(h => h > 4 && h < 200);
                 if (hs.length) {
                     hs.sort((a, b) => a - b);
@@ -758,6 +767,18 @@ window.showConnectionLost = function() {
         // renderRow(row, i): i = chỉ số tuyệt đối trong data, trả về <tr> có key.
         const VirtualRows = ({ data, rowHeight, scrollRef, renderRow }) => {
             const vs = useVirtualScroll(data, rowHeight, scrollRef);
+            // Cột chỉ RỘNG THÊM, không hẹp lại khi cuộn (v1.10.3): bảng tự co giãn cột theo các dòng ĐANG VẼ → cuộn tới đoạn có tên dài là
+            // cả bảng xô ngang, cuộn qua lại xô tới xô lui (đo dữ liệu kiểu thật 28/09: 24–32/250 bước cuộn, xô tới 176px). Giữ bề rộng
+            // lớn nhất đã thấy làm min-width của tiêu đề; đổi dữ liệu (Truy vấn, gõ lọc) thì thả ra đo lại. th theo key cột nên đổi chỗ
+            // cột vẫn mang đúng bề rộng của nó.
+            const heads = () => scrollRef.current ? scrollRef.current.querySelectorAll('thead tr:first-child > th') : [];
+            React.useLayoutEffect(() => { heads().forEach(th => { th.style.minWidth = ''; }); }, [data]);
+            React.useLayoutEffect(() => {
+                heads().forEach(th => {
+                    const w = th.getBoundingClientRect().width;
+                    if (w > (parseFloat(th.style.minWidth) || 0)) th.style.minWidth = w + 'px';
+                });
+            });
             return (
                 <React.Fragment>
                     {vs.topPadding > 0 && <tr><td colSpan={100} style={{ height: vs.topPadding, padding: 0, border: 0 }}></td></tr>}
@@ -843,6 +864,7 @@ window.showConnectionLost = function() {
         //          server so cùng luật trong _num_prefix_where); 'pre' = cột mã/tài khoản, bắt đầu bằng; không có = chứa
         //   td     class ô dữ liệu (giá trị = v(r) nếu có, không thì r[id]) — hoặc hàm (r, key) => <td key={key} …/> cho ô đặc biệt
         //   exp    khoá cột khi xuất "Như đang xem" (mặc định [id]) — phải có trong *_EXPORT_COLS (App) và *_CSV_COLS (server.py)
+        // Bảng: grid.grp = tổng dòng gom nhóm; grid.foot = ô dòng tổng { id cột: { k: khoá trong summary server, dec, cls, v? } } (footCells)
         // Mọi ô đều có border-r; CSS bỏ viền phải của ô cuối hàng → cột nào đứng cuối cũng đúng. Thêm cột = thêm 1 phần tử; máy
         // đã lưu bố cục thấy cột mới ngay sau cột đứng trước nó trong thứ tự mặc định.
         // Bố cục lưu ở localStorage['ds_cols_<tab>'] = { order: [id…], hidden: [id…] } (trùng mặc định thì xoá khoá). Cột # luôn đầu.
@@ -924,7 +946,13 @@ window.showConnectionLost = function() {
             return { cols, layout, move, moveOver, toggle, showAll, reset };
         };
 
-        const gridCell = (c, r) => typeof c.td === 'function' ? c.td(r, c.id) : <td key={c.id} className={c.td}>{c.v ? c.v(r) : r[c.id]}</td>;
+        // Ô trống vẽ '\u00a0' (v1.10.3): ô có py-1.5 (Diễn giải, Ghi chú…) mà trống thì cả dòng thấp 21px thay vì 31px → dòng cao thấp lệch
+        // nhau, bảng ảo đặt sai vị trí (xem CSS "MỌI DÒNG CÙNG CHIỀU CAO"). Ô dạng hàm (td: (r, k) => …) không có py nên không cần.
+        const gridCell = (c, r) => {
+            if (typeof c.td === 'function') return c.td(r, c.id);
+            const x = c.v ? c.v(r) : r[c.id];
+            return <td key={c.id} className={c.td}>{x == null || x === '' ? '\u00a0' : x}</td>;
+        };
         const GridRow = memo(({ grid, cols, r, idx }) => (
             <tr className={typeof grid.tr === 'function' ? grid.tr(r) : grid.tr}>
                 <td className={grid.numTd}>{idx}</td>
@@ -1016,30 +1044,62 @@ window.showConnectionLost = function() {
 
         // Dòng tổng: nhãn trải qua các cột đứng trước ô tổng đầu tiên, ô tổng nằm đúng dưới cột của nó, cột không có tổng để
         // trống (ô trống liền nhau gộp 1 ô như bản cũ). cells: { [id cột]: <td …/> }.
+        // Ô tổng bị kéo lên sát đầu bảng (trước nó < 2 cột) → nhãn sang ĐOẠN CỘT TRỐNG DÀI NHẤT phía sau (≥ 2 cột), khỏi nhét vào cột #
+        // hẹp. v1.10.3: tab bán hàng có ô tổng ở gần cuối (Doanh thu 511…) nên không còn chỗ "ra cuối" như labelAfter.
         const GridFoot = ({ cols, trClass, labelClass, label, cells }) => {
-            const first = cols.findIndex(c => cells[c.id]);
-            let last = -1;
-            cols.forEach((c, i) => { if (cells[c.id]) last = i; });
-            const out = [];
-            let gap = 0;
-            for (let i = first; first >= 0 && i <= last; i++) {
-                const cell = cells[cols[i].id];
-                if (!cell) { gap++; continue; }
-                if (gap) { out.push(<td key={'g' + i} colSpan={gap > 1 ? gap : undefined} className="border-r"></td>); gap = 0; }
-                out.push(React.cloneElement(cell, { key: cols[i].id }));
+            const n = cols.length, at = cols.map(c => !!cells[c.id]);
+            const first = at.indexOf(true);
+            const labelTd = span => <td key="lab" colSpan={span} className={labelClass}>{label}</td>;
+            let lab = null;   // đoạn trống đặt nhãn [từ, tới) theo chỉ số cols; null = trải từ cột # tới trước ô tổng đầu (mặc định)
+            if (first >= 0 && first < 2) {
+                for (let i = first + 1, s = -1; i <= n; i++) {
+                    if (i < n && !at[i]) { if (s < 0) s = i; continue; }
+                    if (s >= 0 && i - s >= 2 && (!lab || i - s > lab[1] - lab[0])) lab = [s, i];
+                    s = -1;
+                }
             }
-            const after = labelAfter(first, last, cols.length);
-            const labelTd = <td colSpan={after ? cols.length - 1 - last : 1 + (first >= 0 ? first : cols.length)} className={labelClass}>{label}</td>;
+            const out = [first < 0 ? labelTd(n + 1) : lab ? <td key="lead" colSpan={1 + first} className="border-r"></td> : labelTd(1 + first)];
+            for (let i = first, s = -1; first >= 0 && i <= n; i++) {
+                if (i < n && !at[i]) { if (s < 0) s = i; continue; }
+                if (s >= 0) {
+                    if (lab && lab[0] === s) out.push(labelTd(i - s));
+                    else if (i < n) out.push(<td key={'g' + s} colSpan={i - s > 1 ? i - s : undefined} className="border-r"></td>);
+                    else out.push(<td key="tail" colSpan={i - s}></td>);
+                    s = -1;
+                }
+                if (i < n) out.push(React.cloneElement(cells[cols[i].id], { key: cols[i].id }));
+            }
             return (
                 <tfoot className="sticky-footer">
-                    <tr className={trClass}>
-                        {after ? <td colSpan={1 + first} className="border-r"></td> : labelTd}
-                        {out}
-                        {after ? labelTd : first >= 0 && last < cols.length - 1 && <td colSpan={cols.length - 1 - last}></td>}
-                    </tr>
+                    <tr className={trClass}>{out}</tr>
                 </tfoot>
             );
         };
+
+        // Ô dòng tổng theo grid.foot (v1.10.3). sums = summary của server (tổng toàn bộ truy vấn) hoặc footRowSums. Khoá thiếu trong
+        // summary (vd DB không có cột Doanh thu 511) → ô trống, không ghi 0.
+        const footCells = (grid, sums) => {
+            const o = {};
+            Object.keys(grid.foot).forEach(id => {
+                const f = grid.foot[id], x = (sums || {})[f.k], n = Number(x || 0);
+                o[id] = <td className={f.cls}>{x == null ? '' : f.dec ? n.toLocaleString('en-US', { minimumFractionDigits: f.dec, maximumFractionDigits: f.dec }) : Math.round(n).toLocaleString('en-US')}</td>;
+            });
+            return o;
+        };
+        // Ô lọc cột loại bớt dòng trên trang (Trum chốt 28/09) → dòng tổng cộng đúng các dòng đang hiện; không loại dòng nào (chưa gõ,
+        // hoặc Truy vấn đã lọc sẵn ở server) → null = dùng tổng toàn bộ truy vấn của server. Cùng số lẻ với ô trên bảng: cộng giá trị gốc.
+        const footRowSums = (grid, all, shown) => {
+            if (shown.length >= all.length) return null;
+            const s = {};
+            Object.keys(grid.foot).forEach(id => {
+                const f = grid.foot[id];
+                let t = 0, any = false;
+                shown.forEach(r => { const x = f.v ? f.v(r) : r[id]; if (x != null && x !== '') { any = true; t += Number(x) || 0; } });
+                s[f.k] = any || f.v || !shown.length ? t : undefined;
+            });
+            return s;
+        };
+        const footShownLabel = (n, unit = 'dòng') => `Tổng các ${unit} đang lọc trên trang (${n.toLocaleString()} ${unit}):`;
 
         // Nút "Cột" ở chân bảng (góc trái, cạnh phân trang): bật/tắt từng cột, kéo đổi thứ tự, khôi phục mặc định; bảng chọn mở
         // lên trên. KHÔNG đặt trên thanh lọc: đo 28/09 thêm 1 nút ở đó là thanh lọc sổ cái ở 1366 px (thanh bên mở) rớt xuống 2 hàng.
@@ -1123,6 +1183,10 @@ window.showConnectionLost = function() {
         const LEDGER_GRID = {
             numTh: 'border-r w-14', numTd: 'border-r text-center', tr: 'hover:bg-indigo-50 border-b border-slate-50',
             grp: { DEBIT: { sum: 'DEBIT', dec: 2, color: 'text-indigo-700' }, CREDIT: { sum: 'CREDIT', dec: 2, color: 'text-indigo-700' } },
+            foot: {
+                DEBIT:  { k: 'total_debit',  dec: 2, v: r => r.DEBIT_CREDIT === 'DEB' ? r.AMOUNT : null, cls: 'border-r text-right px-4 text-emerald-700 bg-emerald-100/40' },
+                CREDIT: { k: 'total_credit', dec: 2, v: r => r.DEBIT_CREDIT === 'CRD' ? r.AMOUNT : null, cls: 'border-r text-right px-4 text-red-700 bg-red-100/40' },
+            },
             cols: [
                 { id: 'TRAN_DATE',             label: 'Ngày CT',        sort: 'TRAN_DATE',           th: 'border-r w-28',                     search: 2, td: 'border-r text-center font-bold' },
                 { id: 'TRAN_NO',               label: 'Số chứng từ',    sort: 'TRAN_NO',             th: 'border-r w-36 px-3',                search: 2, td: 'border-r font-black px-3', q: 'pre' },
@@ -1163,6 +1227,16 @@ window.showConnectionLost = function() {
         const SALE_GRID = {
             numTh: 'border-r w-12', numTd: 'border-r text-center', grp: GRP_TOTAL,
             tr: r => `hover:bg-indigo-50 border-b border-slate-50 ${r.IS_RETURN ? 'bg-red-50/40' : ''}`,
+            foot: {
+                QUANTITY:          { k: 'quantity',          dec: 2, cls: 'border-r text-right font-mono px-2 bg-slate-100/40' },
+                AMOUNT:            { k: 'amount',            dec: 0, cls: 'border-r text-right font-mono px-2 bg-slate-100/40' },
+                DISCOUNT_AMOUNT:   { k: 'discount',          dec: 0, cls: 'border-r text-right font-mono px-2 text-orange-700 bg-orange-100/40' },
+                VAT_TAX_AMOUNT:    { k: 'vat_tax',           dec: 0, cls: 'border-r text-right font-mono px-2 text-violet-700 bg-violet-100/40' },
+                TOTAL_AMOUNT:      { k: 'total',             dec: 0, cls: 'border-r text-right font-mono px-2 text-emerald-700 bg-emerald-100/40' },
+                COG_AMOUNT:        { k: 'cog',               dec: 0, cls: 'border-r text-right font-mono px-2 text-rose-700 bg-rose-100/40' },
+                INCOME_AMOUNT:     { k: 'income_amount',     dec: 0, cls: 'border-r text-right font-mono px-2 text-emerald-700 bg-emerald-100/40' },
+                VAT_INCOME_AMOUNT: { k: 'vat_income_amount', dec: 0, cls: 'border-r text-right font-mono px-2 text-violet-700 bg-violet-100/40' },
+            },
             cols: [
                 { id: 'ORGANIZATION_ID',     label: 'Mã ĐV',         sort: 'ORGANIZATION_ID',   th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'ORGANIZATION_NAME',   label: 'Tên đơn vị',    sort: 'ORGANIZATION_NAME', th: 'border-r w-40 px-3', align: 'left',  search: 2, td: 'border-r whitespace-nowrap px-3 font-bold' },
@@ -1175,6 +1249,9 @@ window.showConnectionLost = function() {
                 { id: 'VAT_TRAN_SERIE',      label: 'Ký hiệu',       sort: 'VAT_TRAN_SERIE',    th: 'border-r w-24',                      search: 1, td: 'border-r text-center', q: 'pre' },
                 { id: 'PR_DETAIL_ID',        label: 'Mã ĐT',         sort: 'PR_DETAIL_ID',      th: 'border-r w-24',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'PR_DETAIL_NAME',      label: 'Tên đối tượng', sort: 'PR_DETAIL_NAME',    th: 'border-r w-44 px-3', align: 'left',  search: 2, td: 'border-r whitespace-nowrap px-3 font-bold' },
+                // v1.10.3: địa chỉ ghi trên chứng từ (SALE_VIEW.ADDRESS — cột có sẵn trong SALE_BASE_COLUMNS), dài thì cắt "…", rê chuột xem đủ
+                { id: 'ADDRESS',             label: 'Địa chỉ',       sort: 'ADDRESS',           th: 'border-r w-56 px-3', align: 'left',  search: 2,
+                  td: (r, k) => <td key={k} className="border-r truncate max-w-[280px] px-3" title={r.ADDRESS || ''}>{r.ADDRESS}</td> },
                 { id: 'WAREHOUSE_ID',        label: 'Mã kho',        sort: 'WAREHOUSE_ID',      th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'WAREHOUSE_NAME',      label: 'Tên kho',       sort: 'WAREHOUSE_NAME',    th: 'border-r w-36 px-3', align: 'left',  search: 1, td: 'border-r whitespace-nowrap px-3' },
                 { id: 'ITEM_ID',             label: 'Mã hàng',       sort: 'ITEM_ID',           th: 'border-r w-24',                      search: 2, td: 'border-r text-center font-black text-indigo-600', q: 'pre' },
@@ -1212,6 +1289,12 @@ window.showConnectionLost = function() {
 
         const INCOME_ALLOC_GRID = {
             numTh: 'border-r w-12', numTd: 'border-r text-center', tr: 'hover:bg-indigo-50 border-b border-slate-50',
+            foot: {
+                INCOME_AMOUNT: { k: 'income_amount', dec: 0, cls: 'border-r text-right font-mono px-2 bg-slate-100/40' },
+                PERIOD_AMT:    { k: 'period_amt',    dec: 0, cls: 'border-r text-right font-mono px-2 text-emerald-700 bg-emerald-100/40' },
+                CUM_AMT:       { k: 'cum_amt',       dec: 0, cls: 'border-r text-right font-mono px-2 text-violet-700 bg-violet-100/40' },
+                CON_LAI:       { k: 'con_lai',       dec: 0, cls: 'border-r text-right font-mono px-2 text-rose-700 bg-rose-100/40' },
+            },
             cols: [
                 { id: 'ORGANIZATION_ID',        label: 'Đơn vị',        sort: 'ORGANIZATION_ID',   th: 'border-r w-16',          search: 1, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'ORGANIZATION_NAME',      label: 'Tên đơn vị',                               th: 'border-r w-40 px-3',     search: 1, td: 'border-r whitespace-nowrap px-3 font-bold' },
@@ -1242,6 +1325,7 @@ window.showConnectionLost = function() {
 
         const VOUCHER_GRID = {
             numTh: 'border-r w-12', numTd: 'border-r text-center', tr: 'hover:bg-indigo-50 border-b border-slate-50', grp: GRP_AMOUNT,
+            foot: { AMOUNT: { k: 'amount', dec: 0, cls: 'border-r text-right font-mono px-2 text-emerald-700 bg-emerald-100/40' } },
             cols: [
                 { id: 'ORGANIZATION_ID',       label: 'Mã ĐV',             sort: 'ORGANIZATION_ID',       th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'ORGANIZATION_NAME',     label: 'Tên đơn vị',        sort: 'ORGANIZATION_NAME',     th: 'border-r w-40 px-3', align: 'left',  search: 1, td: 'border-r whitespace-nowrap px-3 font-bold' },
@@ -1276,6 +1360,14 @@ window.showConnectionLost = function() {
 
         const PURCHASE_GRID = {
             numTh: 'border-r w-12', numTd: 'border-r text-center', tr: 'hover:bg-indigo-50 border-b border-slate-50', grp: GRP_TOTAL,
+            foot: {
+                QUANTITY:        { k: 'quantity',      dec: 2, cls: 'border-r text-right font-mono px-2 bg-slate-100/40' },
+                QUANTITY_WH:     { k: 'quantity_wh',   dec: 2, cls: 'border-r text-right font-mono px-2 bg-slate-100/40' },
+                DISCOUNT_AMOUNT: { k: 'discount',      dec: 0, cls: 'border-r text-right font-mono px-2 text-orange-700 bg-orange-100/40' },
+                PURCHASE_COST:   { k: 'purchase_cost', dec: 2, cls: 'border-r text-right font-mono px-2 bg-slate-100/40' },
+                VAT_TAX_AMOUNT:  { k: 'vat_tax',       dec: 0, cls: 'border-r text-right font-mono px-2 text-violet-700 bg-violet-100/40' },
+                TOTAL_AMOUNT:    { k: 'total',         dec: 0, cls: 'border-r text-right font-mono px-2 text-emerald-700 bg-emerald-100/40' },
+            },
             cols: [
                 { id: 'ORGANIZATION_ID',   label: 'Mã ĐV',         sort: 'ORGANIZATION_ID',   th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'ORGANIZATION_NAME', label: 'Tên đơn vị',    sort: 'ORGANIZATION_NAME', th: 'border-r w-40 px-3', align: 'left',  search: 2, td: 'border-r whitespace-nowrap px-3 font-bold' },
@@ -1312,6 +1404,11 @@ window.showConnectionLost = function() {
 
         const WAREHOUSE_GRID = {
             numTh: 'border-r w-12', numTd: 'border-r text-center', tr: 'hover:bg-indigo-50 border-b border-slate-50', grp: GRP_AMOUNT,
+            foot: {
+                QUANTITY:       { k: 'quantity',       dec: 2, cls: 'border-r text-right font-mono px-2 bg-slate-100/40' },
+                QUANTITY_EXTRA: { k: 'quantity_extra', dec: 2, cls: 'border-r text-right font-mono px-2 bg-slate-100/40' },
+                AMOUNT:         { k: 'amount',         dec: 0, cls: 'border-r text-right font-mono px-2 text-emerald-700 bg-emerald-100/40' },
+            },
             cols: [
                 { id: 'ISSUE_RECEIVE',        label: 'N/X',           sort: 'ISSUE_RECEIVE',        th: 'border-r w-14', search: 1, sh: 'Gõ N (nhập) hoặc X (xuất)', q: 'pre',
                   td: (r, k) => { const ir = r.ISSUE_RECEIVE; return <td key={k} className={`border-r text-center font-black ${ir==='N' ? 'text-emerald-600' : ir==='X' ? 'text-red-600' : ''}`}>{ir}</td>; } },
@@ -1347,6 +1444,10 @@ window.showConnectionLost = function() {
         const fmtQty2 = v => fmtNum(v || 0);   // tồn kho: ô trống vẫn hiện 0.00 như bản cũ
         const WAREHOUSE_BALANCE_GRID = {
             numTh: 'border-r w-12', numTd: 'border-r text-slate-300 font-mono', tr: 'border-b hover:bg-indigo-50/30 text-center',
+            foot: {
+                QUANTITY:     { k: 'quantity',     dec: 2, cls: 'border-r text-right font-mono px-2 bg-slate-100/40' },
+                QUANTITY_ADJ: { k: 'quantity_adj', dec: 2, cls: 'border-r text-right font-mono px-2 bg-slate-100/40' },
+            },
             cols: [
                 { id: 'TRAN_DATE',         label: 'Ngày',            sort: 'TRAN_DATE',         th: 'border-r w-24',                      search: 1, td: 'border-r' },
                 { id: 'ORGANIZATION_ID',   label: 'Mã ĐV',           sort: 'ORGANIZATION_ID',   th: 'border-r w-20',                      search: 2, td: 'border-r', q: 'pre' },
@@ -1386,7 +1487,7 @@ window.showConnectionLost = function() {
                   td: (r, k) => (
                     <td key={k} className="border-r px-3 text-left">
                         {(r.PR_DETAIL_CLASS_NAME || r.PR_DETAIL_CLASS_ID) ? (
-                            <span className="inline-block px-1.5 py-0.5 rounded text-[11px] bg-slate-100 text-ink-2">
+                            <span className="inline-block px-1.5 rounded text-[11px] leading-[18px] align-top bg-slate-100 text-ink-2">
                                 {r.PR_DETAIL_CLASS_NAME || r.PR_DETAIL_CLASS_ID}
                             </span>
                         ) : ''}
@@ -1440,6 +1541,11 @@ window.showConnectionLost = function() {
             return c && c.q === 'pre' ? t.trim().startsWith(q) : t.includes(q);
         };
         // Tham số lọc SQL cho cột số có search 2: n_<ID> = chữ số đã gõ (bỏ dấu phẩy/%)
+        // Lọc các dòng đang tải theo ô tìm theo cột. Không ô nào có chữ → trả NGUYÊN mảng (giữ identity: bảng ảo không cuộn về đầu).
+        const gridFilter = (grid, rows, cs) => {
+            const qs = Object.keys(cs).filter(k => (cs[k] || '').trim() !== '').map(k => [k, cs[k].trim().toLowerCase()]);
+            return qs.length ? rows.filter(row => qs.every(([k, q]) => gridMatch(grid, k, row, q))) : rows;
+        };
         const gridNumParams = (grid, cs) => {
             const o = {};
             grid.cols.forEach(c => { if (c.q === 'num' && c.search === 2) { const v = numKey(cs[c.id]); if (v) o['n_' + c.id] = v; } });
@@ -4185,17 +4291,11 @@ window.showConnectionLost = function() {
             const [purchaseFilters, setPurchaseFilters] = useState({ wh_ids: [], tran_no_search: '' });
             
             // PURCHASE VIRTUAL SCROLL & GROUPING
-            const purchaseFlatData = useMemo(() => {
-                let filteredData = purchaseData;
-                const searchKeys = Object.keys(purchaseColSearch).filter(k => (purchaseColSearch[k] || '').trim() !== '');
-                if (searchKeys.length > 0) {
-                    filteredData = filteredData.filter(row => {
-                        return searchKeys.every(k => gridMatch(PURCHASE_GRID, k, row, purchaseColSearch[k].trim().toLowerCase()));
-                    });
-                }
-                return buildGroupedData(filteredData, groupByPurchase, ['TOTAL_AMOUNT']);
+            const purchaseShown = useMemo(() => gridFilter(PURCHASE_GRID, purchaseData, purchaseColSearch), [purchaseData, purchaseColSearch]);
+            const purchaseFoot = useMemo(() => footRowSums(PURCHASE_GRID, purchaseData, purchaseShown), [purchaseData, purchaseShown]);
+            const purchaseFlatData = useMemo(() => buildGroupedData(purchaseShown, groupByPurchase, ['TOTAL_AMOUNT']),
                 // eslint-disable-next-line react-hooks/exhaustive-deps
-            }, [purchaseData, groupByPurchase, toggleGroupRenderPurchase, purchaseColSearch]);
+                [purchaseShown, groupByPurchase, toggleGroupRenderPurchase]);
             
             const purchaseRowHeight = 28;
 
@@ -4218,17 +4318,11 @@ window.showConnectionLost = function() {
             const [saleLoading, setSaleLoading] = useState(false);
             const debouncedSaleColSearch = useDebounce(saleColSearch, 400);
 
-            const saleFlatData = useMemo(() => {
-                let filteredData = saleData;
-                const searchKeys = Object.keys(saleColSearch).filter(k => (saleColSearch[k] || '').trim() !== '');
-                if (searchKeys.length > 0) {
-                    filteredData = filteredData.filter(row => {
-                        return searchKeys.every(k => gridMatch(SALE_GRID, k, row, saleColSearch[k].trim().toLowerCase()));
-                    });
-                }
-                return buildGroupedData(filteredData, groupBySale, ['TOTAL_AMOUNT']);
+            const saleShown = useMemo(() => gridFilter(SALE_GRID, saleData, saleColSearch), [saleData, saleColSearch]);
+            const saleFoot = useMemo(() => footRowSums(SALE_GRID, saleData, saleShown), [saleData, saleShown]);
+            const saleFlatData = useMemo(() => buildGroupedData(saleShown, groupBySale, ['TOTAL_AMOUNT']),
                 // eslint-disable-next-line react-hooks/exhaustive-deps
-            }, [saleData, groupBySale, toggleGroupRenderSale, saleColSearch]);
+                [saleShown, groupBySale, toggleGroupRenderSale]);
 
             const saleRowHeight = 28;
 
@@ -4247,7 +4341,7 @@ window.showConnectionLost = function() {
 
             const buildSaleQuery = (targetPage = 1, targetPageSize = filters.page_size, searchOverride = null, extra = {}) => {
                 const cs = searchOverride !== null ? searchOverride : saleColSearch;
-                const LONG = new Set(['s_desc','s_org_name','s_item_name','s_exp_name','s_job_name','s_pr_name','s_contact','tran_no','s_inv_no','s_comments']);
+                const LONG = new Set(['s_desc','s_org_name','s_item_name','s_exp_name','s_job_name','s_pr_name','s_contact','tran_no','s_inv_no','s_comments','s_address']);
                 const take = (k,v) => {
                     const x = (v||'').trim();
                     if (!x) return null;
@@ -4271,6 +4365,7 @@ window.showConnectionLost = function() {
                     s_job_name:  take('s_job_name',  cs.JOB_NAME),
                     s_pr_id:     take('s_pr_id',     cs.PR_DETAIL_ID),
                     s_pr_name:   take('s_pr_name',   cs.PR_DETAIL_NAME),
+                    s_address:   take('s_address',   cs.ADDRESS),
                     s_acc_id:    take('s_acc_id',    cs.ACCOUNT_ID),
                     s_unit_id:   take('s_unit_id',   cs.UNIT_ID),
                     // v1.10.1: HTTT, nguồn đơn, ghi chú, hàng trả (server dò tên HTTT/nguồn ra mã rồi lọc)
@@ -4343,11 +4438,8 @@ window.showConnectionLost = function() {
             const incomeAllocScrollRef = useRef();
             // Ô tìm theo cột (v1.10.1): chỉ lọc các dòng đang tải trên trang, không gửi server (tooltip ô lọc ghi rõ)
             const [incomeAllocColSearch, setIncomeAllocColSearch] = useState({});
-            const incomeAllocFlatData = useMemo(() => {
-                const searchKeys = Object.keys(incomeAllocColSearch).filter(k => (incomeAllocColSearch[k] || '').trim() !== '');
-                if (searchKeys.length === 0) return incomeAllocData;
-                return incomeAllocData.filter(row => searchKeys.every(k => gridMatch(INCOME_ALLOC_GRID, k, row, incomeAllocColSearch[k].trim().toLowerCase())));
-            }, [incomeAllocData, incomeAllocColSearch]);
+            const incomeAllocFlatData = useMemo(() => gridFilter(INCOME_ALLOC_GRID, incomeAllocData, incomeAllocColSearch), [incomeAllocData, incomeAllocColSearch]);
+            const incomeAllocFoot = useMemo(() => footRowSums(INCOME_ALLOC_GRID, incomeAllocData, incomeAllocFlatData), [incomeAllocData, incomeAllocFlatData]);
 
             const toggleIncomeAllocFilter = (key, id) => {
                 setIncomeAllocFilters(p => {
@@ -4423,15 +4515,11 @@ window.showConnectionLost = function() {
             const [voucherLoading, setVoucherLoading] = useState(false);
             const debouncedVoucherColSearch = useDebounce(voucherColSearch, 400);
 
-            const voucherFlatData = useMemo(() => {
-                let filteredData = voucherData;
-                const searchKeys = Object.keys(voucherColSearch).filter(k => (voucherColSearch[k] || '').trim() !== '');
-                if (searchKeys.length > 0) {
-                    filteredData = filteredData.filter(row => searchKeys.every(k => gridMatch(VOUCHER_GRID, k, row, voucherColSearch[k].trim().toLowerCase())));
-                }
-                return buildGroupedData(filteredData, groupByVoucher, ['AMOUNT']);
+            const voucherShown = useMemo(() => gridFilter(VOUCHER_GRID, voucherData, voucherColSearch), [voucherData, voucherColSearch]);
+            const voucherFoot = useMemo(() => footRowSums(VOUCHER_GRID, voucherData, voucherShown), [voucherData, voucherShown]);
+            const voucherFlatData = useMemo(() => buildGroupedData(voucherShown, groupByVoucher, ['AMOUNT']),
                 // eslint-disable-next-line react-hooks/exhaustive-deps
-            }, [voucherData, groupByVoucher, toggleGroupRenderVoucher, voucherColSearch]);
+                [voucherShown, groupByVoucher, toggleGroupRenderVoucher]);
 
 
             const handleToggleVoucherGroup = (id) => {
@@ -4522,17 +4610,11 @@ window.showConnectionLost = function() {
             const [warehouseFilters, setWarehouseFilters] = useState({ wh_ids: [], tran_no_search: '', issue_receive: '' });
 
             // WAREHOUSE VIRTUAL SCROLL & GROUPING
-            const warehouseFlatData = useMemo(() => {
-                let filteredData = warehouseData;
-                const searchKeys = Object.keys(warehouseColSearch).filter(k => (warehouseColSearch[k] || '').trim() !== '');
-                if (searchKeys.length > 0) {
-                    filteredData = filteredData.filter(row => {
-                        return searchKeys.every(k => gridMatch(WAREHOUSE_GRID, k, row, warehouseColSearch[k].trim().toLowerCase()));
-                    });
-                }
-                return buildGroupedData(filteredData, groupByWarehouse, ['AMOUNT']);
+            const warehouseShown = useMemo(() => gridFilter(WAREHOUSE_GRID, warehouseData, warehouseColSearch), [warehouseData, warehouseColSearch]);
+            const warehouseFoot = useMemo(() => footRowSums(WAREHOUSE_GRID, warehouseData, warehouseShown), [warehouseData, warehouseShown]);
+            const warehouseFlatData = useMemo(() => buildGroupedData(warehouseShown, groupByWarehouse, ['AMOUNT']),
                 // eslint-disable-next-line react-hooks/exhaustive-deps
-            }, [warehouseData, groupByWarehouse, toggleGroupRenderWarehouse, warehouseColSearch]);
+                [warehouseShown, groupByWarehouse, toggleGroupRenderWarehouse]);
             
             const warehouseRowHeight = 28;
 
@@ -4847,6 +4929,7 @@ window.showConnectionLost = function() {
             const [warehouseBalanceSort, setWarehouseBalanceSort] = useState({ field: null, dir: 'desc' });
             const [warehouseBalanceData, setWarehouseBalanceData] = useState([]);
             const [warehouseBalancePagination, setWarehouseBalancePagination] = useState({ total_rows: 0, total_pages: 1, page: 1 });
+            const [warehouseBalanceSummary, setWarehouseBalanceSummary] = useState({ quantity: 0, quantity_adj: 0 });
             const [warehouseBalanceColSearch, setWarehouseBalanceColSearch] = useState({});
             const [warehouseBalanceLoading, setWarehouseBalanceLoading] = useState(false);
             const [warehouseBalanceFilters, setWarehouseBalanceFilters] = useState({ wh_ids: [] });
@@ -4856,13 +4939,8 @@ window.showConnectionLost = function() {
             };
 
             // Lọc client-side ngay trên trang đang tải (giống Warehouse) — không gọi lại server khi gõ
-            const warehouseBalanceFlatData = useMemo(() => {
-                const searchKeys = Object.keys(warehouseBalanceColSearch).filter(k => (warehouseBalanceColSearch[k] || '').trim() !== '');
-                if (searchKeys.length === 0) return warehouseBalanceData;
-                return warehouseBalanceData.filter(row => searchKeys.every(k => {
-                    return gridMatch(WAREHOUSE_BALANCE_GRID, k, row, warehouseBalanceColSearch[k].trim().toLowerCase());
-                }));
-            }, [warehouseBalanceData, warehouseBalanceColSearch]);
+            const warehouseBalanceFlatData = useMemo(() => gridFilter(WAREHOUSE_BALANCE_GRID, warehouseBalanceData, warehouseBalanceColSearch), [warehouseBalanceData, warehouseBalanceColSearch]);
+            const warehouseBalanceFoot = useMemo(() => footRowSums(WAREHOUSE_BALANCE_GRID, warehouseBalanceData, warehouseBalanceFlatData), [warehouseBalanceData, warehouseBalanceFlatData]);
 
 
 
@@ -4904,6 +4982,7 @@ window.showConnectionLost = function() {
                     const extras = {};
                     if (targetPage > 1 && targetPageSize === filters.page_size && warehouseBalancePagination.total_rows > 0) {
                         extras.known_total = warehouseBalancePagination.total_rows;
+                        extras.known_sums  = JSON.stringify(warehouseBalanceSummary);
                     }
                     const query = buildWarehouseBalanceQuery(targetPage, targetPageSize, searchOverride, extras);
                     const r = await fetch(`/api/warehouse_balance?${query.toString()}`, { signal: _ctrl.signal });
@@ -4912,6 +4991,7 @@ window.showConnectionLost = function() {
                     if (res.status === 'ok') {
                         setWarehouseBalanceData(res.data);
                         setWarehouseBalancePagination(res.pagination);
+                        if (res.summary) setWarehouseBalanceSummary(res.summary);
                         setFilters(p => ({ ...p, page_size: targetPageSize }));
                         markTabApplied('warehouse_balance');
                     } else {
@@ -5800,17 +5880,11 @@ window.showConnectionLost = function() {
 
             
             // LEDGER VIRTUAL SCROLL & GROUPING
-            const ledgerFlatData = useMemo(() => {
-                let filteredData = data;
-                const searchKeys = Object.keys(colSearch).filter(k => (colSearch[k] || '').trim() !== '');
-                if (searchKeys.length > 0) {
-                    filteredData = filteredData.filter(row => {
-                        return searchKeys.every(k => gridMatch(LEDGER_GRID, k, row, colSearch[k].trim().toLowerCase()));
-                    });
-                }
-                return buildGroupedData(filteredData, groupByLedger, ['DEBIT', 'CREDIT']);
+            const ledgerShown = useMemo(() => gridFilter(LEDGER_GRID, data, colSearch), [data, colSearch]);
+            const ledgerFoot = useMemo(() => footRowSums(LEDGER_GRID, data, ledgerShown), [data, ledgerShown]);
+            const ledgerFlatData = useMemo(() => buildGroupedData(ledgerShown, groupByLedger, ['DEBIT', 'CREDIT']),
                 // eslint-disable-next-line react-hooks/exhaustive-deps
-            }, [data, groupByLedger, toggleGroupRender, colSearch]);
+                [ledgerShown, groupByLedger, toggleGroupRender]);
             
             const ledgerRowHeight = 28; // Chiều cao thực tế của <tr> (không đổi theo bộ lọc)
 
@@ -6060,11 +6134,8 @@ window.showConnectionLost = function() {
                                                 )} />
                                             </tbody>
                                             <GridFoot cols={ledgerLay.cols} trClass="text-slate-800 font-black text-[13px] bg-slate-50/95" labelClass="border-r text-right px-8 py-3.5 uppercase text-[10px] text-slate-400"
-                                                label={`Tổng toàn bộ truy vấn (${Number(pagination.total_rows||0).toLocaleString()} dòng):`}
-                                                cells={{
-                                                    DEBIT: <td className="border-r text-right px-4 text-emerald-700 bg-emerald-100/40">{summary.total_debit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>,
-                                                    CREDIT: <td className="border-r text-right px-4 text-red-700 bg-red-100/40">{summary.total_credit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>,
-                                                }} />
+                                                label={ledgerFoot ? footShownLabel(ledgerShown.length) : `Tổng toàn bộ truy vấn (${Number(pagination.total_rows||0).toLocaleString()} dòng):`}
+                                                cells={footCells(LEDGER_GRID, ledgerFoot || summary)} />
                                         </table>
                                     </div>
                                     <div className="ds-pager">
@@ -6201,15 +6272,8 @@ window.showConnectionLost = function() {
                                                 )} />
                                             </tbody>
                                             <GridFoot cols={saleLay.cols} trClass="text-slate-800 font-black text-[12px] bg-slate-50/95" labelClass="border-r text-right px-4 py-3 uppercase text-[10px] text-slate-400"
-                                                label={`Tổng toàn bộ truy vấn (${Number(salePagination.total_rows||0).toLocaleString()} dòng):`}
-                                                cells={{
-                                                    QUANTITY: <td className="border-r text-right font-mono px-2 bg-slate-100/40">{Number(saleSummary.quantity||0).toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2})}</td>,
-                                                    AMOUNT: <td className="border-r text-right font-mono px-2 bg-slate-100/40">{Math.round(Number(saleSummary.amount||0)).toLocaleString('en-US')}</td>,
-                                                    DISCOUNT_AMOUNT: <td className="border-r text-right font-mono px-2 text-orange-700 bg-orange-100/40">{Math.round(Number(saleSummary.discount||0)).toLocaleString('en-US')}</td>,
-                                                    VAT_TAX_AMOUNT: <td className="border-r text-right font-mono px-2 text-violet-700 bg-violet-100/40">{Math.round(Number(saleSummary.vat_tax||0)).toLocaleString('en-US')}</td>,
-                                                    TOTAL_AMOUNT: <td className="border-r text-right font-mono px-2 text-emerald-700 bg-emerald-100/40">{Math.round(Number(saleSummary.total||0)).toLocaleString('en-US')}</td>,
-                                                    COG_AMOUNT: <td className="border-r text-right font-mono px-2 text-rose-700 bg-rose-100/40">{Math.round(Number(saleSummary.cog||0)).toLocaleString('en-US')}</td>,
-                                                }} />
+                                                label={saleFoot ? footShownLabel(saleShown.length) : `Tổng toàn bộ truy vấn (${Number(salePagination.total_rows||0).toLocaleString()} dòng):`}
+                                                cells={footCells(SALE_GRID, saleFoot || saleSummary)} />
                                         </table>
                                     </div>
                                     <div className="ds-pager">
@@ -6311,13 +6375,8 @@ window.showConnectionLost = function() {
                                                 )} />
                                             </tbody>
                                             <GridFoot cols={incomeAllocLay.cols} trClass="text-slate-800 font-black text-[12px] bg-slate-50/95" labelClass="border-r text-right px-4 py-3 uppercase text-[10px] text-slate-400"
-                                                label={`Tổng (${Number(incomeAllocPagination.total_rows||0).toLocaleString()} thẻ):`}
-                                                cells={{
-                                                    INCOME_AMOUNT: <td className="border-r text-right font-mono px-2 bg-slate-100/40">{Math.round(Number(incomeAllocSummary.income_amount||0)).toLocaleString('en-US')}</td>,
-                                                    PERIOD_AMT: <td className="border-r text-right font-mono px-2 text-emerald-700 bg-emerald-100/40">{Math.round(Number(incomeAllocSummary.period_amt||0)).toLocaleString('en-US')}</td>,
-                                                    CUM_AMT: <td className="border-r text-right font-mono px-2 text-violet-700 bg-violet-100/40">{Math.round(Number(incomeAllocSummary.cum_amt||0)).toLocaleString('en-US')}</td>,
-                                                    CON_LAI: <td className="border-r text-right font-mono px-2 text-rose-700 bg-rose-100/40">{Math.round(Number(incomeAllocSummary.con_lai||0)).toLocaleString('en-US')}</td>,
-                                                }} />
+                                                label={incomeAllocFoot ? footShownLabel(incomeAllocFlatData.length, 'thẻ') : `Tổng (${Number(incomeAllocPagination.total_rows||0).toLocaleString()} thẻ):`}
+                                                cells={footCells(INCOME_ALLOC_GRID, incomeAllocFoot || incomeAllocSummary)} />
                                         </table>
                                     </div>
                                     <div className="ds-pager">
@@ -6436,10 +6495,8 @@ window.showConnectionLost = function() {
                                                 )} />
                                             </tbody>
                                             <GridFoot cols={voucherLay.cols} trClass="text-slate-800 font-black text-[12px] bg-slate-50/95" labelClass="border-r text-right px-4 py-3 uppercase text-[10px] text-slate-400"
-                                                label={`Tổng toàn bộ truy vấn (${Number(voucherPagination.total_rows||0).toLocaleString()} dòng):`}
-                                                cells={{
-                                                    AMOUNT: <td className="border-r text-right font-mono px-2 text-emerald-700 bg-emerald-100/40">{Math.round(Number(voucherSummary.amount||0)).toLocaleString('en-US')}</td>,
-                                                }} />
+                                                label={voucherFoot ? footShownLabel(voucherShown.length) : `Tổng toàn bộ truy vấn (${Number(voucherPagination.total_rows||0).toLocaleString()} dòng):`}
+                                                cells={footCells(VOUCHER_GRID, voucherFoot || voucherSummary)} />
                                         </table>
                                     </div>
                                     <div className="ds-pager">
@@ -6580,14 +6637,8 @@ window.showConnectionLost = function() {
                                                 )} />
                                             </tbody>
                                             <GridFoot cols={purchaseLay.cols} trClass="text-slate-800 font-black text-[12px] bg-slate-50/95" labelClass="border-r text-right px-4 py-3 uppercase text-[10px] text-slate-400"
-                                                label={`Tổng toàn bộ truy vấn (${Number(purchasePagination.total_rows||0).toLocaleString()} dòng):`}
-                                                cells={{
-                                                    QUANTITY: <td className="border-r text-right font-mono px-2 bg-slate-100/40">{Number(purchaseSummary.quantity||0).toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2})}</td>,
-                                                    QUANTITY_WH: <td className="border-r text-right font-mono px-2 bg-slate-100/40">{Number(purchaseSummary.quantity_wh||0).toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2})}</td>,
-                                                    DISCOUNT_AMOUNT: <td className="border-r text-right font-mono px-2 text-orange-700 bg-orange-100/40">{Math.round(Number(purchaseSummary.discount||0)).toLocaleString('en-US')}</td>,
-                                                    VAT_TAX_AMOUNT: <td className="border-r text-right font-mono px-2 text-violet-700 bg-violet-100/40">{Math.round(Number(purchaseSummary.vat_tax||0)).toLocaleString('en-US')}</td>,
-                                                    TOTAL_AMOUNT: <td className="border-r text-right font-mono px-2 text-emerald-700 bg-emerald-100/40">{Math.round(Number(purchaseSummary.total||0)).toLocaleString('en-US')}</td>,
-                                                }} />
+                                                label={purchaseFoot ? footShownLabel(purchaseShown.length) : `Tổng toàn bộ truy vấn (${Number(purchasePagination.total_rows||0).toLocaleString()} dòng):`}
+                                                cells={footCells(PURCHASE_GRID, purchaseFoot || purchaseSummary)} />
                                         </table>
                                     </div>
                                     <div className="ds-pager">
@@ -6732,12 +6783,8 @@ window.showConnectionLost = function() {
                                                 )} />
                                             </tbody>
                                             <GridFoot cols={warehouseLay.cols} trClass="text-slate-800 font-black text-[12px] bg-slate-50/95" labelClass="border-r text-right px-4 py-3 uppercase text-[10px] text-slate-400"
-                                                label={`Tổng toàn bộ truy vấn (${Number(warehousePagination.total_rows||0).toLocaleString()} dòng):`}
-                                                cells={{
-                                                    QUANTITY: <td className="border-r text-right font-mono px-2 bg-slate-100/40">{Number(warehouseSummary.quantity||0).toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2})}</td>,
-                                                    QUANTITY_EXTRA: <td className="border-r text-right font-mono px-2 bg-slate-100/40">{Number(warehouseSummary.quantity_extra||0).toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2})}</td>,
-                                                    AMOUNT: <td className="border-r text-right font-mono px-2 text-emerald-700 bg-emerald-100/40">{Math.round(Number(warehouseSummary.amount||0)).toLocaleString('en-US')}</td>,
-                                                }} />
+                                                label={warehouseFoot ? footShownLabel(warehouseShown.length) : `Tổng toàn bộ truy vấn (${Number(warehousePagination.total_rows||0).toLocaleString()} dòng):`}
+                                                cells={footCells(WAREHOUSE_GRID, warehouseFoot || warehouseSummary)} />
                                         </table>
                                     </div>
                                     <div className="ds-pager">
@@ -6811,6 +6858,9 @@ window.showConnectionLost = function() {
                                                     <GridRow key={i} grid={WAREHOUSE_BALANCE_GRID} cols={warehouseBalanceLay.cols} r={row} idx={i + 1} />
                                                 )} />
                                             </tbody>
+                                            <GridFoot cols={warehouseBalanceLay.cols} trClass="text-slate-800 font-black text-[12px] bg-slate-50/95" labelClass="border-r text-right px-4 py-3 uppercase text-[10px] text-slate-400"
+                                                label={warehouseBalanceFoot ? footShownLabel(warehouseBalanceFlatData.length) : `Tổng toàn bộ truy vấn (${Number(warehouseBalancePagination.total_rows||0).toLocaleString()} dòng):`}
+                                                cells={footCells(WAREHOUSE_BALANCE_GRID, warehouseBalanceFoot || warehouseBalanceSummary)} />
                                         </table>
                                     </div>
                                     <div className="ds-pager">
