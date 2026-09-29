@@ -1336,7 +1336,7 @@ trên DB thật (M4); bản xuất vẫn nối CTE S; EXE chưa mở thử bằn
 - Chưa: test cập nhật thật (mở bản v1.10.6, bấm "Cập nhật ngay" — lần mở app kế tiếp trên máy Trum chính là bài này); Trum gửi số đo
   tab theo tháng trên DB thật (thanh trạng thái hoặc `datastudio.log`); bản xuất tra theo lô nếu số đo cho thấy xuất chậm.
 
-## 36. v1.10.8 (build xem trước, CHƯA commit / phát hành): màn đăng nhập "Kết nối gần đây" + họa tiết công nghệ, phiên chỉ sống 1 lần chạy app, lưu mật khẩu DPAPI, tắt app là tắt hẳn *(30/09/2026)*
+## 36. v1.10.8 (đã phát hành 30/09, commit `4f027ae`): màn đăng nhập "Kết nối gần đây" + họa tiết công nghệ, phiên chỉ sống 1 lần chạy app, lưu mật khẩu DPAPI, tắt app là tắt hẳn *(30/09/2026)*
 
 **Yêu cầu Trum (29/09 tối):** (1) "có design nào đẹp cho phần login bên phải không, thiết kế đẹp cho hợp concept"; (2) "khi tắt app thì
 sẽ tự kill hết các tác vụ chạy ngầm, để lần sau mở app thì phải đăng nhập lại, vẫn cho phép lưu thông tin server, dbname, user và pass đã
@@ -1396,5 +1396,21 @@ Express thật, file lưu kết nối nằm trong scratchpad):
   (PID MSYS, không phải PID Windows) không tắt được máy chủ thử cũ → lượt chụp ảnh cuối phiên 4f1202a2 treo vì 2 máy chủ thử cùng chạy
   (tái hiện in-process: lưu kết nối khi thư mục chưa có vẫn đúng). Chạy máy chủ thử bằng `Start-Process -PassThru` để có PID thật.
 - `exit_type=Crashed` trong Preferences của AppProfile có từ trước, đóng app thường không đổi — không do bản này.
-- Chưa: Trum mở EXE xem trước → duyệt → `pre-push-qa` → commit + phát hành; test cập nhật thật 1.10.7 → 1.10.8 (phải về màn đăng nhập,
-  thẻ vừa dùng chọn sẵn).
+- Trum không mở EXE xem trước, bảo thẳng "push git phát hành luôn đi".
+
+**pre-push-qa (30/09): 🟡 VÀNG** — rà §3.2 / §3.3 / §3.7 (17 mục) không dính; không còn chỗ gọi `loginData` / `handleLogin` / `showPw`
+cũ; `db_config` chỉ dùng đúng 5 khoá còn giữ; `session` chỉ ghi ở login / logout; chỉ 1 `before_request`. Chạy lại trên code commit:
+`test_login.py` 61/61 + presence qua socket thật (bọc `run_isolated.py` để dòng thử không vào `datastudio.log` thật), `smoke_exe.ps1` trên
+đúng EXE phát hành: server 1,9 s, metadata 401, Host lạ 403, đóng cửa sổ → EXE + cổng 5050 tắt 2,8 s. Quét dòng thêm mới: 0 mật khẩu /
+IP / tên máy chủ. Rủi ro ghi cả commit: chưa đăng nhập DB thật bằng bản này; đóng cửa sổ trong 5 s đầu thì server ~20 s sau mới tắt.
+
+- **Phát hành 30/09:** commit `4f027ae` (push `67cae70..4f027ae`), zip tạo lại từ EXE mới (zip cũ là v1.10.7), release `v1.10.8`
+  "Kết nối gần đây, tắt app sạch" (29 ký tự), ghi chú theo mẫu mục 3.4 — `_release_summary` rút đủ tiêu đề + 6 ý.
+- **Sự cố repo Private:** `releases/latest` không đăng nhập trả **404** — repo đã bị đổi Private (không phiên agent nào đổi; sau lúc kiểm
+  v1.10.7 chiều 29/09). `gh` đăng nhập vẫn thấy release nên chỉ gọi API như app mới lộ. Hỏi Trum → Trum mở lại Public. Sau đó: tag
+  v1.10.8, không nháp, digest asset EXE = SHA-256 `93d383ed…7e97`; `/api/check_update` với bản giả 1.10.7 → có bản mới + 6 ý, 1.10.8 → không
+  báo lại.
+- **Test cập nhật thật** (`upd_real.ps1`): EXE release v1.10.7 (SHA `0cc23b46…`) chạy ở thư mục tạm → `POST /api/apply_update` → tải
+  16.683.521 byte → v1.10.8 lên sau 5,9 s, thư mục còn 1 file, SHA = release; cửa sổ bản mới mở, `/api/metadata` 401 (phải đăng nhập
+  lại — đúng ý Trum); đóng cửa sổ → EXE + cổng tắt 2,7 s, không sót Chrome.
+- Chưa: đăng nhập DB thật (CHULONG) bằng v1.10.8 — lần mở app kế tiếp trên máy Trum chính là bài này.
