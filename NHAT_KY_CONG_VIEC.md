@@ -1329,3 +1329,9 @@ trên DB thật (M4); bản xuất vẫn nối CTE S; EXE chưa mở thử bằn
 - **M3 EXE:** `python build_exe.py` (trả `version.txt` về 1.10.6 trước) → `dist/iPOS_Ledger_Studio.exe` v1.10.7, 16.665.611 byte,
   17:52 29/09; `verify_exe.py` đọc gói (`CArchiveReader`): `version.txt` = 1.10.7, `app.js` trùng từng byte bản đã chạy các bộ giao
   diện, script `server` có đủ 7 hàm mới; SHA-256 `0cc23b46…f523`.
+- **Phát hành 29/09:** commit `8899a58` (push `593b59d..8899a58`), zip tạo lại từ EXE mới (zip cũ là v1.10.6 lúc 13:42), release
+  `v1.10.7` "Bộ lọc Thời gian, DT tháng nhanh" (32 ký tự), ghi chú theo mẫu mục 3.4 — `_release_summary` rút đủ tiêu đề + 6 ý. Kiểm như
+  app: `releases/latest` không đăng nhập → tag v1.10.7, không nháp, asset `iPOS_Ledger_Studio.exe` digest = SHA-256 EXE vừa build;
+  `/api/check_update` với APP_VERSION giả 1.10.6 → `has_update` + 1 bản thay đổi 6 ý; 1.10.7 → không báo lại.
+- Chưa: test cập nhật thật (mở bản v1.10.6, bấm "Cập nhật ngay" — lần mở app kế tiếp trên máy Trum chính là bài này); Trum gửi số đo
+  tab theo tháng trên DB thật (thanh trạng thái hoặc `datastudio.log`); bản xuất tra theo lô nếu số đo cho thấy xuất chậm.
