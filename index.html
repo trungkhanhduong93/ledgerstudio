@@ -322,7 +322,22 @@ window.showConnectionLost = function() {
         .ds-cell { height: 30px; border-radius: 7px; font-size: 12.5px; color: var(--ds-ink-2); transition: background-color .12s, color .12s; }
         .ds-cell:hover { background: var(--ds-tint); color: var(--ds-ink); }
         .ds-cell.is-on { background: var(--ds-brand-soft); color: var(--ds-brand); font-weight: 500; }
-        @media (prefers-reduced-motion: reduce) { .ds-pop-in { animation: none; } .ds-btn, .ds-chip, .ds-nav { transition: none; } }
+        /* Chọn khoảng tháng (DT chờ phân bổ theo tháng, v1.10.6): tháng giữa khoảng tô nhạt, 2 đầu mút tô xanh */
+        .ds-cell.is-in { background: var(--ds-brand-soft); color: var(--ds-brand); }
+        .ds-cell.is-edge { background: var(--ds-brand); color: #fff; font-weight: 500; }
+        .ds-mr-cal { border: 1px solid var(--ds-line-soft); border-radius: 10px; padding: 8px; }
+        .ds-mr-yr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-size: 13px; font-weight: 600; color: var(--ds-ink); }
+        .ds-mr-yr button { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 6px; color: var(--ds-ink-3); }
+        .ds-mr-yr button:hover { background: var(--ds-tint); color: var(--ds-ink); }
+        /* Tooltip tên bảng / báo cáo ở thanh bên (v1.10.6, Trum 29/09): chỉ hiện khi tên bị cắt "…", thanh bên thu gọn, hoặc báo cáo
+           đang hiện tên viết tắt. Gắn vào body (portal) + position: fixed → thanh bên (overflow hidden) không cắt mất. */
+        .ds-navtip { position: fixed; z-index: 10000; max-width: 320px; padding: 7px 11px; border-radius: 8px; background: #0E1A2B; color: #fff;
+                     font-size: 12.5px; line-height: 1.4; box-shadow: 0 8px 24px rgba(14,26,43,.22); pointer-events: none; transform: translateY(-50%);
+                     animation: dsTipIn .14s cubic-bezier(.2, 0, 0, 1); }
+        .ds-navtip::before { content: ''; position: absolute; left: -4px; top: 50%; width: 8px; height: 8px; background: inherit; border-radius: 1px; transform: translateY(-50%) rotate(45deg); }
+        .ds-navtip small { display: block; margin-top: 1px; font-size: 11px; color: #9FB3C8; }
+        @keyframes dsTipIn { from { opacity: 0; transform: translate(-4px, -50%); } }
+        @media (prefers-reduced-motion: reduce) { .ds-pop-in { animation: none; } .ds-btn, .ds-chip, .ds-nav { transition: none; } .ds-navtip { animation: none; } }
 
         /* ===== BẢNG DỮ LIỆU (Đợt 3, 27/09/2026) — class ds-grid trên 7 bảng =====
            Đè kiểu cũ trong ô (font-black, italic, chữ xanh/đỏ/teal/chàm, font-mono) bằng CSS thay vì sửa từng ô của 7 component
@@ -623,7 +638,7 @@ window.showConnectionLost = function() {
                :not(.app-shell) — con đầu của #root > div là banner cập nhật (nếu có), còn không thì là cả khung app:
                thiếu :not là bản in trắng trơn. */
             #root > div > div:first-child:not(.app-shell),
-            .app-sidebar, .app-pagehead, .app-statusbar, .app-reportbar, .ds-toast,
+            .app-sidebar, .app-pagehead, .app-statusbar, .app-reportbar, .ds-toast, .ds-navtip,
             .bg-white.border-b,
             button, 
             .label-text, 
@@ -1398,6 +1413,72 @@ window.showConnectionLost = function() {
             ],
         };
 
+        // DOANH THU CHỜ PHÂN BỔ THEO THÁNG (v1.10.6, theo mẫu Bao cao_DTCTH_sample.xlsx — cột đúng thứ tự mẫu). Cột tháng đổi theo khoảng
+        // Từ tháng – Đến tháng → trong bố cục (useColLayout) cả dải tháng là MỘT khối 'MONTHS' (kéo / ẩn cả khối, nhớ theo tab), lúc
+        // vẽ incomeMonthGrid mới bung ra từng tháng. Nhãn 2 cột lũy kế theo server (khoảng T1 → Tn cùng năm: "năm trước / năm nay").
+        const IM_NUM = 'border-r text-right font-mono px-2';
+        const IM_FOOT = 'border-r text-right font-mono px-2 bg-slate-100/40';
+        const INCOME_MONTH_GRID = {
+            numTh: 'border-r w-12', numTd: 'border-r text-center', tr: 'hover:bg-indigo-50 border-b border-slate-50',
+            foot: {
+                INCOME_AMOUNT: { k: 'income_amount', dec: 0, cls: IM_FOOT },
+                CUM_BEFORE:    { k: 'cum_before',    dec: 0, cls: IM_FOOT },
+                CUM_IN:        { k: 'cum_in',        dec: 0, cls: 'border-r text-right font-mono px-2 text-violet-700 bg-violet-100/40' },
+                CON_LAI:       { k: 'con_lai',       dec: 0, cls: 'border-r text-right font-mono px-2 text-rose-700 bg-rose-100/40' },
+            },
+            cols: [
+                { id: 'ORGANIZATION_ID',  label: 'Đơn vị',        sort: 'ORGANIZATION_ID', th: 'border-r w-16',          search: 1, td: 'border-r text-center italic', q: 'pre' },
+                { id: 'TRAN_ID',          label: 'Mã ctừ',        sort: 'TRAN_ID',         th: 'border-r w-16',          search: 1, td: 'border-r text-center italic', q: 'pre' },
+                { id: 'TRAN_NO',          label: 'Số ctừ',        sort: 'TRAN_NO',         th: 'border-r w-32 px-3',     search: 1, td: 'border-r font-black px-3', q: 'pre' },
+                { id: 'TRAN_DATE',        label: 'Ngày ctừ',      sort: 'TRAN_DATE',       th: 'border-r w-24',          search: 1, td: 'border-r text-center font-bold' },
+                { id: 'USE_DATE',         label: 'Ngày pbổ',      sort: 'USE_DATE',        th: 'border-r w-24',          search: 1, td: 'border-r text-center' },
+                { id: 'DESCRIPTION',      label: 'Diễn giải',     sort: 'DESCRIPTION',     th: 'border-r w-56 px-3', align: 'left', search: 1, td: 'border-r truncate max-w-[260px] px-3', v: r => <span title={r.DESCRIPTION || ''}>{r.DESCRIPTION}</span> },
+                { id: 'ITEM_ID',          label: 'Hàng hóa',      sort: 'ITEM_ID',         th: 'border-r w-24',          search: 1, td: 'border-r text-center font-black text-indigo-600', q: 'pre' },
+                { id: 'ALLOCATION_RATE',  label: 'Tỷ lệ pb',      sort: 'ALLOCATION_RATE', th: 'border-r w-16 px-2', align: 'right', search: 1, td: IM_NUM, v: r => fmtInt(r.ALLOCATION_RATE), q: 'num' },
+                { id: 'INCOME_AMOUNT',    label: 'Doanh thu',     sort: 'INCOME_AMOUNT',   th: 'border-r w-28 px-2', align: 'right', search: 1, td: IM_NUM + ' font-black', v: r => fmtInt(r.INCOME_AMOUNT), q: 'num' },
+                { id: 'ACCOUNT_ID_DES',   label: 'Tk đích',       sort: 'ACCOUNT_ID_DES',  th: 'border-r w-20',          search: 1, td: 'border-r text-center font-black text-indigo-600', q: 'pre' },
+                { id: 'PR_DETAIL_ID',     label: 'Mã đối tượng',  sort: 'PR_DETAIL_ID',    th: 'border-r w-32',          search: 1, td: 'border-r text-center italic', q: 'pre' },
+                { id: 'CONTRACT_NO',      label: 'Số hợp đồng',                            th: 'border-r w-56 px-3', align: 'left', search: 1, td: 'border-r truncate max-w-[280px] px-3', v: r => <span title={r.CONTRACT_NO || ''}>{r.CONTRACT_NO}</span> },
+                { id: 'VAT_TRAN_NO',      label: 'Số Hóa đơn',                             th: 'border-r w-24',          search: 1, td: 'border-r text-center', q: 'pre' },
+                { id: 'CUM_BEFORE',       label: 'Lũy kế trước kỳ', sort: 'CUM_BEFORE',    th: 'border-r w-28 px-2', align: 'right', search: 1, td: IM_NUM, v: r => fmtInt(r.CUM_BEFORE), q: 'num' },
+                { id: 'MONTHS',           label: 'Các cột tháng (theo kỳ chọn)' },
+                { id: 'CUM_IN',           label: 'Lũy kế trong kỳ', sort: 'CUM_IN',        th: 'border-r w-28 px-2', align: 'right', search: 1, td: IM_NUM + ' text-violet-600', v: r => fmtInt(r.CUM_IN), q: 'num' },
+                { id: 'CON_LAI',          label: 'Giá trị còn lại', sort: 'CON_LAI',       th: 'border-r w-28 px-2', align: 'right', search: 1, td: IM_NUM + ' font-black text-rose-600', v: r => fmtInt(r.CON_LAI), q: 'num' },
+                { id: 'PR_DETAIL_NAME',   label: 'Tên đối tượng', sort: 'PR_DETAIL_NAME',  th: 'border-r w-56 px-3', align: 'left', search: 1, td: 'border-r truncate max-w-[280px] px-3 font-bold', v: r => <span title={r.PR_DETAIL_NAME || ''}>{r.PR_DETAIL_NAME}</span> },
+                { id: 'ACCOUNT_NAME_DES', label: 'Tên tài khoản DT (Loại doanh thu)', sort: 'ACCOUNT_NAME_DES', th: 'border-r w-56 px-3', align: 'left', search: 1, td: 'border-r whitespace-nowrap px-3' },
+            ],
+        };
+        // Khoảng tháng → { months: [{ key: 'M202601', year, month }], labels } — CÙNG luật với server _income_month_range (tối đa 36
+        // tháng, giữ các tháng cuối). Dùng để vẽ cột trước lần truy vấn đầu; truy vấn xong thì vẽ theo months/labels server trả.
+        const MONTH_RANGE_MAX = 36;
+        const ymIdx = p => p.y * 12 + p.m - 1;
+        const ymOf = i => ({ y: Math.floor(i / 12), m: (i % 12) + 1 });
+        const ymStr = p => `${String(p.m).padStart(2, '0')}/${p.y}`;
+        const thisYearRange = () => { const d = new Date(); return { from: { y: d.getFullYear(), m: 1 }, to: { y: d.getFullYear(), m: d.getMonth() + 1 } }; };
+        const incomeMonthRangeMeta = (range) => {
+            let a = ymIdx(range.from), b = ymIdx(range.to);
+            if (b < a) [a, b] = [b, a];
+            if (b - a + 1 > MONTH_RANGE_MAX) a = b - MONTH_RANGE_MAX + 1;
+            const months = [];
+            for (let i = a; i <= b; i++) { const p = ymOf(i); months.push({ key: `M${p.y}${String(p.m).padStart(2, '0')}`, year: p.y, month: p.m }); }
+            const f = ymOf(a), t = ymOf(b);
+            return { months, labels: f.m === 1 && f.y === t.y ? { CUM_BEFORE: 'Lũy kế năm trước', CUM_IN: 'Lũy kế năm nay' } : { CUM_BEFORE: 'Lũy kế trước kỳ', CUM_IN: 'Lũy kế trong kỳ' } };
+        };
+        // meta → { grid: bảng đủ cột (tháng đã bung, dùng cho lọc/tổng/vẽ), expand(cols của useColLayout) → cột để vẽ, months }
+        const incomeMonthGrid = (meta) => {
+            const monthCols = meta.months.map(m => ({
+                id: m.key, label: `T${m.month}/${m.year}`, sort: m.key, th: 'border-r w-28 px-2', align: 'right', search: 1,
+                td: IM_NUM, v: r => fmtInt(r[m.key]), q: 'num', month: true,
+            }));
+            const relabel = c => (meta.labels && meta.labels[c.id] ? { ...c, label: meta.labels[c.id] } : c);
+            const expand = cols => cols.flatMap(c => (c.id === 'MONTHS' ? monthCols : [relabel(c)]));
+            const foot = { ...INCOME_MONTH_GRID.foot };
+            meta.months.forEach(m => { foot[m.key] = { k: m.key.toLowerCase(), dec: 0, cls: IM_FOOT }; });
+            const cols = expand(INCOME_MONTH_GRID.cols), byId = {};
+            cols.forEach(c => { byId[c.id] = c; });   // gridMatch (ô tìm theo cột) tra cột qua byId
+            return { grid: { ...INCOME_MONTH_GRID, foot, cols, byId }, expand, months: meta.months };
+        };
+
         const VOUCHER_GRID = {
             numTh: 'border-r w-12', numTd: 'border-r text-center', tr: 'hover:bg-indigo-50 border-b border-slate-50', grp: GRP_AMOUNT,
             foot: { AMOUNT: { k: 'amount', dec: 0, cls: 'border-r text-right font-mono px-2 text-emerald-700 bg-emerald-100/40' } },
@@ -1603,7 +1684,7 @@ window.showConnectionLost = function() {
             ],
         };
 
-        [LEDGER_GRID, SALE_GRID, INCOME_ALLOC_GRID, VOUCHER_GRID, PURCHASE_GRID, WAREHOUSE_GRID, WAREHOUSE_BALANCE_GRID, PR_DETAIL_GRID]
+        [LEDGER_GRID, SALE_GRID, INCOME_ALLOC_GRID, INCOME_MONTH_GRID, VOUCHER_GRID, PURCHASE_GRID, WAREHOUSE_GRID, WAREHOUSE_BALANCE_GRID, PR_DETAIL_GRID]
             .forEach(g => { g.byId = {}; g.cols.forEach(c => { g.byId[c.id] = c; }); });
         // Lọc theo cột trên trang đang tải (q = chữ thường đã trim). Cột số (q: 'num'): số ĐANG HIỆN bỏ dấu phẩy/% phải BẮT ĐẦU
         // bằng chữ số đã gõ (145 → 145; 1,450; 145,000 — không ra 2,145; số âm phải gõ "-"). Cột mã (q: 'pre'): bắt đầu bằng.
@@ -1824,6 +1905,74 @@ window.showConnectionLost = function() {
                             <div className="grid grid-cols-2 gap-1 pt-2 border-t border-line-soft">
                                 <button type="button" onClick={() => {setPeriod({...period, type: 'year', value: 1}); onToggle(null);}} className={`ds-cell ${period.type==='year' ? 'is-on' : ''}`}>Cả năm</button>
                                 <button type="button" onClick={() => {setPeriod({...period, type: 'custom', value: 1}); onToggle(null);}} className={`ds-cell ${period.type==='custom' ? 'is-on' : ''}`}>Tùy ý</button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // Chọn khoảng tháng (DT chờ phân bổ theo tháng, v1.10.6 — Trum: "chọn từ tháng – đến tháng thì các cột tháng tự xoay theo;
+        // chọn năm nay thì từ tháng 1 tới tháng hiện tại"). value = { from: {y, m}, to: {y, m} }. Bấm tháng ở lịch trái = Từ tháng,
+        // lịch phải = Đến tháng; chọn vượt đầu kia hoặc quá MONTH_RANGE_MAX tháng thì đầu kia tự kéo theo (server cũng chặn 36).
+        const MonthRangePicker = ({ value, onChange, isActive, onToggle }) => {
+            const ref = useRef(null);
+            const [yr, setYr] = useState({ from: value.from.y, to: value.to.y });
+            useEffect(() => {
+                const onDown = (e) => { if (ref.current && !ref.current.contains(e.target)) onToggle(null); };
+                if (isActive) { document.addEventListener('mousedown', onDown); setYr({ from: value.from.y, to: value.to.y }); }
+                return () => document.removeEventListener('mousedown', onDown);
+            }, [isActive]);
+            const a = ymIdx(value.from), b = ymIdx(value.to), n = b - a + 1;
+            const setFrom = p => { const i = ymIdx(p); let t = Math.max(i, b); if (t - i + 1 > MONTH_RANGE_MAX) t = i + MONTH_RANGE_MAX - 1; onChange({ from: p, to: ymOf(t) }); };
+            const setTo = p => { const i = ymIdx(p); let f = Math.min(i, a); if (i - f + 1 > MONTH_RANGE_MAX) f = i - MONTH_RANGE_MAX + 1; onChange({ from: ymOf(f), to: p }); };
+            const now = new Date(), cy = now.getFullYear(), cm = now.getMonth() + 1, ci = cy * 12 + cm - 1;
+            const presets = [
+                ['Năm nay', { from: { y: cy, m: 1 }, to: { y: cy, m: cm } }, `T1 → T${cm}/${cy}`],
+                ['Cả năm nay', { from: { y: cy, m: 1 }, to: { y: cy, m: 12 } }, `T1 → T12/${cy}`],
+                ['Năm trước', { from: { y: cy - 1, m: 1 }, to: { y: cy - 1, m: 12 } }, `T1 → T12/${cy - 1}`],
+                ['12 tháng qua', { from: ymOf(ci - 11), to: { y: cy, m: cm } }, `${ymStr(ymOf(ci - 11))} → ${ymStr({ y: cy, m: cm })}`],
+            ];
+            const same = r => ymIdx(r.from) === a && ymIdx(r.to) === b;
+            const cal = (side) => {
+                const y = yr[side];
+                return (
+                    <div className="ds-mr-cal">
+                        <div className="ds-poplabel">{side === 'from' ? 'Từ tháng' : 'Đến tháng'}</div>
+                        <div className="ds-mr-yr">
+                            <button type="button" onClick={() => setYr(p => ({ ...p, [side]: y - 1 }))} title="Năm trước"><Icon name="chevron-left" size={14} stroke={2} /></button>
+                            <span className="tabular-nums">{y}</span>
+                            <button type="button" onClick={() => setYr(p => ({ ...p, [side]: y + 1 }))} title="Năm sau"><Icon name="chevron-right" size={14} stroke={2} /></button>
+                        </div>
+                        <div className="grid grid-cols-4 gap-1">
+                            {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => {
+                                const i = y * 12 + m - 1, edge = i === a || i === b, inside = i > a && i < b;
+                                return <button key={m} type="button" onClick={() => (side === 'from' ? setFrom : setTo)({ y, m })}
+                                    className={`ds-cell ${edge ? 'is-edge' : inside ? 'is-in' : ''}`}>T{m}</button>;
+                            })}
+                        </div>
+                    </div>
+                );
+            };
+            return (
+                <div className="relative" ref={ref}>
+                    <button type="button" onClick={() => onToggle(isActive ? null : 'month_range')} className={`ds-chip ${isActive ? 'is-open' : ''}`}>
+                        <Icon name="calendar" size={14} stroke={2} />
+                        <span className="ds-k">Kỳ</span>
+                        <span className="tabular-nums" title={`${n} tháng`}>T{value.from.m}/{value.from.y} → T{value.to.m}/{value.to.y}</span>
+                        <Icon name="chevron-down" size={12} stroke={2} className={`transition-transform ${isActive ? 'rotate-180' : ''}`} />
+                    </button>
+                    {isActive && (
+                        <div className="ds-pop ds-pop-in absolute top-full left-0 mt-1.5 w-[440px] z-[500] p-3 space-y-3">
+                            <div className="grid grid-cols-4 gap-1">
+                                {presets.map(([label, r, hint]) => (
+                                    <button key={label} type="button" title={hint} onClick={() => { onChange(r); onToggle(null); }} className={`ds-cell px-1 ${same(r) ? 'is-on' : ''}`}>{label}</button>
+                                ))}
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">{cal('from')}{cal('to')}</div>
+                            <div className="flex items-center justify-between text-[12px] text-ink-3">
+                                <span>{n} cột tháng · tối đa {MONTH_RANGE_MAX} tháng</span>
+                                <button type="button" onClick={() => onToggle(null)} className="ds-btn ds-btn-pri h-7 px-3">Xong</button>
                             </div>
                         </div>
                     )}
@@ -2374,6 +2523,7 @@ window.showConnectionLost = function() {
             const jobIdRef = React.useRef(null);
             const timerRef = React.useRef(null);
             const samplesRef = React.useRef([]);
+            const phaseRef = React.useRef('');
             const aliveRef = React.useRef(true);
 
             React.useEffect(() => {
@@ -2409,7 +2559,9 @@ window.showConnectionLost = function() {
                 }
                 if (id !== jobIdRef.current || !aliveRef.current) return;   // dialog đã đóng hoặc đã xuất lượt khác
                 if (s) {
-                    const now = Date.now(), arr = samplesRef.current;
+                    const now = Date.now();
+                    if (s.phase !== phaseRef.current) { phaseRef.current = s.phase; samplesRef.current = []; setSpeed(0); }   // tải → ghi: bộ đếm về 0, đo tốc độ lại
+                    const arr = samplesRef.current;
                     arr.push({ t: now, n: s.current || 0 });
                     while (arr.length > 2 && now - arr[0].t > 5000) arr.shift();
                     const dt = (arr[arr.length - 1].t - arr[0].t) / 1000;
@@ -2426,7 +2578,7 @@ window.showConnectionLost = function() {
                 if (step === 'running') return;
                 const name = fileBase.trim();
                 if (!name) { setActionMsg('Hãy nhập tên file trước khi xuất.'); return; }
-                setActionMsg(''); setErrorMsg(''); setCancelling(false); setSpeed(0); samplesRef.current = [];
+                setActionMsg(''); setErrorMsg(''); setCancelling(false); setSpeed(0); samplesRef.current = []; phaseRef.current = '';
                 setJob({ status: 'running', phase: 'prepare', current: 0, total: cfg.estimate(variant) || 0, filename: `${name}.${format}` });
                 setStep('running');
                 try {
@@ -2488,17 +2640,22 @@ window.showConnectionLost = function() {
             const phase = job ? job.phase : 'prepare';
             const current = job ? (job.current || 0) : 0;
             const total = job ? (job.total || 0) : 0;
-            const writing = phase === 'write' && total > 0;
+            // v1.10.6: báo cáo nhiều dòng TẢI hết về máy trước (có %), rồi mới GHI file (có %) — xem server "XUẤT FILE LỚN…"
+            const writing = (phase === 'write' || phase === 'fetch') && total > 0;
             const pct = step === 'done' || phase === 'finalize' ? 100 : (writing ? Math.min(99, Math.floor(current * 100 / total)) : 0);
             const eta = writing && speed > 0 ? (total - current) / speed : null;
+            const retry = job && job.retry;
+            const retryLeft = retry ? Math.max(0, Math.ceil(retry.until - Date.now() / 1000)) : 0;
             const steps = [
                 { k: 'prepare', label: 'Chuẩn bị' },
-                ...(cfg.serverQuery ? [{ k: 'query', label: 'Truy vấn dữ liệu' }] : []),
+                ...(cfg.serverQuery ? [{ k: 'query', label: 'Truy vấn' }, { k: 'fetch', label: 'Tải dữ liệu' }] : []),
                 { k: 'write', label: isXlsx ? 'Ghi Excel' : 'Ghi CSV' },
                 { k: 'finalize', label: 'Hoàn tất' },
             ];
-            const ORDER = { prepare: 0, query: 1, write: 2, finalize: 3, done: 4 };
-            const phaseTitle = phase === 'query' ? 'Đang truy vấn dữ liệu từ máy chủ…'
+            const ORDER = { prepare: 0, query: 1, fetch: 2, write: 3, finalize: 4, done: 5 };
+            const phaseTitle = retry ? 'Mất kết nối tới máy chủ — đang tự kết nối lại…'
+                : phase === 'query' ? 'Đang đếm dữ liệu trên máy chủ…'
+                : phase === 'fetch' ? 'Đang tải dữ liệu từ máy chủ…'
                 : phase === 'write' ? (isXlsx ? 'Đang ghi file Excel…' : 'Đang ghi file CSV…')
                 : phase === 'finalize' ? (isXlsx ? 'Đang đóng gói file .xlsx…' : 'Đang hoàn tất file…')
                 : 'Đang chuẩn bị…';
@@ -2600,7 +2757,7 @@ window.showConnectionLost = function() {
                                     {heavy && (
                                         <div className="ds-note is-warn">
                                             <Icon name="clock" size={14} stroke={2} />
-                                            <span>Dữ liệu lớn (≈ {fmtCount(est)} dòng): file Excel cần khoảng {Math.max(1, Math.round(est / 12000 / 60))} phút để ghi. Cần nhanh thì chọn <b>CSV</b>.</span>
+                                            <span>Dữ liệu lớn (≈ {fmtCount(est)} dòng): cần khoảng {Math.max(1, Math.round(est / 7000 / 60))} phút để tải về và ghi file Excel. Mạng chập chờn thì ứng dụng tự kết nối lại, không phải xuất lại từ đầu. Cần nhanh thì chọn <b>CSV</b>.</span>
                                         </div>
                                     )}
                                     {cfg.staleNote && (
@@ -2650,14 +2807,30 @@ window.showConnectionLost = function() {
                                         })}
                                     </div>
                                     <div className="grid grid-cols-3 gap-2">
-                                        <div className="ds-stat"><div className="ds-k">Đã ghi</div><div className="ds-v">{fmtCount(current)}<span className="text-ink-3 font-normal"> / {total ? fmtCount(total) : '…'}</span></div></div>
-                                        <div className="ds-stat"><div className="ds-k">Tốc độ</div><div className="ds-v">{writing && speed > 0 ? `${fmtCount(Math.round(speed))} dòng/giây` : '—'}</div></div>
-                                        <div className="ds-stat"><div className="ds-k">Thời gian</div><div className="ds-v">{fmtClock(job && job.elapsed)}{eta !== null && eta > 1 ? <span className="text-ink-3 font-normal"> · còn ~{fmtClock(eta)}</span> : null}</div></div>
+                                        <div className="ds-stat"><div className="ds-k">{phase === 'fetch' || phase === 'query' ? 'Đã tải' : 'Đã ghi'}</div><div className="ds-v">{fmtCount(current)}<span className="text-ink-3 font-normal"> / {total ? fmtCount(total) : '…'}</span></div></div>
+                                        <div className="ds-stat"><div className="ds-k">Tốc độ</div><div className="ds-v">{writing && speed > 0 && !retry ? `${fmtCount(Math.round(speed))} dòng/giây` : '—'}</div></div>
+                                        <div className="ds-stat"><div className="ds-k">Thời gian</div><div className="ds-v">{fmtClock(job && job.elapsed)}{eta !== null && eta > 1 && !retry ? <span className="text-ink-3 font-normal"> · còn ~{fmtClock(eta)}</span> : null}</div></div>
                                     </div>
-                                    {job && job.sheets > 1 && (
+                                    {retry ? (
+                                        <div className="ds-note is-warn">
+                                            <Icon name="refresh-cw" size={14} stroke={2} />
+                                            <span>
+                                                {retryLeft > 0 ? `Mạng tới máy chủ bị ngắt — tự kết nối lại sau ${retryLeft} giây` : 'Đang kết nối lại máy chủ…'} (lần {retry.n}/{retry.max}).
+                                                {' '}Phần đã tải ({fmtCount(current)} dòng) được giữ nguyên, chỉ tải lại khúc đang dở. Kiểm tra VPN nếu chờ lâu.
+                                            </span>
+                                        </div>
+                                    ) : job && job.retries > 0 ? (
+                                        <div className="flex items-center gap-1.5 text-[12px] text-ink-2"><Icon name="refresh-cw" size={13} stroke={2} /> Đã tự kết nối lại {job.retries} lần khi mạng chập chờn — dữ liệu không bị thiếu, không bị trùng.</div>
+                                    ) : null}
+                                    {phase === 'fetch' && job && job.chunks > 1 && !retry && (
+                                        <div className="flex items-center gap-1.5 text-[12px] text-ink-2"><Icon name="layers" size={13} stroke={2} /> Tải theo từng khúc ngày: xong {job.chunk || 0}/{job.chunks} khúc — mạng đứt chỉ phải tải lại khúc đang dở</div>
+                                    )}
+                                    {phase !== 'fetch' && job && job.sheets > 1 && (
                                         <div className="flex items-center gap-1.5 text-[12px] text-ink-2"><Icon name="layers" size={13} stroke={2} /> Đang ghi sheet {job.sheet}/{job.sheets} — mỗi sheet tối đa 1.000.000 dòng</div>
                                     )}
-                                    <div className="text-[12px] text-ink-3">Máy chủ đang ghi file, không cần giữ nguyên cửa sổ này. Đừng tắt ứng dụng cho tới khi xong.</div>
+                                    <div className="text-[12px] text-ink-3">{phase === 'fetch' || phase === 'query'
+                                        ? 'Đang tải dữ liệu về máy — tải xong mới ghi file, lúc ghi không cần mạng. Đừng tắt ứng dụng cho tới khi xong.'
+                                        : 'Đang ghi file trên máy này, không cần giữ nguyên cửa sổ. Đừng tắt ứng dụng cho tới khi xong.'}</div>
                                 </div>
                                 <div className="ds-dlg-foot">
                                     <button onClick={cancel} disabled={cancelling || !jobIdRef.current} className="ds-btn ds-btn-danger">
@@ -2678,7 +2851,8 @@ window.showConnectionLost = function() {
                                         <span className="ds-tag"><Icon name="rows" size={12} stroke={2} /> {fmtCount(job.rows)} dòng</span>
                                         {isXlsx && <span className="ds-tag"><Icon name="layers" size={12} stroke={2} /> {job.sheets || 1} sheet</span>}
                                         <span className="ds-tag"><Icon name="hard-drive" size={12} stroke={2} /> {fmtBytes(job.size)}</span>
-                                        <span className="ds-tag"><Icon name="clock" size={12} stroke={2} /> {fmtClock(job.elapsed)}</span>
+                                        <span className="ds-tag" title={job.timing && job.timing.fetch != null ? `Đếm ${fmtClock(job.timing.query)} · tải ${fmtClock(job.timing.fetch)} · ghi ${fmtClock(job.timing.write)} · đóng gói ${fmtClock(job.timing.finalize)}` : undefined}><Icon name="clock" size={12} stroke={2} /> {fmtClock(job.elapsed)}</span>
+                                        {job.retries > 0 && <span className="ds-tag" title="Mạng tới máy chủ bị ngắt giữa chừng, ứng dụng tự kết nối lại và tải tiếp — file vẫn đủ dòng"><Icon name="refresh-cw" size={12} stroke={2} /> Tự nối lại {job.retries} lần</span>}
                                     </div>
                                     <div className="ds-path mt-3">{job.file_path}</div>
                                     {actionMsg && <div className="ds-err mt-2">{actionMsg}</div>}
@@ -3977,6 +4151,7 @@ window.showConnectionLost = function() {
             { id: 'purchase',  name: 'Danh sách chứng từ nhập - mua hàng' },
             { id: 'warehouse', name: 'Danh sách chứng từ kho' },
             { id: 'income_alloc', name: 'Danh sách doanh thu chờ phân bổ' },
+            { id: 'income_alloc_month', name: 'Doanh thu chờ phân bổ theo tháng' },   // v1.10.6, theo mẫu Bao cao_DTCTH (Trum 29/09)
             // Tồn kho thực tế: ẩn khỏi thanh bên theo Trum (28/09/2026, v1.10.4). Code tab + /api/warehouse_balance giữ nguyên
             // — bật lại = bỏ comment dòng dưới. activeTab không nhớ qua lần mở app nên không máy nào kẹt ở tab đã ẩn.
             // { id: 'warehouse_balance', name: 'Danh sách tồn kho thực tế' },
@@ -3994,6 +4169,7 @@ window.showConnectionLost = function() {
             purchase:          ['Chứng từ nhập - mua hàng', 'shopping-cart'],
             warehouse:         ['Chứng từ kho', 'package'],
             income_alloc:      ['Doanh thu chờ phân bổ', 'clock'],
+            income_alloc_month: ['Doanh thu chờ phân bổ theo tháng', 'calendar'],
             warehouse_balance: ['Tồn kho thực tế', 'layers'],
             pr_detail:         ['Danh mục đối tượng', 'user'],
         };
@@ -4016,8 +4192,32 @@ window.showConnectionLost = function() {
             { id: 'data',   label: 'Dữ liệu', icon: 'table' },
             { id: 'report', label: 'Báo cáo', icon: 'file-text' },
         ];
+        // Tooltip tên bảng / báo cáo ở thanh bên (v1.10.6, Trum 29/09: "tên nào quá dài thì rê chuột mở tooltip"). Rê chuột 280 ms → hiện
+        // cạnh mục, có hiệu ứng hiện mờ (.ds-navtip). CHỈ hiện khi: tên bị cắt "…" (đo scrollWidth), thanh bên thu gọn (chỉ còn icon /
+        // mã), hoặc báo cáo đang hiện tên viết tắt (full ≠ label, vd "LCTT trực tiếp"). Thay title gốc của trình duyệt (hiện chậm ~1 s).
+        const useNavTip = (collapsed) => {
+            const [tip, setTip] = useState(null);
+            const timer = useRef(null);
+            const hide = () => { clearTimeout(timer.current); setTip(null); };
+            const show = (e, text, sub, force) => {
+                const el = e.currentTarget, lab = el.querySelector('.ds-label');
+                const cut = !!lab && lab.scrollWidth > lab.clientWidth + 1;
+                clearTimeout(timer.current);
+                if (!collapsed && !cut && !force) { setTip(null); return; }
+                timer.current = setTimeout(() => {
+                    const r = el.getBoundingClientRect();
+                    setTip({ text, sub, x: Math.round(r.right + 10), y: Math.round(r.top + r.height / 2) });
+                }, 280);
+            };
+            useEffect(() => () => clearTimeout(timer.current), []);
+            useEffect(hide, [collapsed]);
+            const node = tip && createPortal(<div className="ds-navtip" role="tooltip" style={{ left: tip.x, top: tip.y }}>{tip.text}{tip.sub && <small>{tip.sub}</small>}</div>, document.body);
+            return { show, hide, node };
+        };
+
         // refresh = metaRefresh của App: null | { phase: 'busy' | 'ok' | 'err', title, text, ms, id }
         const AppSidebar = ({ collapsed, onToggleCollapsed, activeTab, reportType, onPickTab, onPickReport, refresh, onRefresh, onLogout }) => {
+            const tip = useNavTip(collapsed);
             // Thẻ Dữ liệu / Báo cáo chỉ đổi DANH SÁCH đang xem — trang đang mở giữ nguyên tới khi bấm 1 mục.
             // Trang đang mở chuyển nhóm (chọn báo cáo, chọn tab dữ liệu) → thẻ đi theo.
             const pageSec = activeTab === 'report' ? 'report' : 'data';
@@ -4028,7 +4228,7 @@ window.showConnectionLost = function() {
                 : phase ? `${refresh.title}${refresh.text ? '\n' + refresh.text : ''}`
                 : 'Tải lại danh mục (Tài khoản, Đơn vị, Đối tượng, Hàng hóa…)';
             return (
-                <aside className={`app-sidebar ds-rail ${collapsed ? 'is-collapsed' : ''}`}>
+                <aside className={`app-sidebar ds-rail ${collapsed ? 'is-collapsed' : ''}`} onScroll={tip.hide}>
                     <div className="ds-brand">
                         <svg viewBox="0 0 200 200" width="22" height="22" className="shrink-0" aria-hidden="true">
                             <rect width="200" height="200" rx="45" fill="#FF9D3D"/>
@@ -4051,15 +4251,18 @@ window.showConnectionLost = function() {
                     {/* key={sec}: đổi thẻ là lắp lại danh sách → chạy hiệu ứng hiện (dsNavIn) */}
                     <div key={sec} className="ds-navlist" role="tabpanel">
                         {sec === 'data' ? NAV_DOCS.map(t => (
-                            <button key={t.id} type="button" title={t.label} onClick={() => onPickTab(t.id)} className={`ds-nav ${activeTab === t.id ? 'is-on' : ''}`}>
+                            <button key={t.id} type="button" aria-label={t.label} onClick={() => { tip.hide(); onPickTab(t.id); }} className={`ds-nav ${activeTab === t.id ? 'is-on' : ''}`}
+                                onMouseEnter={e => tip.show(e, t.label)} onMouseLeave={tip.hide} onFocus={e => tip.show(e, t.label)} onBlur={tip.hide}>
                                 <Icon name={t.icon} size={16} stroke={1.75} /><span className="ds-label">{t.label}</span>
                             </button>
                         )) : NAV_REPORTS.map(r => (
-                            <button key={r.id} type="button" title={`${r.id} · ${r.full}`} onClick={() => onPickReport(r.id)} className={`ds-nav ${activeTab === 'report' && reportType === r.id ? 'is-on' : ''}`}>
+                            <button key={r.id} type="button" aria-label={`${r.id} · ${r.full}`} onClick={() => { tip.hide(); onPickReport(r.id); }} className={`ds-nav ${activeTab === 'report' && reportType === r.id ? 'is-on' : ''}`}
+                                onMouseEnter={e => tip.show(e, r.full, r.id, r.full !== r.label)} onMouseLeave={tip.hide} onFocus={e => tip.show(e, r.full, r.id, r.full !== r.label)} onBlur={tip.hide}>
                                 <span className="ds-code">{r.id}</span><span className="ds-label">{r.label}</span>
                             </button>
                         ))}
                     </div>
+                    {tip.node}
                     <div className="ds-spacer"></div>
                     <button id="btn-refresh-meta" type="button" onClick={onRefresh} disabled={phase === 'busy'} title={refreshTitle}
                         className={`ds-nav ${phase === 'busy' ? 'is-busy' : phase === 'ok' ? 'is-done' : phase === 'err' ? 'is-fail' : ''}`}>
@@ -4099,7 +4302,7 @@ window.showConnectionLost = function() {
         // Nút + menu "Xuất Excel" của 8 tab dữ liệu. PHẢI khai báo ngoài App (v1.10.5): trước đây nằm trong App → mỗi lần App vẽ
         // lại là 1 component MỚI → React gỡ rồi lắp lại cả nút lẫn menu, hiệu ứng hiện menu (ds-pop-in) chạy lại → bấm
         // "Đầy đủ" / "Như đang xem" thấy menu chớp nháy (Trum báo 28/09). App truyền state qua props (exportBtn).
-        const ExportButton = ({ kind, open, setOpen, exporting, cols, onCols, gridLays, onExport }) => {
+        const ExportButton = ({ kind, open, setOpen, exporting, cols, onCols, gridLays, viewCounts, onExport }) => {
             const ref = useRef(null);
             const isOpen = open === kind;
             useEffect(() => {
@@ -4127,7 +4330,7 @@ window.showConnectionLost = function() {
                                     <button type="button" className={cols === 'all' ? 'is-on' : ''} onClick={() => onCols('all')}>Đầy đủ</button>
                                     <button type="button" className={cols === 'view' ? 'is-on' : ''} onClick={() => onCols('view')}>Như đang xem</button>
                                 </div>
-                                <small>{cols === 'view' ? `${gridLays[kind].cols.length} cột đang hiện, đúng thứ tự trên màn hình` : 'Bộ cột xuất chuẩn của danh sách'}</small>
+                                <small>{cols === 'view' ? `${(viewCounts && viewCounts[kind]) || gridLays[kind].cols.length} cột đang hiện, đúng thứ tự trên màn hình` : 'Bộ cột xuất chuẩn của danh sách'}</small>
                             </div>
                             <div className="px-3 pt-2.5 pb-1.5 ds-poplabel">Chọn kiểu và định dạng xuất</div>
                             <button onClick={() => onExport(kind, 'single', 'xlsx')} className="ds-menuitem">
@@ -4737,6 +4940,75 @@ window.showConnectionLost = function() {
                 if (isLoggedIn && activeTab === 'income_alloc') loadIncomeAllocData(1, incomeAllocPageSize);
             }, [incomeAllocSort]);
 
+            // ============ DOANH THU CHỜ PHÂN BỔ THEO THÁNG (v1.10.6) — server /api/income_alloc_month ============
+            // Mặc định "hiện hết" (Trum): Trạng thái thẻ + Giá trị phân bổ = Tất cả, người dùng tự lọc trong "Bộ lọc khác".
+            const [incomeMonthData, setIncomeMonthData] = useState([]);
+            const [incomeMonthPagination, setIncomeMonthPagination] = useState({ total_rows: 0, total_pages: 1, page: 1 });
+            const [incomeMonthSummary, setIncomeMonthSummary] = useState({});
+            const [incomeMonthLoading, setIncomeMonthLoading] = useState(false);
+            const [incomeMonthSort, setIncomeMonthSort] = useState({ field: null, dir: 'asc' });
+            const [incomeMonthFilters, setIncomeMonthFilters] = useState(() => ({ range: thisYearRange(), active: '', alloc_status: '', acc_des_ids: [], tran_no_search: '' }));
+            const [incomeMonthMeta, setIncomeMonthMeta] = useState(null);   // { months, labels } của lần truy vấn gần nhất → cột bảng vẽ theo đây
+            const [incomeMonthPageSize, setIncomeMonthPageSize] = useState(1000);
+            const incomeMonthScrollRef = useRef();
+            const [incomeMonthColSearch, setIncomeMonthColSearch] = useState({});
+            // Chưa truy vấn: cột tháng theo khoảng đang chọn. Đã truy vấn: theo months server trả (đổi khoảng mà chưa bấm Truy vấn thì
+            // bảng giữ cột của dữ liệu đang hiện — cột và số luôn khớp nhau).
+            const incomeMonthView = useMemo(() => incomeMonthGrid(incomeMonthMeta || incomeMonthRangeMeta(incomeMonthFilters.range)), [incomeMonthMeta, incomeMonthFilters.range]);
+            const incomeMonthFlatData = useMemo(() => gridFilter(incomeMonthView.grid, incomeMonthData, incomeMonthColSearch), [incomeMonthView, incomeMonthData, incomeMonthColSearch]);
+            const incomeMonthFoot = useMemo(() => footRowSums(incomeMonthView.grid, incomeMonthData, incomeMonthFlatData), [incomeMonthView, incomeMonthData, incomeMonthFlatData]);
+            const toggleIncomeMonthFilter = (key, id) => setIncomeMonthFilters(p => ({ ...p, [key]: p[key].includes(id) ? p[key].filter(x => x !== id) : [...p[key], id] }));
+
+            const buildIncomeMonthQuery = (targetPage = 1, targetPageSize = incomeMonthPageSize, extra = {}) => {
+                const r = incomeMonthFilters.range;
+                const query = new URLSearchParams({
+                    from_month: ymStr(r.from), to_month: ymStr(r.to),
+                    active: incomeMonthFilters.active, alloc_status: incomeMonthFilters.alloc_status,
+                    page: targetPage, page_size: targetPageSize, ...extra,
+                });
+                ['tran_ids','org_ids','job_ids','item_ids','expense_ids','pr_detail_ids'].forEach(k => {
+                    if ((filters[k] || []).length) query.set(k, filters[k].join(','));
+                });
+                if ((incomeMonthFilters.acc_des_ids || []).length) query.set('acc_des_ids', incomeMonthFilters.acc_des_ids.join(','));
+                if (incomeMonthFilters.tran_no_search?.trim()) query.set('tran_no', incomeMonthFilters.tran_no_search.trim());
+                if (incomeMonthSort.field) { query.set('order_by', incomeMonthSort.field); query.set('order_dir', incomeMonthSort.dir); }
+                return query;
+            };
+
+            const loadIncomeMonthData = async (targetPage = 1, targetPageSize = incomeMonthPageSize) => {
+                if (abortRef.current) abortRef.current.abort();
+                const _ctrl = new AbortController(); abortRef.current = _ctrl;
+                setIncomeMonthLoading(true);
+                const extras = {};
+                if (targetPage > 1 && targetPageSize === incomeMonthPageSize && incomeMonthPagination.total_rows > 0) {
+                    extras.known_total = incomeMonthPagination.total_rows;
+                    extras.known_sums  = JSON.stringify(incomeMonthSummary);
+                }
+                try {
+                    const r = await fetch(`/api/income_alloc_month?${buildIncomeMonthQuery(targetPage, targetPageSize, extras).toString()}`, { signal: _ctrl.signal });
+                    if (r.status === 401) { setIsLoggedIn(false); return; }
+                    const res = await r.json();
+                    if (res.status === 'ok') {
+                        setIncomeMonthMeta({ months: res.months || [], labels: res.labels || null });
+                        setIncomeMonthData(res.data);
+                        setIncomeMonthPagination(res.pagination);
+                        setIncomeMonthSummary(res.summary || {});
+                        markTabApplied('income_alloc_month');
+                    } else {
+                        alert('Không truy vấn được Doanh thu chờ phân bổ theo tháng.\n\n' + (res.message || JSON.stringify(res)));
+                    }
+                } catch (err) {
+                    if (err.name === 'AbortError' || _ctrl.signal.aborted) return;
+                    alert('Không truy vấn được dữ liệu.\n\n' + viErr(err));
+                } finally { setIncomeMonthLoading(false); }
+            };
+
+            const incomeMonthFirstSort = useRef(true);
+            useEffect(() => {
+                if (incomeMonthFirstSort.current) { incomeMonthFirstSort.current = false; return; }
+                if (isLoggedIn && activeTab === 'income_alloc_month') loadIncomeMonthData(1, incomeMonthPageSize);
+            }, [incomeMonthSort]);
+
             // ============ VOUCHER (CHỨNG TỪ TIỀN) TAB STATE & LOADER ============
             const [groupByVoucher, setGroupByVoucher] = useState([]);
             const [toggleGroupRenderVoucher, setToggleGroupRenderVoucher] = useState(0);
@@ -5254,12 +5526,21 @@ window.showConnectionLost = function() {
             const ledgerLay = useColLayout('ledger', LEDGER_GRID, clearColSearch(setColSearch));
             const saleLay = useColLayout('sale', SALE_GRID, clearColSearch(setSaleColSearch));
             const incomeAllocLay = useColLayout('income_alloc', INCOME_ALLOC_GRID, clearColSearch(setIncomeAllocColSearch));
+            // ẩn khối cột tháng → xoá chữ ở ô tìm của MỌI cột tháng
+            const incomeMonthLay = useColLayout('income_alloc_month', INCOME_MONTH_GRID, id => setIncomeMonthColSearch(p => {
+                const ks = Object.keys(p).filter(k => (id === 'MONTHS' ? /^M\d{6}$/.test(k) : k === id) && p[k]);
+                if (!ks.length) return p;
+                const n = { ...p }; ks.forEach(k => { n[k] = ''; }); return n;
+            }));
+            const incomeMonthCols = useMemo(() => incomeMonthView.expand(incomeMonthLay.cols), [incomeMonthView, incomeMonthLay.cols]);
+            // kéo tiêu đề 1 cột tháng = kéo cả khối tháng (bố cục chỉ biết khối 'MONTHS')
+            const incomeMonthMove = (from, to, after) => incomeMonthLay.move(/^M\d{6}$/.test(from) ? 'MONTHS' : from, /^M\d{6}$/.test(to) ? 'MONTHS' : to, after);
             const voucherLay = useColLayout('voucher', VOUCHER_GRID, clearColSearch(setVoucherColSearch));
             const purchaseLay = useColLayout('purchase', PURCHASE_GRID, clearColSearch(setPurchaseColSearch));
             const warehouseLay = useColLayout('warehouse', WAREHOUSE_GRID, clearColSearch(setWarehouseColSearch));
             const warehouseBalanceLay = useColLayout('warehouse_balance', WAREHOUSE_BALANCE_GRID, clearColSearch(setWarehouseBalanceColSearch));
             const prDetailLay = useColLayout('pr_detail', PR_DETAIL_GRID, clearColSearch(setPrDetailColSearch));
-            const gridLays = { ledger: ledgerLay, sale: saleLay, income_alloc: incomeAllocLay, voucher: voucherLay, purchase: purchaseLay,
+            const gridLays = { ledger: ledgerLay, sale: saleLay, income_alloc: incomeAllocLay, income_alloc_month: incomeMonthLay, voucher: voucherLay, purchase: purchaseLay,
                                warehouse: warehouseLay, warehouse_balance: warehouseBalanceLay, pr_detail: prDetailLay };
             // Xuất Excel tab dữ liệu: 'all' = bộ cột xuất chuẩn (như trước), 'view' = đúng các cột đang hiện, theo thứ tự trên màn hình
             const [exportCols, setExportCols] = useState(() => { try { return localStorage.getItem('ds_export_cols') === 'view' ? 'view' : 'all'; } catch (e) { return 'all'; } });
@@ -5402,6 +5683,21 @@ window.showConnectionLost = function() {
                             incomeAllocFilters.tran_no_search || '',
                         ]);
                     }
+                    if (tab === 'income_alloc_month') {
+                        return JSON.stringify([
+                            ymStr(incomeMonthFilters.range.from), ymStr(incomeMonthFilters.range.to),
+                            (filters.org_ids||[]).slice().sort(),
+                            (filters.tran_ids||[]).slice().sort(),
+                            (filters.job_ids||[]).slice().sort(),
+                            (filters.expense_ids||[]).slice().sort(),
+                            (filters.item_ids||[]).slice().sort(),
+                            (filters.pr_detail_ids||[]).slice().sort(),
+                            incomeMonthFilters.active,
+                            incomeMonthFilters.alloc_status,
+                            (incomeMonthFilters.acc_des_ids||[]).slice().sort(),
+                            incomeMonthFilters.tran_no_search || '',
+                        ]);
+                    }
                     if (tab === 'voucher') {
                         return JSON.stringify([
                             filters.from_date, filters.to_date,
@@ -5477,7 +5773,7 @@ window.showConnectionLost = function() {
                     return '';
                 }
                 return '';
-            }, [filters, saleFilters, incomeAllocFilters, voucherFilters, purchaseFilters, warehouseFilters, warehouseBalanceFilters, prDetailFilters, reportType, journalViewMode, vatSalesMode]);
+            }, [filters, saleFilters, incomeAllocFilters, incomeMonthFilters, voucherFilters, purchaseFilters, warehouseFilters, warehouseBalanceFilters, prDetailFilters, reportType, journalViewMode, vatSalesMode]);
 
             const markTabApplied = (tab) => {
                 setAppliedSnapshots(p => ({ ...p, [tab]: getTabFilterSnapshot(tab) }));
@@ -5633,8 +5929,11 @@ window.showConnectionLost = function() {
                 ['PROVINCE_ID','Tỉnh thành'],
             ];
 
+            // DT chờ phân bổ theo tháng: cột tháng theo khoảng đang xem (cùng thứ tự mẫu với server _income_month_export_cols)
+            const INCOME_MONTH_EXPORT_COLS = incomeMonthView.grid.cols.map(c => [c.id, c.month ? c.label.replace(/^T(\d+)\//, (_, m) => m.padStart(2, '0') + '/') : c.label]);
             const EXPORT_COLS_BY_KIND = {
                 ledger: LEDGER_EXPORT_COLS, purchase: PURCHASE_EXPORT_COLS, sale: SALE_EXPORT_COLS, voucher: VOUCHER_EXPORT_COLS,
+                income_alloc_month: INCOME_MONTH_EXPORT_COLS,
                 income_alloc: INCOME_ALLOC_EXPORT_COLS, warehouse_balance: WAREHOUSE_BALANCE_EXPORT_COLS, pr_detail: PR_DETAIL_EXPORT_COLS,
                 warehouse: WAREHOUSE_EXPORT_COLS,
             };
@@ -5749,6 +6048,7 @@ window.showConnectionLost = function() {
                 if (kind === 'sale') return buildSaleQuery(1, 1, null, {});
                 if (kind === 'voucher') return buildVoucherQuery(1, 1, null, {});
                 if (kind === 'income_alloc') return buildIncomeAllocQuery(1, 1, {});
+                if (kind === 'income_alloc_month') return buildIncomeMonthQuery(1, 1, {});
                 if (kind === 'warehouse_balance') return buildWarehouseBalanceQuery(1, 1, null, {});
                 if (kind === 'pr_detail') return buildPrDetailQuery(1, 1, null, {});
                 return buildWarehouseQuery(1, 1, null, {});
@@ -5766,9 +6066,17 @@ window.showConnectionLost = function() {
 
             // Kick off server-side export job → poll status → khi done set exportDone modal
             // viewKeys: khoá cột khi xuất "Như đang xem" (server chỉ nhận khoá có trong bộ cột xuất của tab); null = xuất đủ như cũ
+            // v1.10.6: job tải hết dòng về file tạm trước (phase fetch — đứt mạng tự nối lại, sj.retry), rồi mới ghi file (write).
+            const exportCancelRef = React.useRef(false);
+            const cancelServerExport = async (jobId) => {
+                exportCancelRef.current = true;
+                setExportProgress(p => p ? { ...p, cancelling: true } : p);
+                try { await fetch('/api/export/cancel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ job_id: jobId }) }); } catch (e) { /* vòng poll tự báo */ }
+            };
             const startServerExport = async (kind, total, format = 'csv', viewKeys = null) => {
                 setExporting(true);
-                setExportProgress({ phase: 'stream', current: 0, total });
+                exportCancelRef.current = false;
+                setExportProgress({ phase: 'job', sub: 'prepare', current: 0, total, format });
                 try {
                     const q = buildExportQuery(kind);
                     q.set('total', String(total));
@@ -5787,13 +6095,16 @@ window.showConnectionLost = function() {
                         const sr = await fetch(`/api/export/status?job_id=${jobId}`);
                         if (sr.status === 404) { alert('Job đã bị xóa.'); break; }
                         const sj = await sr.json();
-                        setExportProgress({ phase: 'stream', current: sj.current || 0, total: sj.total || total });
+                        setExportProgress(p => ({ phase: 'job', sub: sj.phase || 'fetch', current: sj.current || 0, total: sj.total || total, format,
+                            jobId, retry: sj.retry || null, retries: sj.retries || 0, chunk: sj.chunk || 0, chunks: sj.chunks || 0, elapsed: sj.elapsed || 0,
+                            cancelling: !!(p && p.cancelling) }));
                         if (sj.status === 'done') {
                             setExporting(false);
                             setExportProgress(null);
-                            setExportDone({ file_path: sj.file_path, filename: sj.filename, total: sj.current });
+                            setExportDone({ file_path: sj.file_path, filename: sj.filename, total: sj.current, retries: sj.retries || 0 });
                             break;
                         }
+                        if (sj.status === 'cancelled' || (sj.status === 'error' && exportCancelRef.current)) break;   // tự bấm Hủy → đóng êm
                         if (sj.status === 'error') {
                             alert('Xuất file không thành công.\n\n' + (sj.error || ''));
                             break;
@@ -5869,6 +6180,8 @@ window.showConnectionLost = function() {
                         url = `/api/voucher?${buildVoucherQuery(1, 1, null, { export_all: '1' }).toString()}`;
                     } else if (kind === 'income_alloc') {
                         url = `/api/income_alloc?${buildIncomeAllocQuery(1, 1, { export_all: '1' }).toString()}`;
+                    } else if (kind === 'income_alloc_month') {
+                        url = `/api/income_alloc_month?${buildIncomeMonthQuery(1, 1, { export_all: '1' }).toString()}`;
                     } else if (kind === 'warehouse_balance') {
                         url = `/api/warehouse_balance?${buildWarehouseBalanceQuery(1, 1, null, { export_all: '1' }).toString()}`;
                     } else if (kind === 'pr_detail') {
@@ -5886,11 +6199,15 @@ window.showConnectionLost = function() {
                     if (!rows.length) { alert('Không có dữ liệu để xuất.'); return; }
 
                     const fullCols = EXPORT_COLS_BY_KIND[kind] || WAREHOUSE_EXPORT_COLS;
-                    const cols = viewKeys ? pickExportCols(fullCols, viewKeys) : fullCols;
+                    // khối 'MONTHS' (bố cục DT chờ phân bổ theo tháng) → bung ra các khoá tháng
+                    const keys = viewKeys && viewKeys.flatMap(k => (k === 'MONTHS' ? incomeMonthView.months.map(m => m.key) : [k]));
+                    const cols = keys ? pickExportCols(fullCols, keys) : fullCols;
                     const extractor = kind === 'ledger' ? (r) => extractLedgerRow(r, cols) : (r) => extractRowGeneric(cols, r);
 
-                    const prefix = kind === 'ledger' ? 'ChungTuTongHop_' : (kind === 'purchase' ? 'PhieuNhapKho_' : (kind === 'sale' ? 'ChungTuBanHang_' : (kind === 'voucher' ? 'ChungTuTien_' : (kind === 'income_alloc' ? 'DoanhThuChoPhanBo_' : (kind === 'warehouse_balance' ? 'TonKhoThucTe_' : (kind === 'pr_detail' ? 'DanhMucDoiTuong' : 'ChungTuKho_'))))));
-                    const fname = prefix + (kind === 'pr_detail' ? '.' : (filters.from_date.replace(/\//g,'') + '-' + filters.to_date.replace(/\//g,'') + '.')) + 'xlsx';
+                    const prefix = kind === 'ledger' ? 'ChungTuTongHop_' : (kind === 'purchase' ? 'PhieuNhapKho_' : (kind === 'sale' ? 'ChungTuBanHang_' : (kind === 'voucher' ? 'ChungTuTien_' : (kind === 'income_alloc' ? 'DoanhThuChoPhanBo_' : kind === 'income_alloc_month' ? 'DoanhThuChoPhanBoTheoThang_' : (kind === 'warehouse_balance' ? 'TonKhoThucTe_' : (kind === 'pr_detail' ? 'DanhMucDoiTuong' : 'ChungTuKho_'))))));
+                    const fname = prefix + (kind === 'pr_detail' ? '.' : kind === 'income_alloc_month'
+                        ? `${ymStr(incomeMonthFilters.range.from).replace('/', '')}-${ymStr(incomeMonthFilters.range.to).replace('/', '')}.`
+                        : (filters.from_date.replace(/\//g,'') + '-' + filters.to_date.replace(/\//g,'') + '.')) + 'xlsx';
 
                     setExportProgress({ phase: 'build', current: 0, total: rows.length });
                     await yieldToUI();
@@ -5953,7 +6270,8 @@ window.showConnectionLost = function() {
             };
 
             // Props chung cho <ExportButton kind=… {...exportBtn} /> — component nằm NGOÀI App (xem định nghĩa trên App).
-            const exportBtn = { open: exportOpen, setOpen: setExportOpen, exporting, cols: exportCols, onCols: chooseExportCols, gridLays, onExport: doExport };
+            const exportBtn = { open: exportOpen, setOpen: setExportOpen, exporting, cols: exportCols, onCols: chooseExportCols, gridLays,
+                                viewCounts: { income_alloc_month: incomeMonthCols.length }, onExport: doExport };   // khối tháng = N cột thật
 
             const loadReportData = async (pageArg, modeArg) => {
                 // pageArg là số -> nhảy thẳng tới trang đó (dùng cho pager). Không phải số (vd event) -> dùng filters.page.
@@ -6578,6 +6896,83 @@ window.showConnectionLost = function() {
                                         <div className="flex flex-col items-end">
                                             
                                             <span className="ds-meta">Trang {incomeAllocPagination.page} / {incomeAllocPagination.total_pages}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </>
+                    )}
+
+                    {activeTab === 'income_alloc_month' && (
+                        <>
+                            <div className="bg-white border-b border-slate-200 px-6 pt-2 pb-3 shrink-0 z-[900]">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <MonthRangePicker value={incomeMonthFilters.range} onChange={range => setIncomeMonthFilters(p => ({ ...p, range }))} isActive={activeDropdown === 'month_range'} onToggle={setActiveDropdown} />
+                                    <FilterConfigurator tab="income_alloc_month" defaultOutside={["incomeMonthFilters.tran_no_search", "filters.org_ids"]} onApply={() => loadIncomeMonthData()} setActiveDropdown={setActiveDropdown} items={[
+                                        { key: 'incomeMonthFilters.tran_no_search', label: 'Số chứng từ', active: !!(incomeMonthFilters.tran_no_search || '').trim(), clear: () => setIncomeMonthFilters(p => ({ ...p, tran_no_search: '' })),
+                                          node: <div className="relative">
+                                            <Icon name="search" size={14} stroke={2} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-4 pointer-events-none"/>
+                                            <input type="text" value={incomeMonthFilters.tran_no_search} onChange={e => setIncomeMonthFilters(p => ({ ...p, tran_no_search: e.target.value }))} onKeyDown={e => { if (e.key === 'Enter') loadIncomeMonthData(); }} placeholder="Số chứng từ" className={`ds-input pl-8 w-36 ${incomeMonthFilters.tran_no_search ? 'is-on' : ''}`} />
+                                            </div> },
+                                        { key: 'filters.org_ids', label: 'Đơn vị', active: filters.org_ids.length > 0, clear: () => setFilters(p => ({ ...p, org_ids: [] })),
+                                          node: <PremiumDropdown label="Đơn vị" items={meta.orgs} selectedItems={filters.org_ids} onSelect={id => toggleFilter('org_ids', id)} isActive={activeDropdown === 'Đơn vị'} onToggle={setActiveDropdown} align="right" /> },
+                                        { key: 'incomeMonthFilters.alloc_status', label: 'Giá trị phân bổ', active: !!incomeMonthFilters.alloc_status, clear: () => setIncomeMonthFilters(p => ({ ...p, alloc_status: '' })),
+                                          node: <div className="ds-seg">{[['', 'Tất cả'], ['remaining', 'Còn giá trị'], ['done', 'Đã hết'], ['in_period', 'Có phân bổ trong kỳ']].map(([v, l]) => (
+                                              <button key={'s' + v} type="button" onClick={() => setIncomeMonthFilters(p => ({ ...p, alloc_status: v }))} className={incomeMonthFilters.alloc_status === v ? 'is-on' : ''}>{l}</button>))}</div> },
+                                        { key: 'incomeMonthFilters.active', label: 'Trạng thái thẻ', active: !!incomeMonthFilters.active, clear: () => setIncomeMonthFilters(p => ({ ...p, active: '' })),
+                                          node: <div className="ds-seg">{[['', 'Tất cả'], ['1', 'Đang hiệu lực'], ['0', 'Ngừng']].map(([v, l]) => (
+                                              <button key={'a' + v} type="button" onClick={() => setIncomeMonthFilters(p => ({ ...p, active: v }))} className={incomeMonthFilters.active === v ? 'is-on' : ''}>{l}</button>))}</div> },
+                                        { key: 'filters.item_ids', label: 'Hàng hóa', active: filters.item_ids.length > 0, clear: () => setFilters(p => ({ ...p, item_ids: [] })),
+                                          node: <PremiumDropdown label="Hàng hóa" items={meta.items} selectedItems={filters.item_ids} onSelect={id => toggleFilter('item_ids', id)} isActive={activeDropdown === 'Hàng hóa'} onToggle={setActiveDropdown} /> },
+                                        { key: 'filters.pr_detail_ids', label: 'Đối tượng', active: filters.pr_detail_ids.length > 0, clear: () => setFilters(p => ({ ...p, pr_detail_ids: [] })),
+                                          node: <PremiumDropdown label="Đối tượng" items={meta.pr_details} selectedItems={filters.pr_detail_ids} onSelect={id => toggleFilter('pr_detail_ids', id)} isActive={activeDropdown === 'Đối tượng'} onToggle={setActiveDropdown} /> },
+                                        { key: 'incomeMonthFilters.acc_des_ids', label: 'TK đích', active: incomeMonthFilters.acc_des_ids.length > 0, clear: () => setIncomeMonthFilters(p => ({ ...p, acc_des_ids: [] })),
+                                          node: <PremiumDropdown label="TK đích" items={meta.accounts} codePrefix selectedItems={incomeMonthFilters.acc_des_ids} onSelect={id => toggleIncomeMonthFilter('acc_des_ids', id)} isActive={activeDropdown === 'TK đích'} onToggle={setActiveDropdown} align="right" /> },
+                                        { key: 'filters.tran_ids', label: 'Loại CT', active: filters.tran_ids.length > 0, clear: () => setFilters(p => ({ ...p, tran_ids: [] })),
+                                          node: <PremiumDropdown label="Loại CT" items={meta.tran_ids} selectedItems={filters.tran_ids} onSelect={id => toggleFilter('tran_ids', id)} isActive={activeDropdown === 'Loại CT'} onToggle={setActiveDropdown} align="right" /> },
+                                        { key: 'filters.job_ids', label: 'Công việc', active: filters.job_ids.length > 0, clear: () => setFilters(p => ({ ...p, job_ids: [] })),
+                                          node: <PremiumDropdown label="Công việc" items={meta.jobs} selectedItems={filters.job_ids} onSelect={id => toggleFilter('job_ids', id)} isActive={activeDropdown === 'Công việc'} onToggle={setActiveDropdown} /> },
+                                        { key: 'filters.expense_ids', label: 'Mục chi phí', active: filters.expense_ids.length > 0, clear: () => setFilters(p => ({ ...p, expense_ids: [] })),
+                                          node: <PremiumDropdown label="Mục chi phí" items={meta.expenses} selectedItems={filters.expense_ids} onSelect={id => toggleFilter('expense_ids', id)} isActive={activeDropdown === 'Mục chi phí'} onToggle={setActiveDropdown} /> },
+                                    ]} />
+                                    <div className="ml-auto flex items-center gap-2">
+                                        <PageSizeDropdown value={incomeMonthPageSize} onChange={newSize => { setIncomeMonthPageSize(newSize); }} />
+                                        <span className="ds-meta"><b>{Number(incomeMonthPagination.total_rows || 0).toLocaleString()}</b> dòng</span>
+                                        <ExportButton kind="income_alloc_month" {...exportBtn} />
+                                        <button onClick={() => loadIncomeMonthData()} disabled={incomeMonthLoading}
+                                            title={isTabDirty('income_alloc_month') ? 'Bộ lọc đã thay đổi! Nhấn để áp dụng bộ lọc mới' : 'Truy vấn dữ liệu'}
+                                            className={`ds-btn ds-btn-pri ${isTabDirty('income_alloc_month') ? 'ds-btn-need-query' : ''}`}>
+                                            {isTabDirty('income_alloc_month') && <span className="ds-btn-dirty-dot" />}
+                                            {incomeMonthLoading ? <Icon name="loader" size={14} className="animate-spin" /> : <Icon name="search" size={14} stroke={2} />}
+                                            <span>{incomeMonthLoading ? 'Đang tải' : isTabDirty('income_alloc_month') ? 'Áp dụng bộ lọc' : 'Truy vấn'}</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="text-[12px] text-ink-3 mt-2">Số tháng = kỳ phân bổ kết thúc trong tháng đó · {(incomeMonthView.grid.byId.CUM_BEFORE || {}).label} = trước tháng đầu kỳ · Giá trị còn lại = Doanh thu − {(incomeMonthView.grid.byId.CUM_BEFORE || {}).label} − {(incomeMonthView.grid.byId.CUM_IN || {}).label}</div>
+                            </div>
+                            <div className="flex-1 min-h-0 p-3 overflow-hidden bg-canvas flex flex-col relative">
+                                {incomeMonthLoading && <div className="ds-loading"><div className="ds-loadbar"></div><div className="ds-loadpill"><Icon name="loader" size={14} className="animate-spin"/>Đang truy vấn dữ liệu...</div></div>}
+                                <div className="flex-1 min-h-0 bg-white border border-line rounded-[10px] overflow-hidden flex flex-col mt-1">
+                                    <div className="flex-1 min-h-0 overflow-auto custom-scrollbar" ref={incomeMonthScrollRef}>
+                                        <table className="ds-grid w-max border-collapse" style={{ width: 'max-content', minWidth: '100%' }}>
+                                            <GridHead grid={incomeMonthView.grid} cols={incomeMonthCols} sort={incomeMonthSort} onSort={f => setIncomeMonthSort(s => cycleSort(s, f))} onMove={incomeMonthMove} search={incomeMonthColSearch} setSearch={setIncomeMonthColSearch} />
+                                            <tbody>
+                                                <VirtualRows data={incomeMonthFlatData} rowHeight={28} scrollRef={incomeMonthScrollRef} renderRow={(row, i) => (
+                                                    <GridRow key={i} grid={incomeMonthView.grid} cols={incomeMonthCols} r={row} idx={i + 1} />
+                                                )} />
+                                            </tbody>
+                                            <GridFoot cols={incomeMonthCols} trClass="text-slate-800 font-black text-[12px] bg-slate-50/95" labelClass="border-r text-right px-4 py-3 uppercase text-[10px] text-slate-400"
+                                                label={incomeMonthFoot ? footShownLabel(incomeMonthFlatData.length) : `Tổng (${Number(incomeMonthPagination.total_rows || 0).toLocaleString()} dòng):`}
+                                                cells={footCells(incomeMonthView.grid, incomeMonthFoot || incomeMonthSummary)} />
+                                        </table>
+                                    </div>
+                                    <div className="ds-pager">
+                                        <div className="flex items-center"><ColumnConfigurator grid={INCOME_MONTH_GRID} lay={incomeMonthLay} /></div>
+                                        <div className="flex items-center gap-2">
+                                            <PageJumper page={incomeMonthPagination.page} totalPages={incomeMonthPagination.total_pages} onGoto={p => loadIncomeMonthData(p)} />
+                                        </div>
+                                        <div className="flex flex-col items-end">
+                                            <span className="ds-meta">Trang {incomeMonthPagination.page} / {incomeMonthPagination.total_pages}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -7240,7 +7635,7 @@ window.showConnectionLost = function() {
                                     <div className="ds-dlg-ic is-ok"><Icon name="check" size={18} stroke={2.5} /></div>
                                     <div className="min-w-0">
                                         <h2>Đã xuất xong</h2>
-                                        <div className="ds-dlg-sub break-all">{(exportDone.total || 0).toLocaleString()} dòng · {exportDone.filename}</div>
+                                        <div className="ds-dlg-sub break-all">{(exportDone.total || 0).toLocaleString()} dòng · {exportDone.filename}{exportDone.retries > 0 ? ` · tự kết nối lại ${exportDone.retries} lần` : ''}</div>
                                     </div>
                                 </div>
                                 <div className="ds-dlg-body">
@@ -7262,12 +7657,16 @@ window.showConnectionLost = function() {
                                 <div className="ds-dlg-head">
                                     <div className="ds-dlg-ic is-ok"><Icon name="loader" size={18} stroke={2} className="animate-spin" /></div>
                                     <div className="min-w-0">
-                                        <h3>Đang xuất Excel</h3>
+                                        <h3>{exportProgress.phase === 'job' && exportProgress.format === 'csv' ? 'Đang xuất CSV' : 'Đang xuất Excel'}</h3>
                                         <div className="ds-dlg-sub">
                                             {exportProgress.phase === 'fetch'  && 'Đang tải dữ liệu từ server...'}
                                             {exportProgress.phase === 'build'  && `Đang dựng file: ${exportProgress.current.toLocaleString()} / ${exportProgress.total.toLocaleString()} dòng`}
                                             {exportProgress.phase === 'write'  && 'Đang ghi file xlsx...'}
-                                            {exportProgress.phase === 'stream' && `Đang stream ${exportProgress.total.toLocaleString()} dòng → browser tải file CSV trực tiếp`}
+                                            {exportProgress.phase === 'job' && (exportProgress.retry ? 'Mất kết nối tới máy chủ — đang tự kết nối lại…'
+                                                : exportProgress.sub === 'query' ? 'Đang đếm dữ liệu trên máy chủ…'
+                                                : exportProgress.sub === 'write' ? `Đang ghi file: ${fmtCount(exportProgress.current)} / ${fmtCount(exportProgress.total)} dòng`
+                                                : exportProgress.sub === 'prepare' ? 'Đang chuẩn bị…'
+                                                : `Đang tải dữ liệu: ${fmtCount(exportProgress.current)} / ${fmtCount(exportProgress.total)} dòng`)}
                                         </div>
                                     </div>
                                 </div>
@@ -7275,8 +7674,32 @@ window.showConnectionLost = function() {
                                     {exportProgress.total > 0 && (
                                         <div className="ds-progress"><i style={{ width: `${Math.min(100, Math.round((exportProgress.current / Math.max(1, exportProgress.total)) * 100))}%` }}></i></div>
                                     )}
-                                    <div className="text-[12px] text-ink-3">Vui lòng không tắt cửa sổ. Dữ liệu lớn có thể mất vài phút.</div>
+                                    {exportProgress.phase === 'job' && exportProgress.retry && (
+                                        <div className="ds-note is-warn">
+                                            <Icon name="refresh-cw" size={14} stroke={2} />
+                                            <span>
+                                                {Math.ceil(exportProgress.retry.until - Date.now() / 1000) > 0 ? `Mạng tới máy chủ bị ngắt — tự kết nối lại sau ${Math.ceil(exportProgress.retry.until - Date.now() / 1000)} giây` : 'Đang kết nối lại máy chủ…'} (lần {exportProgress.retry.n}/{exportProgress.retry.max}).
+                                                {' '}Phần đã tải được giữ nguyên. Kiểm tra VPN nếu chờ lâu.
+                                            </span>
+                                        </div>
+                                    )}
+                                    {exportProgress.phase === 'job' && !exportProgress.retry && exportProgress.retries > 0 && (
+                                        <div className="flex items-center gap-1.5 text-[12px] text-ink-2"><Icon name="refresh-cw" size={13} stroke={2} /> Đã tự kết nối lại {exportProgress.retries} lần — dữ liệu không thiếu, không trùng.</div>
+                                    )}
+                                    {exportProgress.phase === 'job' && exportProgress.sub === 'fetch' && exportProgress.chunks > 1 && !exportProgress.retry && (
+                                        <div className="flex items-center gap-1.5 text-[12px] text-ink-2"><Icon name="layers" size={13} stroke={2} /> Tải theo từng khúc ngày: xong {exportProgress.chunk}/{exportProgress.chunks} khúc</div>
+                                    )}
+                                    <div className="text-[12px] text-ink-3">{exportProgress.phase === 'job'
+                                        ? 'Tải hết dữ liệu về máy rồi mới ghi file — mạng chập chờn thì tự kết nối lại. Đừng tắt ứng dụng cho tới khi xong.'
+                                        : 'Vui lòng không tắt cửa sổ. Dữ liệu lớn có thể mất vài phút.'}</div>
                                 </div>
+                                {exportProgress.phase === 'job' && exportProgress.jobId && (
+                                    <div className="ds-dlg-foot">
+                                        <button onClick={() => cancelServerExport(exportProgress.jobId)} disabled={exportProgress.cancelling} className="ds-btn ds-btn-danger">
+                                            {exportProgress.cancelling ? <><Icon name="loader" size={14} className="animate-spin" /> Đang hủy…</> : <><Icon name="x" size={14} stroke={2} /> Hủy xuất</>}
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}

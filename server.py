@@ -1824,6 +1824,319 @@ _export_jobs = {}
 _export_jobs_lock = threading.Lock()
 
 
+# ============== XUẤT FILE LỚN CHỊU ĐƯỢC MẠNG CHẬP CHỜN (v1.10.6, Trum 29/09) ==============
+# Sự cố: xuất BC007 ≈ 2,86 triệu dòng (IACC_CHULONG, qua VPN) → "[DBNETLIB]ConnectionWrite (10054)" giữa chừng, mất trắng.
+# Bản cũ giữ MỘT truy vấn mở suốt lúc ghi file (đọc 5.000 dòng → ghi → đọc tiếp): file càng lớn kết nối càng phải sống
+# lâu, VPN chớp 1 lần là hỏng cả file. Nay mọi job xuất (báo cáo + danh sách chứng từ) đi 2 giai đoạn:
+#   1. TẢI — chia truy vấn thành các khúc theo khoảng NGÀY (_day_chunks: ngày là khoá sắp xếp đầu nên nối các khúc
+#      = đúng thứ tự của 1 truy vấn), đọc từng khúc vào file tạm nén trên máy (_ExportSpool). Đứt mạng → đóng kết nối
+#      hỏng, chờ, nối lại, bỏ phần dở của khúc đang tải rồi tải lại ĐÚNG khúc đó (_ExportDb). Khúc đã tải giữ nguyên.
+#   2. GHI — tải xong mới nhả kết nối SQL rồi ghi Excel/CSV từ file tạm: khâu lâu nhất không còn phụ thuộc mạng.
+# Mỗi job ghi nhật ký (mốc thời gian từng khâu, từng khúc, lần nối lại, lỗi rút gọn) vào
+# Downloads\iPOS_Ledger_Studio\logs\datastudio.log — trước đây EXE không ghi log ra đâu cả, lỗi ở máy người dùng là mù.
+import logging.handlers
+import pickle
+import struct
+import tempfile
+import zlib
+
+_EXPORT_CHUNK_ROWS = 200000   # dòng/khúc tối thiểu (gộp các ngày liền nhau tới mốc; 1 ngày to hơn thì đứng riêng 1 khúc)
+# Tối đa ~8 khúc: khúc cỡ trăm nghìn dòng thì SQL thường QUÉT CẢ BẢNG LEDGER thay vì tra index ngày (tra khoá từng dòng đắt
+# hơn) — CHULONG LEDGER 1,75 GB, buffer pool Express 1,4 GB (skill chulong-db-perf) → mỗi khúc 1 lượt đọc đĩa, làm chậm người
+# đang nhập liệu. 8 khúc = 8 lượt quét thay vì 1, đổi lại mỗi khúc sắp xếp gọn trong RAM (câu 2,86 triệu dòng cũ tràn
+# tempdb) và đứt mạng chỉ tải lại ≤ 1/8. Nhật ký ghi "dong dau sau x s" từng khúc → biết thật sự quét hay tra index.
+_EXPORT_MAX_CHUNKS = 8
+_EXPORT_FETCH_ROWS = 5000
+_NET_RETRY_WAITS = (3, 5, 10, 20, 30, 45, 60, 60)   # giây chờ trước mỗi lần nối lại (~4 phút) — hết lượt mới báo lỗi
+_EXPORT_CONNECT_WAIT = 15     # giây chờ tối đa mỗi lần nối lại (driver "SQL Server" bỏ qua timeout=5 — xem _make_conn_capped)
+_CHUNK_MARK = "/*CHUNK*/"     # chỗ chèn điều kiện ngày của khúc: CUỐI mệnh đề WHERE, trước ORDER BY (xem _day_chunks)
+
+_xlog = logging.getLogger("datastudio.export")
+_xlog_state = {"path": None}
+_xlog_lock = threading.Lock()
+
+
+def _export_log_path():
+    """Gắn (1 lần) file nhật ký xuất, trả đường dẫn ('' nếu không ghi được). Chỉ ghi tên CSDL, số dòng, thời gian,
+    lỗi rút gọn — KHÔNG ghi mật khẩu / chuỗi kết nối. Xoay vòng 1 MB × 4 file."""
+    with _xlog_lock:
+        if _xlog_state["path"] is None:
+            try:
+                folder = os.path.join(_export_dir(), "logs")
+                os.makedirs(folder, exist_ok=True)
+                path = os.path.join(folder, "datastudio.log")
+                h = logging.handlers.RotatingFileHandler(path, maxBytes=1000000, backupCount=3, encoding="utf-8", delay=True)
+                h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+                _xlog.addHandler(h)
+                _xlog.setLevel(logging.INFO)
+                _xlog.propagate = False
+                _xlog_state["path"] = path
+            except Exception:
+                _xlog_state["path"] = ""
+        return _xlog_state["path"]
+
+
+# Lỗi đáng thử lại: mạng/kết nối đứt, hết giờ chờ, bị chọn làm nạn nhân deadlock. Lỗi SQL thật (sai cú pháp, thiếu cột,
+# thiếu quyền, sai mật khẩu…) KHÔNG thử lại — báo ngay như cũ.
+_NET_ERR = re.compile(
+    r"\b08S01\b|\b0800[134]\b|\bHYT0[01]\b|1005[34]|1006[01]|connectionwrite|connectionread|connectioncheckfordata|"
+    r"connectionopen|general network error|communication link failure|tcp provider|named pipes provider|"
+    r"shared memory provider|session provider|physical connection is not usable|forcibly closed|semaphore timeout|"
+    r"network name is no longer available|connection (?:is )?broken|severe error occurred|timeout expired|deadlock|\b40001\b",
+    re.I)
+
+
+def _is_net_error(e):
+    return isinstance(e, (TimeoutError, ConnectionError)) or bool(_NET_ERR.search(str(e)))
+
+
+class _ExportNetError(Exception):
+    """Đã tự nối lại hết lượt mà mạng vẫn đứt — câu báo đã là tiếng Việt 3 phần (_vi_error_text giữ nguyên)."""
+
+
+class _ExportCtl:
+    """Cập nhật / hỏi huỷ / ghi nhật ký cho 1 job trong _export_jobs (dùng chung job báo cáo và job danh sách)."""
+
+    def __init__(self, job_id, started, tag):
+        self.job_id, self.started, self.tag = job_id, started, tag
+        _export_log_path()
+
+    def upd(self, **kw):
+        with _export_jobs_lock:
+            job = _export_jobs.get(self.job_id)
+            if job is not None:
+                job.update(kw)
+                job['elapsed'] = round(time.time() - self.started, 1)
+
+    def cancelled(self):
+        with _export_jobs_lock:
+            job = _export_jobs.get(self.job_id)
+            return bool(job and job.get('cancelled'))
+
+    def log(self, msg, *args, level=logging.INFO):
+        try:
+            _xlog.log(level, f"[{self.job_id[:8]} {self.tag}] " + msg, *args)
+        except Exception:
+            pass
+
+
+class _ExportSpool:
+    """File tạm nén chứa các dòng đã tải: mỗi khung = 4 byte độ dài + zlib(pickle(list dòng)). mark/rollback để bỏ phần
+    dở của khúc đang tải khi đứt mạng. Đo 29/09 (dòng giả kiểu BC007): 2,86 triệu dòng ghi ~10 s, đọc ~4 s, ~55 MB.
+    pickle an toàn ở đây: chỉ chính job này ghi rồi đọc lại file của nó."""
+
+    def __init__(self):
+        folder = tempfile.gettempdir()
+        try:   # dọn file tạm mồ côi (EXE bị tắt ngang giữa lúc xuất) — chỉ file cũ hơn 6 giờ
+            now = time.time()
+            for fn in os.listdir(folder):
+                fp = os.path.join(folder, fn)
+                if fn.startswith("ds_spool_") and fn.endswith(".tmp") and now - os.path.getmtime(fp) > 6 * 3600:
+                    os.remove(fp)
+        except Exception:
+            pass
+        fd, self.path = tempfile.mkstemp(prefix="ds_spool_", suffix=".tmp", dir=folder)
+        self.fh = os.fdopen(fd, "w+b")
+        self.count = 0
+
+    def mark(self):
+        return self.fh.tell(), self.count
+
+    def rollback(self, m):
+        self.fh.seek(m[0])
+        self.fh.truncate()
+        self.count = m[1]
+
+    def write(self, batch):
+        blob = zlib.compress(pickle.dumps(batch, pickle.HIGHEST_PROTOCOL), 1)
+        self.fh.write(struct.pack("<I", len(blob)))
+        self.fh.write(blob)
+        self.count += len(batch)
+
+    def size(self):
+        return self.fh.tell()
+
+    def iter_rows(self):
+        self.fh.flush()
+        self.fh.seek(0)
+        while True:
+            head = self.fh.read(4)
+            if len(head) < 4:
+                break
+            (n,) = struct.unpack("<I", head)
+            for r in pickle.loads(zlib.decompress(self.fh.read(n))):
+                yield r
+
+    def close(self):
+        try:
+            self.fh.close()
+        except Exception:
+            pass
+        try:
+            os.remove(self.path)
+        except Exception:
+            pass
+
+
+class _ExportDb:
+    """Kết nối SQL RIÊNG của 1 job xuất (không dùng pool, không cần session). Lỗi mạng → đóng kết nối hỏng, chờ
+    _NET_RETRY_WAITS, nối lại, làm lại đúng bước đang dở. Mọi bước chỉ SELECT nên làm lại là an toàn."""
+
+    def __init__(self, db_cfg, ctl):
+        self.db_cfg, self.ctl, self.conn = db_cfg, ctl, None
+        self.reconnects = 0
+
+    def cursor(self):
+        if self.conn is None:
+            self.conn = _make_conn_capped(self.db_cfg, _EXPORT_CONNECT_WAIT)
+        return self.conn.cursor()
+
+    def close(self):
+        if self.conn is not None:
+            try:
+                self.conn.close()
+            except Exception:
+                pass
+            self.conn = None
+
+    def _retry(self, what, attempt):
+        tries, t_begin = 0, time.time()
+        while True:
+            try:
+                out = attempt()
+                if tries:
+                    self.ctl.upd(retry=None)
+                    self.ctl.log("%s: da noi lai, chay tiep", what)
+                return out
+            except (XR.ExportCancelled, _ExportNetError):
+                raise
+            except Exception as e:
+                if not _is_net_error(e):
+                    raise
+                self.close()
+                if tries >= len(_NET_RETRY_WAITS):
+                    self.ctl.log("%s: bo cuoc sau %d lan noi lai: %s", what, tries, _err_brief(e), level=logging.ERROR)
+                    logp = _export_log_path()
+                    raise _ExportNetError(
+                        f"Mất kết nối tới máy chủ SQL khi đang tải dữ liệu — đã tự kết nối lại {tries} lần trong "
+                        f"{max(1, round((time.time() - t_begin) / 60))} phút vẫn không được.\n"
+                        f"{_VI_FIX} Kiểm tra VPN công ty còn kết nối rồi bấm xuất lại. Mạng yếu kéo dài thì thu hẹp kỳ "
+                        f"hoặc lọc bớt đơn vị cho ít dòng hơn.\n"
+                        f"{_VI_DETAIL} {_err_brief(e)}" + (f" · nhật ký: {logp}" if logp else "")) from e
+                wait = _NET_RETRY_WAITS[tries]
+                tries += 1
+                self.reconnects += 1
+                self.ctl.log("%s: loi mang (lan %d/%d, cho %ds): %s", what, tries, len(_NET_RETRY_WAITS), wait,
+                             _err_brief(e), level=logging.WARNING)
+                self.ctl.upd(retries=self.reconnects,
+                             retry={'n': tries, 'max': len(_NET_RETRY_WAITS), 'wait': wait, 'until': time.time() + wait})
+                deadline = time.time() + wait
+                while time.time() < deadline:
+                    if self.ctl.cancelled():
+                        raise XR.ExportCancelled()
+                    time.sleep(0.25)
+
+    def run(self, fn, what):
+        """fn(cursor) → kết quả; đứt mạng thì nối lại và gọi lại fn từ đầu."""
+        return self._retry(what, lambda: fn(self.cursor()))
+
+    def all(self, sql, params=None, what="truy van"):
+        def go(cur):
+            if params:
+                cur.execute(sql, params)
+            else:
+                cur.execute(sql)
+            return cur.fetchall()
+        return self.run(go, what)
+
+    def one(self, sql, params=None, what="truy van"):
+        rows = self.all(sql, params, what)
+        return rows[0] if rows else None
+
+    def fetch(self, chunks, spool):
+        """Tải lần lượt các khúc [(sql, params), …] vào spool, cập nhật current = số dòng đã tải.
+        Trả tên cột (cursor.description) — bộ xuất danh sách cần để map dòng."""
+        cols, n = None, len(chunks)
+        for i, (sql, params) in enumerate(chunks, 1):
+            mark = spool.mark()
+            timing = {}
+
+            def attempt():
+                nonlocal cols
+                spool.rollback(mark)   # lần thử lại: bỏ phần dở của khúc này, tải lại từ đầu khúc
+                self.ctl.upd(current=spool.count)
+                t0 = time.time()
+                cur = self.cursor()
+                cur.execute(sql, params)
+                if cols is None:
+                    cols = [c[0] for c in cur.description]
+                timing.pop('first', None)
+                while True:
+                    batch = cur.fetchmany(_EXPORT_FETCH_ROWS)
+                    timing.setdefault('first', time.time() - t0)
+                    if not batch:
+                        break
+                    spool.write([tuple(r) for r in batch])
+                    self.ctl.upd(current=spool.count)
+                    if self.ctl.cancelled():
+                        raise XR.ExportCancelled()
+                cur.close()
+                timing['total'] = time.time() - t0
+
+            self._retry(f"khuc {i}/{n}", attempt)
+            self.ctl.upd(chunk=i)
+            self.ctl.log("khuc %d/%d: %d dong, dong dau sau %.1fs, xong %.1fs", i, n, spool.count - mark[1],
+                         timing.get('first', 0), timing.get('total', 0))
+        return cols or []
+
+
+def _day_chunks(sql, params, day_counts, col, desc=False, target=None):
+    """Chia 1 truy vấn xuất thành các khúc theo khoảng ngày (xem đầu khối).
+    sql chứa đúng 1 _CHUNK_MARK ở CUỐI mệnh đề WHERE (sau mọi điều kiện có '?', trước ORDER BY — ORDER BY không có '?')
+    → điều kiện ngày của khúc chèn vào đó, tham số nối vào CUỐI params (Bẫy 2).
+    day_counts: [(ngày 'YYYYMMDD', số dòng), …] do GROUP BY CONVERT(VARCHAR(8), col, 112) trên CÙNG WHERE trả về.
+    WHERE gốc đã giới hạn [từ ngày, tới ngày] nên khúc đầu chỉ cần cận trên, khúc cuối chỉ cần cận dưới, cận giữa nửa mở
+    → hợp các khúc = đúng tập dòng của truy vấn gốc, không trùng không sót (TRAN_DATE có giờ vẫn đúng).
+    CHỈ dùng khi ORDER BY bắt đầu bằng chính cột ngày này (desc = cột đó sắp giảm dần) — nối khúc theo ngày mới giữ đúng thứ
+    tự. Dòng trùng cả khoá sắp xếp vốn không có thứ tự cố định (Bẫy 20), chia khúc không làm khác đi.
+    Không chia được (thiếu dấu, có dòng ngày NULL, chỉ 1 khúc) → 1 khúc = truy vấn gốc.
+    target (dòng/khúc) mặc định = max(_EXPORT_CHUNK_ROWS, tổng / _EXPORT_MAX_CHUNKS)."""
+    whole = [(sql.replace(_CHUNK_MARK, ""), list(params))]
+    if sql.count(_CHUNK_MARK) != 1 or any(d is None for d, _ in day_counts):
+        return whole
+    total = sum(int(n or 0) for _, n in day_counts)
+    target = target or max(_EXPORT_CHUNK_ROWS, -(-total // _EXPORT_MAX_CHUNKS))
+    starts, acc = [], 0
+    for d, n in sorted((str(d).strip(), int(n or 0)) for d, n in day_counts):
+        if not starts or acc >= target:   # gộp ngày tới khi CHẠM mốc → mỗi khúc ≥ target (trừ khúc cuối), số khúc ≤ tổng/target
+            starts.append(d)
+            acc = 0
+        acc += n
+    if len(starts) <= 1:
+        return whole
+    out = []
+    for k, s in enumerate(starts):
+        if k == 0:
+            pred, p = f"{col} < ?", [starts[1]]
+        elif k == len(starts) - 1:
+            pred, p = f"{col} >= ?", [s]
+        else:
+            pred, p = f"{col} >= ? AND {col} < ?", [s, starts[k + 1]]
+        out.append((sql.replace(_CHUNK_MARK, " AND " + pred), list(params) + p))
+    return out[::-1] if desc else out
+
+
+def _list_day_split(order_by_sql, date_col, from_sql, where_sql, params, tail=""):
+    """Bộ xuất danh sách: ORDER BY bắt đầu bằng cột ngày (mặc định "X.TRAN_DATE DESC, X.TRAN_NO") → day_split cho
+    _start_export_job; người dùng sắp theo cột khác → None (tải 1 khúc, đứt mạng thì tải lại cả truy vấn)."""
+    first = order_by_sql.split(",")[0].split()
+    if not first or first[0] != date_col:
+        return None
+    return (date_col, len(first) > 1 and first[1].upper() == "DESC",
+            f"SELECT CONVERT(VARCHAR(8), {date_col}, 112), COUNT(*) {from_sql} WHERE {where_sql} "
+            f"GROUP BY CONVERT(VARCHAR(8), {date_col}, 112){tail}", list(params))
+
+
 def _csv_escape(v):
     """Escape 1 cell cho CSV chuẩn RFC 4180."""
     if v is None:
@@ -1895,7 +2208,7 @@ def _write_csv_to_disk(job_id, headers, row_iter, filename, total_estimate, out_
         with _export_jobs_lock:
             job = _export_jobs.get(job_id)
             if job is not None:
-                job['status'] = 'error'
+                job['status'] = 'cancelled' if job.get('cancelled') else 'error'
                 job['error']  = str(e)
 
 
@@ -1903,8 +2216,12 @@ def _write_csv_to_disk(job_id, headers, row_iter, filename, total_estimate, out_
 LIST_XLSX_SHEET_ROWS = 1000000
 
 
-def _write_xlsx_to_disk(job_id, headers, row_iter, filename, total_estimate, out_path=None):
+def _write_xlsx_to_disk(job_id, headers, row_iter, filename, total_estimate, out_path=None, spec=None):
     """Ghi dữ liệu lớn ra XLSX (constant_memory), tự sang sheet mới khi chạm LIST_XLSX_SHEET_ROWS dòng.
+
+    spec (tuỳ chọn — DT chờ phân bổ theo tháng, v1.10.6): {'header_dates': {cột: datetime} tiêu đề là ngày thật (hiện mm/yyyy),
+    'formulas': {cột: '=SUM(O{r}:Z{r})'} ô ghi công thức ({r} = số dòng Excel) kèm giá trị tính sẵn, 'sum_cols': [cột…] dòng
+    "Tổng cộng" cuối bảng (1 sheet → công thức SUM, nhiều sheet → số)}.
 
     ⚠️ pyodbc trả cột tiền/số lượng kiểu Decimal. Bản cũ chỉ nhận int/float là số ⇒ mọi cột Decimal
     (số lượng, đơn giá, thành tiền của phiếu nhập/kho/bán hàng…) bị ghi thành CHỮ: SUM ra 0, ô có tam giác xanh.
@@ -1927,13 +2244,22 @@ def _write_xlsx_to_disk(job_id, headers, row_iter, filename, total_estimate, out
         ncols = len(headers)
         widths = [min(40, max(9, len(str(h)) + 3)) for h in headers]
         sheets = []
+        spec = spec or {}
+        hdr_dates, formulas = spec.get('header_dates') or {}, spec.get('formulas') or {}
+        sum_cols = [c for c in (spec.get('sum_cols') or []) if c < ncols]
+        sums = {c: _Dec(0) for c in sum_cols}
+        hdr_date_format = workbook.add_format(dict(base, bold=True, bg_color='#F1F5F9', align='center', valign='vcenter',
+                                                   border=1, border_color='#CBD5E1', num_format='mm/yyyy'))
 
         def new_sheet(idx):
             ws = workbook.add_worksheet(f"Sheet {idx}")
             ws.freeze_panes(1, 0)
             ws.set_row(0, 30)
             for col_num, header in enumerate(headers):
-                ws.write_string(0, col_num, str(header), header_format)
+                if col_num in hdr_dates:
+                    ws.write_datetime(0, col_num, hdr_dates[col_num], hdr_date_format)
+                else:
+                    ws.write_string(0, col_num, str(header), header_format)
             sheets.append(ws)
             return ws
 
@@ -1955,7 +2281,13 @@ def _write_xlsx_to_disk(job_id, headers, row_iter, filename, total_estimate, out
                         widths[col_num] = max(widths[col_num], 12)
                 elif isinstance(val, (int, float, _Dec)) and not isinstance(val, bool):
                     num = float(val)
-                    worksheet.write_number(row_num, col_num, num, int_format if num.is_integer() else dec_format)
+                    if col_num in formulas:
+                        worksheet.write_formula(row_num, col_num, formulas[col_num].replace('{r}', str(row_num + 1)),
+                                                int_format if num.is_integer() else dec_format, num)
+                    else:
+                        worksheet.write_number(row_num, col_num, num, int_format if num.is_integer() else dec_format)
+                    if col_num in sums:
+                        sums[col_num] += val if isinstance(val, _Dec) else _Dec(repr(val))
                     if count < 200 and col_num < ncols:
                         widths[col_num] = max(widths[col_num], min(20, len(f"{num:,.0f}") + 3))
                 else:
@@ -1975,6 +2307,22 @@ def _write_xlsx_to_disk(job_id, headers, row_iter, filename, total_estimate, out
                             raise RuntimeError("Cancelled by user")
 
         sheets[-1].autofilter(0, 0, max(1, row_num - 1), ncols - 1)
+        if sum_cols and count:
+            from xlsxwriter.utility import xl_col_to_name
+            tot_fmt = workbook.add_format(dict(base, bold=True, num_format='#,##0', bg_color='#F8FAFC', top=1, top_color='#94A3B8'))
+            tot_lbl = workbook.add_format(dict(base, bold=True, bg_color='#F8FAFC', top=1, top_color='#94A3B8'))
+            for c in range(ncols):
+                if c in sums:
+                    v = float(sums[c])
+                    if len(sheets) == 1:
+                        L = xl_col_to_name(c)
+                        worksheet.write_formula(row_num, c, f"=SUM({L}2:{L}{row_num})", tot_fmt, v)
+                    else:   # nhiều sheet: SUM 1 sheet sẽ sai → ghi số tổng mọi sheet
+                        worksheet.write_number(row_num, c, v, tot_fmt)
+                elif c == 0:
+                    worksheet.write_string(row_num, 0, "Tổng cộng" if len(sheets) == 1 else "Tổng cộng (mọi sheet)", tot_lbl)
+                else:
+                    worksheet.write_blank(row_num, c, None, tot_lbl)
         for ws in sheets:
             for col_num, w in enumerate(widths):
                 ws.set_column(col_num, col_num, w)
@@ -2004,7 +2352,7 @@ def _write_xlsx_to_disk(job_id, headers, row_iter, filename, total_estimate, out
         with _export_jobs_lock:
             job = _export_jobs.get(job_id)
             if job is not None:
-                job['status'] = 'error'
+                job['status'] = 'cancelled' if job.get('cancelled') else 'error'
                 job['error']  = str(e)
 
 
@@ -2100,13 +2448,18 @@ def open_folder_route():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
-def _start_export_job(filename, headers, sql, params, transform_row, total_estimate=0):
-    """Mở connection mới (cùng db_config session) → chạy query → ghi disk ở thread riêng.
+def _start_export_job(filename, headers, sql, params, transform_row, total_estimate=0, day_split=None, xlsx_spec=None):
+    """Job nền xuất danh sách chứng từ: kết nối riêng (cùng db_config session) → TẢI hết dòng vào file tạm (chịu đứt
+    mạng — xem khối "XUẤT FILE LỚN CHỊU ĐƯỢC MẠNG CHẬP CHỜN") → nhả kết nối → GHI xlsx/csv.
 
     transform_row(raw_row, sql_cols) → list giá trị theo thứ tự headers.
+    day_split (tuỳ chọn, từ _list_day_split) = (cột ngày, giảm dần?, câu đếm theo ngày, tham số): chia khúc theo ngày —
+    sql phải có _CHUNK_MARK cuối WHERE. Không truyền → tải 1 khúc (đứt mạng thì tải lại cả truy vấn).
+    xlsx_spec (tuỳ chọn): tiêu đề ngày / công thức / dòng tổng cho file xlsx — xem _write_xlsx_to_disk.
     Trả về job_id ngay.
     """
     job_id = uuid.uuid4().hex
+    started = time.time()
     # Tên file không trùng file cũ: trước đây xuất lại cùng khoảng ngày là GHI ĐÈ — mà file cũ đang mở trong Excel
     # thì Windows khoá file ⇒ job lỗi "Permission denied". Nay tự thêm (2), (3)… và ghi ra *.part rồi mới đổi tên.
     ext = 'xlsx' if filename.lower().endswith('.xlsx') else 'csv'
@@ -2114,48 +2467,71 @@ def _start_export_job(filename, headers, sql, params, transform_row, total_estim
     filename = os.path.basename(final_path)
     with _export_jobs_lock:
         _export_jobs[job_id] = {
-            'status': 'running', 'current': 0, 'total': total_estimate,
+            'status': 'running', 'phase': 'prepare', 'current': 0, 'total': total_estimate,
             'file_path': None, 'filename': filename, 'error': None,
-            'cancelled': False,
+            'cancelled': False, 'started': started, 'elapsed': 0, 'retries': 0, 'retry': None,
+            'format': ext,
         }
     db_cfg = session.get('db_config')
+    ctl = _ExportCtl(job_id, started, f"danh sach {filename}")
 
     def _runner():
-        own_conn = None
+        db, spool = None, None
         try:
             if not db_cfg:
                 raise Exception("Chưa đăng nhập SQL Server")
-            # Connection riêng cho thread — không dùng pool chung
-            own_conn = _make_conn(db_cfg)
-            cursor = own_conn.cursor()
-            cursor.execute(sql, params)
-            sql_cols = [c[0] for c in cursor.description]
-
-            def row_iter():
-                while True:
-                    batch = cursor.fetchmany(1000)
-                    if not batch: break
-                    for raw in batch:
-                        yield transform_row(raw, sql_cols)
-
+            ctl.log("bat dau: CSDL %s, uoc tinh %d dong, %s", db_cfg.get('database'), total_estimate, ext)
+            db = _ExportDb(db_cfg, ctl)
+            chunks, total = [(sql.replace(_CHUNK_MARK, ""), list(params))], total_estimate
+            if day_split:
+                col, desc, count_sql, count_params = day_split
+                ctl.upd(phase='query')
+                t = time.time()
+                days = db.all(count_sql, count_params, "dem dong theo ngay")
+                total = sum(int(r[1] or 0) for r in days)
+                chunks = _day_chunks(sql, params, [(r[0], r[1]) for r in days], col, desc)
+                ctl.upd(total=total)
+                ctl.log("dem: %d dong, %d ngay -> %d khuc, %.1fs", total, len(days), len(chunks), time.time() - t)
+            t = time.time()
+            ctl.upd(phase='fetch', current=0, chunk=0, chunks=len(chunks))
+            spool = _ExportSpool()
+            sql_cols = db.fetch(chunks, spool)
+            db.close()   # tải xong → nhả kết nối TRƯỚC khi ghi file
+            ctl.log("tai xong: %d dong, %.1fs, file tam %.1f MB, noi lai %d lan", spool.count, time.time() - t,
+                    spool.size() / 1048576, db.reconnects)
+            db = None
+            if ctl.cancelled():
+                raise XR.ExportCancelled()
+            t = time.time()
+            ctl.upd(phase='write', current=0, total=spool.count)
+            rows = (transform_row(raw, sql_cols) for raw in spool.iter_rows())
             if ext == 'xlsx':
-                _write_xlsx_to_disk(job_id, headers, row_iter(), filename, total_estimate, out_path=final_path + '.part')
+                _write_xlsx_to_disk(job_id, headers, rows, filename, spool.count, out_path=final_path + '.part', spec=xlsx_spec)
             else:
-                _write_csv_to_disk(job_id, headers, row_iter(), filename, total_estimate, out_path=final_path + '.part')
-        except Exception as e:
+                _write_csv_to_disk(job_id, headers, rows, filename, spool.count, out_path=final_path + '.part')
             with _export_jobs_lock:
-                job = _export_jobs.get(job_id)
-                if job is not None:
-                    job['status'] = 'error'
-                    job['error']  = str(e)
+                job = _export_jobs.get(job_id) or {}
+                st, err = job.get('status'), job.get('error')
+            if st == 'done':
+                ctl.upd(phase='done')
+                ctl.log("ghi xong: %.1fs, tong %.1fs", time.time() - t, time.time() - started)
+            else:
+                ctl.log("ghi file loi: %s", _err_brief(err), level=logging.ERROR)
+        except XR.ExportCancelled:
+            ctl.upd(status='cancelled', phase='cancelled')
+            ctl.log("nguoi dung huy")
+        except Exception as e:
+            ctl.log("loi: %s", _err_brief(e), level=logging.ERROR)
+            ctl.upd(status='error', phase='error', error=str(e))
         finally:
-            if own_conn:
-                try: own_conn.close()
-                except: pass
+            if db is not None:
+                db.close()
+            if spool is not None:
+                spool.close()
             with _export_jobs_lock:
                 _export_reserved.discard(final_path.lower())
 
-    threading.Thread(target=_runner, daemon=True).start()
+    threading.Thread(target=_runner, daemon=True, name=f"export-list-{job_id[:8]}").start()
     return job_id
 
 
@@ -2293,7 +2669,10 @@ def get_ledger_stream_csv():
         ]
         jt = " ".join(joins)
         join_filter = " AND ".join(join_clauses) if join_clauses else "1=1"
-        sql = f"SELECT {BASE_COLS} {jt} WHERE {where_sql} AND {join_filter} ORDER BY {order_by_sql}"
+        sql = f"SELECT {BASE_COLS} {jt} WHERE {where_sql} AND {join_filter}{_CHUNK_MARK} ORDER BY {order_by_sql}"
+        # câu đếm theo ngày: như /api/ledger/count — chỉ kèm JOIN khi có ô tìm theo tên (số dòng chỉ để chia khúc + tiến trình)
+        day_split = _list_day_split(order_by_sql, "L.TRAN_DATE", jt if join_clauses else "FROM dbo.LEDGER L WITH (NOLOCK)",
+                                    f"{where_sql} AND {join_filter}", params + join_params)
         cols = _pick_export_cols(args, LEDGER_CSV_COLS)
         all_keys = [k for k, _ in LEDGER_CSV_COLS]
         pick = [all_keys.index(k) for k, _ in cols]
@@ -2334,7 +2713,7 @@ def get_ledger_stream_csv():
 
         headers = [label for _, label in cols]
         fname   = f"ChungTuTongHop_{args.get('from_date','').replace('/','')}-{args.get('to_date','').replace('/','')}.{args.get('format', 'csv')}"
-        job_id  = _start_export_job(fname, headers, sql, params + join_params, transform, total_estimate)
+        job_id  = _start_export_job(fname, headers, sql, params + join_params, transform, total_estimate, day_split)
         return jsonify({"status": "ok", "job_id": job_id, "filename": fname})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -2395,7 +2774,8 @@ def get_purchase_stream_csv():
             LEFT JOIN dbo.DM_EXPENSE      E WITH (NOLOCK) ON P.EXPENSE_ID      = E.EXPENSE_ID
         """
         SELECT_LIST = f"{col_list}, O.ORGANIZATION_NAME AS ORGANIZATION_NAME, E.EXPENSE_NAME AS EXPENSE_NAME"
-        sql = f"SELECT {SELECT_LIST} {JOIN_SQL} WHERE {where_sql} ORDER BY {order_by_sql}"
+        sql = f"SELECT {SELECT_LIST} {JOIN_SQL} WHERE {where_sql}{_CHUNK_MARK} ORDER BY {order_by_sql}"
+        day_split = _list_day_split(order_by_sql, "P.TRAN_DATE", JOIN_SQL, where_sql, params)
         cols = _pick_export_cols(args, PURCHASE_CSV_COLS, TRAN_NAME_EXPORT_COL)
         tran_map = _tran_name_map() if any(k == "TRAN_NAME" for k, _ in cols) else None
 
@@ -2407,7 +2787,7 @@ def get_purchase_stream_csv():
 
         headers = [label for _, label in cols]
         fname   = f"PhieuNhapKho_{args.get('from_date','').replace('/','')}-{args.get('to_date','').replace('/','')}.{args.get('format', 'csv')}"
-        job_id  = _start_export_job(fname, headers, sql, params, transform, total_estimate)
+        job_id  = _start_export_job(fname, headers, sql, params, transform, total_estimate, day_split)
         return jsonify({"status": "ok", "job_id": job_id, "filename": fname})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -2470,7 +2850,8 @@ def get_warehouse_stream_csv():
             LEFT JOIN dbo.DM_ORGANIZATION O  WITH (NOLOCK) ON W.ORGANIZATION_ID    = O.ORGANIZATION_ID
             LEFT JOIN dbo.DM_WAREHOUSE    WI WITH (NOLOCK) ON W.WAREHOUSE_ID_ISSUE = WI.WAREHOUSE_ID
         """
-        sql = f"SELECT {SELECT_LIST} {JOIN_SQL} WHERE {where_sql} ORDER BY {order_by_sql}"
+        sql = f"SELECT {SELECT_LIST} {JOIN_SQL} WHERE {where_sql}{_CHUNK_MARK} ORDER BY {order_by_sql}"
+        day_split = _list_day_split(order_by_sql, "W.TRAN_DATE", JOIN_SQL, where_sql, params)
 
         cols = _pick_export_cols(args, WAREHOUSE_CSV_COLS, TRAN_NAME_EXPORT_COL)
         tran_map = _tran_name_map() if any(k == "TRAN_NAME" for k, _ in cols) else None
@@ -2483,7 +2864,7 @@ def get_warehouse_stream_csv():
 
         headers = [label for _, label in cols]
         fname   = f"ChungTuKho_{args.get('from_date','').replace('/','')}-{args.get('to_date','').replace('/','')}.{args.get('format', 'csv')}"
-        job_id  = _start_export_job(fname, headers, sql, params, transform, total_estimate)
+        job_id  = _start_export_job(fname, headers, sql, params, transform, total_estimate, day_split)
         return jsonify({"status": "ok", "job_id": job_id, "filename": fname})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -3421,7 +3802,8 @@ def get_sale_stream_csv():
         dim = _sale_dim_info()
         extra_cols = _sale_extra_cols(dim)
         join_from = SALE_JOIN_SQL if need_join else SALE_FROM_ONLY
-        sql = f"SELECT {_sale_select_list(need_join, extra_cols)} {join_from} WHERE {where_sql} ORDER BY {order_by_sql} OPTION (RECOMPILE)"
+        sql = f"SELECT {_sale_select_list(need_join, extra_cols)} {join_from} WHERE {where_sql}{_CHUNK_MARK} ORDER BY {order_by_sql} OPTION (RECOMPILE)"
+        day_split = _list_day_split(order_by_sql, "S.TRAN_DATE", join_from, where_sql, params, " OPTION (RECOMPILE)")
         cols = _pick_export_cols(args, SALE_CSV_COLS, TRAN_NAME_EXPORT_COL)
         tran_map = _tran_name_map() if any(k == "TRAN_NAME" for k, _ in cols) else None
 
@@ -3440,7 +3822,7 @@ def get_sale_stream_csv():
 
         headers = [label for _, label in cols]
         fname   = f"ChungTuBanHang_{args.get('from_date','').replace('/','')}-{args.get('to_date','').replace('/','')}.{args.get('format', 'csv')}"
-        job_id  = _start_export_job(fname, headers, sql, params, transform, total_estimate)
+        job_id  = _start_export_job(fname, headers, sql, params, transform, total_estimate, day_split)
         return jsonify({"status": "ok", "job_id": job_id, "filename": fname})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -3626,7 +4008,8 @@ def _income_alloc_select_list():
     return (", ".join(f"A.{c}" for c in _income_alloc_cols()) + """,
     ISNULL(D.PERIOD_AMT,0) AS PERIOD_AMT,
     ISNULL(D.CUM_AMT,0)    AS CUM_AMT,
-    (A.INCOME_AMOUNT - ISNULL(D.CUM_AMT,0)) AS CON_LAI""")
+    (A.INCOME_AMOUNT - ISNULL(D.CUM_AMT,0)) AS CON_LAI,
+    PD.PR_DETAIL_NAME AS PR_DETAIL_NAME""")
 
 
 def _income_alloc_sort_whitelist():
@@ -3642,7 +4025,10 @@ def _income_alloc_sort_whitelist():
     return wl
 
 
-INCOME_ALLOC_FROM = "FROM dbo.INCOME_ALLOCATION A WITH (NOLOCK) LEFT JOIN D ON D.FR_KEY = A.PR_KEY"
+# Tên đối tượng JOIN thẳng DM_PR_DETAIL theo mã trên INCOME_ALLOCATION (Trum 29/09): trước lấy từ danh mục nạp sẵn — danh mục đó chỉ
+# có đối tượng ACTIVE=1 nên khách đã ngừng dùng bị trống tên.
+INCOME_ALLOC_FROM = ("FROM dbo.INCOME_ALLOCATION A WITH (NOLOCK) LEFT JOIN D ON D.FR_KEY = A.PR_KEY "
+                     "LEFT JOIN dbo.DM_PR_DETAIL PD WITH (NOLOCK) ON PD.PR_DETAIL_ID = A.PR_DETAIL_ID")
 
 
 def _income_alloc_cte(from_dt, to_dt):
@@ -3748,7 +4134,7 @@ def _income_alloc_enrich(rows, columns_present=True):
         r['ORGANIZATION_NAME'] = org_map.get((str(r.get('ORGANIZATION_ID') or '')).strip(), '')
         r['ITEM_NAME']         = item_map.get((str(r.get('ITEM_ID') or '')).strip(), '')
         r['JOB_NAME']          = job_map.get((str(r.get('JOB_ID') or '')).strip(), '')
-        r['PR_DETAIL_NAME']    = pr_map.get((str(r.get('PR_DETAIL_ID') or '')).strip(), '')
+        r['PR_DETAIL_NAME']    = (r.get('PR_DETAIL_NAME') or '').strip() or pr_map.get((str(r.get('PR_DETAIL_ID') or '')).strip(), '')
         r['EXPENSE_NAME']      = exp_map.get((str(r.get('EXPENSE_ID') or '')).strip(), '')
         r['TRAN_NAME']         = tran_map.get((str(r.get('TRAN_ID') or '')).strip(), '')
         r['ALLOCATION_METHOD_NAME'] = ALLOC_METHOD_MAP.get(str(r.get('ALLOCATION_METHOD') or '').strip(),
@@ -3912,7 +4298,7 @@ def get_income_alloc_stream_csv():
             d = dict(zip(sql_cols, raw))
             d['ORGANIZATION_NAME'] = org_map.get((str(d.get('ORGANIZATION_ID') or '')).strip(), '')
             d['ITEM_NAME']         = item_map.get((str(d.get('ITEM_ID') or '')).strip(), '')
-            d['PR_DETAIL_NAME']    = pr_map.get((str(d.get('PR_DETAIL_ID') or '')).strip(), '')
+            d['PR_DETAIL_NAME']    = (d.get('PR_DETAIL_NAME') or '').strip() or pr_map.get((str(d.get('PR_DETAIL_ID') or '')).strip(), '')
             d['TRAN_NAME']         = tran_map.get((str(d.get('TRAN_ID') or '')).strip(), '')
             d['ALLOCATION_METHOD_NAME'] = ALLOC_METHOD_MAP.get(str(d.get('ALLOCATION_METHOD') or '').strip(),
                                                                str(d.get('ALLOCATION_METHOD') or ''))
@@ -3921,6 +4307,326 @@ def get_income_alloc_stream_csv():
         headers = [label for _, label in cols]
         fname   = f"DoanhThuChoPhanBo_{args.get('from_date','').replace('/','')}-{args.get('to_date','').replace('/','')}.{args.get('format', 'csv')}"
         job_id  = _start_export_job(fname, headers, sql, d_params + w_params, transform, total_estimate)
+        return jsonify({"status": "ok", "job_id": job_id, "filename": fname})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# ======================================================================
+# DOANH THU CHỜ PHÂN BỔ THEO THÁNG (v1.10.6, Trum 29/09 — theo mẫu "Bao cao_DTCTH_sample.xlsx")
+# ----------------------------------------------------------------------
+# Mỗi khoản INCOME_ALLOCATION 1 dòng, số phân bổ trải ra từng tháng của khoảng [từ tháng, đến tháng] (tối đa 36 tháng):
+#   • Tháng m     = SUM(DETAIL.AMOUNT) các kỳ có DAY_END trong tháng m. Kỳ vắt nhiều tháng (tiêu thức Quý/Năm) tính vào tháng kết
+#                   thúc kỳ — cùng cách tính Lũy kế của danh sách DT chờ phân bổ → cột Còn lại 2 bảng bằng nhau (Trum duyệt).
+#   • LK trước kỳ = các kỳ có DAY_END trước ngày 1 của "từ tháng" (khoảng T1 → Tn cùng năm: mẫu gọi "Lũy kế năm trước").
+#   • LK trong kỳ = cộng các tháng · Còn lại = Doanh thu − LK trước kỳ − LK trong kỳ.
+#   • Tên đối tượng: JOIN thẳng DM_PR_DETAIL theo PR_DETAIL_ID (cả đối tượng ngừng dùng — danh mục nạp sẵn chỉ có ACTIVE=1).
+#   • Tên tài khoản DT (Loại doanh thu) = DM_ACCOUNT.ACCOUNT_NAME của ACCOUNT_ID_DES.
+#   • Số Hóa đơn = SALE.VAT_TRAN_NO, Số hợp đồng = SALE.COMMENTS của phiếu gốc (Trum chốt). Nối theo Mã + Số + Ngày CT + Đơn vị:
+#     KHÔNG dùng PR_KEY_CTU — PR_KEY trùng giữa SALE và VOUCHER (DB demo trùng 120 khoá) và có dòng trỏ vào khoá CHI TIẾT;
+#     số phiếu lặp lại giữa các đơn vị (TRUNGDEMO 1.049 phiếu / 894 bộ Mã+Số+Ngày, thêm Đơn vị → 1.048). Phiếu không phải
+#     bán hàng (không có trong SALE) → 2 cột này trống.
+# Dòng hiện: mọi khoản có ngày CT tới hết "đến tháng" (Trum: "hiện hết"); Trạng thái thẻ / Giá trị phân bổ để người dùng tự lọc.
+# ======================================================================
+INCOME_MONTH_MAX = 36
+INCOME_MONTH_BASE = ["PR_KEY", "ORGANIZATION_ID", "TRAN_ID", "TRAN_NO", "TRAN_DATE", "USE_DATE", "DESCRIPTION", "ITEM_ID",
+                     "ALLOCATION_RATE", "INCOME_AMOUNT", "ACCOUNT_ID_DES", "PR_DETAIL_ID", "ACTIVE"]
+_sale_link_cache = {}
+
+
+def _add_month(d, n=1):
+    k = d.year * 12 + d.month - 1 + n
+    return date(k // 12, k % 12 + 1, 1)
+
+
+def _income_month_range(args):
+    """from_month / to_month dạng 'MM/YYYY' → (danh sách ngày 1 của từng tháng, (nhãn LK trước, nhãn LK trong kỳ)).
+    Thiếu / sai → năm nay: tháng 1 → tháng hiện tại. Quá INCOME_MONTH_MAX tháng → giữ các tháng CUỐI (tới "đến tháng")."""
+    today = date.today()
+
+    def parse(s, dflt):
+        try:
+            m, y = str(s or '').strip().split('/')
+            return date(int(y), int(m), 1)
+        except (ValueError, TypeError):
+            return dflt
+    f = parse(args.get('from_month'), date(today.year, 1, 1))
+    t = parse(args.get('to_month'), date(today.year, today.month, 1))
+    if t < f:
+        f, t = t, f
+    if (t.year * 12 + t.month) - (f.year * 12 + f.month) + 1 > INCOME_MONTH_MAX:
+        f = _add_month(t, 1 - INCOME_MONTH_MAX)
+    months, d = [], f
+    while d <= t:
+        months.append(d)
+        d = _add_month(d)
+    labels = (("Lũy kế năm trước", "Lũy kế năm nay") if f.month == 1 and f.year == t.year
+              else ("Lũy kế trước kỳ", "Lũy kế trong kỳ"))
+    return months, labels
+
+
+def _month_key(m):
+    return f"M{m.year:04d}{m.month:02d}"
+
+
+def _income_month_cte(months):
+    """CTE D (tổng chi tiết theo từng tháng) + CTE S (số HĐ, số hợp đồng từ SALE nếu DB có đủ cột). Ngày ghi thẳng dạng
+    'YYYYMMDD' (tự sinh từ date, không nhận chữ người dùng) → khỏi 70 tham số và khỏi lệch thứ tự '?' (Bẫy 2)."""
+    lit = lambda d: "'" + d.strftime('%Y%m%d') + "'"
+    start, end_next = months[0], _add_month(months[-1])
+    parts = [f"SUM(CASE WHEN DAY_END < {lit(start)} THEN AMOUNT ELSE 0 END) AS CUM_BEFORE"]
+    for m in months:
+        parts.append(f"SUM(CASE WHEN DAY_END >= {lit(m)} AND DAY_END < {lit(_add_month(m))} THEN AMOUNT ELSE 0 END) AS {_month_key(m)}")
+    parts.append(f"SUM(CASE WHEN DAY_END >= {lit(start)} AND DAY_END < {lit(end_next)} THEN AMOUNT ELSE 0 END) AS CUM_IN")
+    # CUM_AMT = lũy kế tới hết kỳ — tên trùng CTE của danh sách cũ để dùng lại luật lọc "Giá trị phân bổ" (_build_income_alloc_where)
+    parts.append(f"SUM(CASE WHEN DAY_END < {lit(end_next)} THEN AMOUNT ELSE 0 END) AS CUM_AMT")
+    sql = ("WITH D AS (SELECT FR_KEY, " + ", ".join(parts) +
+           " FROM dbo.INCOME_ALLOCATION_DETAIL WITH (NOLOCK) GROUP BY FR_KEY)")
+    if _sale_link_ok():
+        sql += """, S AS (
+            SELECT S.TRAN_ID, S.TRAN_NO, S.TRAN_DATE, S.ORGANIZATION_ID,
+                   MAX(S.VAT_TRAN_NO) AS VAT_TRAN_NO, MAX(CAST(S.COMMENTS AS NVARCHAR(4000))) AS CONTRACT_NO
+            FROM dbo.SALE S WITH (NOLOCK)
+            WHERE EXISTS (SELECT 1 FROM dbo.INCOME_ALLOCATION X WITH (NOLOCK)
+                          WHERE X.TRAN_ID = S.TRAN_ID AND X.TRAN_NO = S.TRAN_NO AND X.TRAN_DATE = S.TRAN_DATE
+                            AND X.ORGANIZATION_ID = S.ORGANIZATION_ID)
+            GROUP BY S.TRAN_ID, S.TRAN_NO, S.TRAN_DATE, S.ORGANIZATION_ID)"""
+    return sql
+
+
+def _sale_link_ok():
+    """SALE có đủ cột để lấy Số HĐ / Số hợp đồng không (dò 1 lần mỗi CSDL — Bẫy 5: SELECT cột không có là sập 500 + ngắt pool)."""
+    db = (session.get('db_config') or {}).get('database', '')
+    if db not in _sale_link_cache:
+        try:
+            cur = get_connection().cursor()
+            cur.execute("SELECT UPPER(COLUMN_NAME) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'SALE'")
+            have = {r[0] for r in cur.fetchall()}
+            _sale_link_cache[db] = {'TRAN_ID', 'TRAN_NO', 'TRAN_DATE', 'ORGANIZATION_ID', 'VAT_TRAN_NO', 'COMMENTS'} <= have
+        except Exception:
+            _sale_link_cache[db] = False
+    return _sale_link_cache[db]
+
+
+def _income_month_select(months):
+    have = set(_income_alloc_cols())
+    base = [f"A.{c}" for c in INCOME_MONTH_BASE if c in have]
+    nums = (["ISNULL(D.CUM_BEFORE,0) AS CUM_BEFORE"] + [f"ISNULL(D.{_month_key(m)},0) AS {_month_key(m)}" for m in months]
+            + ["ISNULL(D.CUM_IN,0) AS CUM_IN", "(A.INCOME_AMOUNT - ISNULL(D.CUM_BEFORE,0) - ISNULL(D.CUM_IN,0)) AS CON_LAI",
+               "PD.PR_DETAIL_NAME AS PR_DETAIL_NAME", "AC.ACCOUNT_NAME AS ACCOUNT_NAME_DES"])
+    return ", ".join(base + nums)
+
+
+INCOME_MONTH_FROM = """FROM dbo.INCOME_ALLOCATION A WITH (NOLOCK)
+    LEFT JOIN D ON D.FR_KEY = A.PR_KEY
+    LEFT JOIN dbo.DM_PR_DETAIL PD WITH (NOLOCK) ON PD.PR_DETAIL_ID = A.PR_DETAIL_ID
+    LEFT JOIN dbo.DM_ACCOUNT   AC WITH (NOLOCK) ON AC.ACCOUNT_ID   = A.ACCOUNT_ID_DES"""
+
+
+def _income_month_sale_cols():
+    return ("S.VAT_TRAN_NO AS VAT_TRAN_NO, S.CONTRACT_NO AS CONTRACT_NO" if _sale_link_ok()
+            else "CAST(NULL AS NVARCHAR(20)) AS VAT_TRAN_NO, CAST(NULL AS NVARCHAR(200)) AS CONTRACT_NO")
+
+
+_INCOME_MONTH_SALE_JOIN = ("LEFT JOIN S ON S.TRAN_ID = T.TRAN_ID AND S.TRAN_NO = T.TRAN_NO AND S.TRAN_DATE = T.TRAN_DATE "
+                           "AND S.ORGANIZATION_ID = T.ORGANIZATION_ID")
+
+
+def _income_month_where(args, months):
+    """Dùng lại bộ lọc của danh sách DT chờ phân bổ (A.TRAN_DATE ≤ hết "đến tháng", ACTIVE, Giá trị phân bổ, đơn vị, hàng,
+    đối tượng, TK đích, số CT…). Mặc định "hiện hết": không gửi active / alloc_status = tất cả. Thêm 'in_period' = có phân bổ
+    trong kỳ."""
+    last_day = date.fromordinal(_add_month(months[-1]).toordinal() - 1)
+    a = {k: args.get(k) for k in args}
+    a['from_date'] = months[0].strftime("%d/%m/%Y")
+    a['to_date'] = last_day.strftime("%d/%m/%Y")
+    a['active'] = args.get('active', '')
+    status = args.get('alloc_status', '')
+    a['alloc_status'] = '' if status == 'in_period' else status
+    where_sql, params, _f, _t = _build_income_alloc_where(a)
+    if status == 'in_period':
+        where_sql += " AND ISNULL(D.CUM_IN,0) <> 0"
+    return where_sql, params
+
+
+def _income_month_sort(months):
+    wl = {k: v for k, v in _income_alloc_sort_whitelist().items() if k != "PERIOD_AMT"}
+    wl.update({
+        "CUM_BEFORE": "ISNULL(D.CUM_BEFORE,0)", "CUM_IN": "ISNULL(D.CUM_IN,0)",
+        "CON_LAI": "(A.INCOME_AMOUNT - ISNULL(D.CUM_AMT,0))",
+        "PR_DETAIL_NAME": "PD.PR_DETAIL_NAME", "ACCOUNT_NAME_DES": "AC.ACCOUNT_NAME",
+    })
+    wl.update({_month_key(m): f"ISNULL(D.{_month_key(m)},0)" for m in months})
+    return wl
+
+
+def _income_month_meta(months, labels):
+    return {"months": [{"key": _month_key(m), "year": m.year, "month": m.month} for m in months],
+            "labels": {"CUM_BEFORE": labels[0], "CUM_IN": labels[1]}}
+
+
+def _income_month_row(r, months):
+    for dk in ("TRAN_DATE", "USE_DATE"):
+        v = r.get(dk)
+        if isinstance(v, (date, datetime)):
+            r[dk] = v.strftime("%d/%m/%Y")
+    for nk in ["ALLOCATION_RATE", "INCOME_AMOUNT", "CUM_BEFORE", "CUM_IN", "CON_LAI"] + [_month_key(m) for m in months]:
+        v = r.get(nk)
+        if v is not None:
+            try:
+                r[nk] = float(v)
+            except (TypeError, ValueError):
+                pass
+    for sk in ("PR_DETAIL_NAME", "ACCOUNT_NAME_DES", "CONTRACT_NO", "VAT_TRAN_NO"):
+        if isinstance(r.get(sk), str):
+            r[sk] = r[sk].strip()
+    r.pop('RowNum', None)
+    return r
+
+
+@app.route("/api/income_alloc_month")
+@with_db_lock
+def get_income_alloc_month():
+    """Doanh thu chờ phân bổ theo tháng — xem khối chú thích ở trên."""
+    try:
+        args = request.args
+        page = max(1, int(args.get("page", 1)))
+        page_size = max(1, int(args.get("page_size", 1000)))
+        export_all = args.get("export_all") == "1"
+        known_total, known_sums = args.get("known_total"), args.get("known_sums")
+        skip_count = page > 1 and known_total is not None and known_sums is not None and not export_all
+        months, labels = _income_month_range(args)
+        mkeys = [_month_key(m) for m in months]
+        cte = _income_month_cte(months)
+        where_sql, w_params = _income_month_where(args, months)
+        order_by_sql = _resolve_order_by(args, _income_month_sort(months), "A.TRAN_DATE, A.TRAN_NO")
+        cursor = get_connection().cursor()
+
+        sum_keys = ["income_amount", "cum_before"] + [k.lower() for k in mkeys] + ["cum_in", "con_lai"]
+        if skip_count:
+            total_rows = int(known_total)
+            try:
+                summary = json.loads(known_sums)
+            except (TypeError, ValueError):
+                summary = {}
+        else:
+            cnt_sql = f"""{cte}
+                SELECT COUNT(*), SUM(A.INCOME_AMOUNT), SUM(ISNULL(D.CUM_BEFORE,0)),
+                       {", ".join(f"SUM(ISNULL(D.{k},0))" for k in mkeys)},
+                       SUM(ISNULL(D.CUM_IN,0)), SUM(A.INCOME_AMOUNT - ISNULL(D.CUM_BEFORE,0) - ISNULL(D.CUM_IN,0))
+                {INCOME_MONTH_FROM} WHERE {where_sql}"""
+            cursor.execute(cnt_sql, w_params)
+            row = cursor.fetchone()
+            total_rows = int(row[0] or 0)
+            summary = {k: float(v or 0) for k, v in zip(sum_keys, row[1:])}
+
+        # Số HĐ / Số hợp đồng (CTE S) nối SAU khi đánh số dòng → trang chỉ nối đúng các dòng của trang
+        offset = (page - 1) * page_size
+        page_where = "" if export_all else "WHERE T.RowNum > ? AND T.RowNum <= ?"
+        sql = f"""{cte}, T AS (
+                SELECT {_income_month_select(months)}, ROW_NUMBER() OVER (ORDER BY {order_by_sql}) AS RowNum
+                {INCOME_MONTH_FROM} WHERE {where_sql})
+            SELECT T.*, {_income_month_sale_cols()} FROM T {_INCOME_MONTH_SALE_JOIN if _sale_link_ok() else ''}
+            {page_where} ORDER BY T.RowNum"""
+        cursor.execute(sql, w_params + ([] if export_all else [offset, offset + page_size]))
+        columns = [c[0] for c in cursor.description]
+        rows = [_income_month_row(dict(zip(columns, raw)), months) for raw in cursor.fetchall()]
+        if export_all:
+            total_rows = len(rows)
+
+        return jsonify({
+            "status": "ok", "data": rows, "summary": summary, **_income_month_meta(months, labels),
+            "pagination": {"total_rows": total_rows, "total_pages": max(1, (total_rows + page_size - 1) // page_size),
+                           "page": 1 if export_all else page},
+        })
+    except Exception as e:
+        msg = str(e)
+        if "đăng nhập" not in msg:
+            invalidate_pool()
+        logger.error(f"Error in get_income_alloc_month: {msg}")
+        return jsonify({"status": "error", "message": msg}), 401 if "đăng nhập" in msg else 500
+
+
+@app.route("/api/income_alloc_month/count")
+@with_db_lock
+def get_income_alloc_month_count():
+    try:
+        months, _labels = _income_month_range(request.args)
+        where_sql, w_params = _income_month_where(request.args, months)
+        cursor = get_connection().cursor()
+        cursor.execute(f"{_income_month_cte(months)} SELECT COUNT(*) {INCOME_MONTH_FROM} WHERE {where_sql}", w_params)
+        return jsonify({"status": "ok", "total": int(cursor.fetchone()[0] or 0)})
+    except Exception as e:
+        msg = str(e)
+        if "đăng nhập" not in msg:
+            invalidate_pool()
+        return jsonify({"status": "error", "message": msg}), 401 if "đăng nhập" in msg else 500
+
+
+def _income_month_export_cols(months, labels):
+    """Bộ cột xuất = đúng thứ tự file mẫu. Khoá 'MONTHS' (App gửi khi xuất "Như đang xem") = cả dải cột tháng."""
+    return ([("ORGANIZATION_ID", "Đơn vị"), ("TRAN_ID", "Mã ctừ"), ("TRAN_NO", "Số ctừ"), ("TRAN_DATE", "Ngày ctừ"),
+             ("USE_DATE", "Ngày pbổ"), ("DESCRIPTION", "Diễn giải"), ("ITEM_ID", "Hàng hóa"), ("ALLOCATION_RATE", "Tỷ lệ pb"),
+             ("INCOME_AMOUNT", "Doanh thu"), ("ACCOUNT_ID_DES", "Tk đích"), ("PR_DETAIL_ID", "Mã đối tượng"),
+             ("CONTRACT_NO", "Số hợp đồng"), ("VAT_TRAN_NO", "Số Hóa đơn"), ("CUM_BEFORE", labels[0])]
+            + [(_month_key(m), f"{m.month:02d}/{m.year}") for m in months]
+            + [("CUM_IN", labels[1]), ("CON_LAI", "Giá trị còn lại"), ("PR_DETAIL_NAME", "Tên đối tượng"),
+               ("ACCOUNT_NAME_DES", "Tên tài khoản DT (Loại doanh thu)")])
+
+
+def _income_month_xlsx_spec(cols, months):
+    """Như file mẫu: tiêu đề cột tháng là NGÀY thật (hiện mm/yyyy); Lũy kế trong kỳ = SUM các ô tháng, Còn lại = Doanh thu − LK
+    trước − LK trong kỳ ghi CÔNG THỨC (kèm giá trị tính sẵn); dòng tổng cuối SUM các cột tiền. Cột phụ thuộc bị ẩn khi xuất
+    "Như đang xem" → ô đó ghi số, không ghi công thức."""
+    from xlsxwriter.utility import xl_col_to_name as L
+    pos = {k: i for i, (k, _) in enumerate(cols)}
+    mk = [_month_key(m) for m in months]
+    spec = {'header_dates': {pos[_month_key(m)]: datetime(m.year, m.month, 1) for m in months if _month_key(m) in pos},
+            'formulas': {}, 'sum_cols': [pos[k] for k in ["INCOME_AMOUNT", "CUM_BEFORE"] + mk + ["CUM_IN", "CON_LAI"] if k in pos]}
+    if "CUM_IN" in pos and mk and all(k in pos for k in mk):
+        idx = [pos[k] for k in mk]
+        if idx == list(range(idx[0], idx[0] + len(idx))):
+            spec['formulas'][pos["CUM_IN"]] = f"=SUM({L(idx[0])}{{r}}:{L(idx[-1])}{{r}})"
+        else:
+            spec['formulas'][pos["CUM_IN"]] = "=SUM(" + ",".join(f"{L(i)}{{r}}" for i in idx) + ")"
+    if all(k in pos for k in ("CON_LAI", "INCOME_AMOUNT", "CUM_BEFORE", "CUM_IN")):
+        spec['formulas'][pos["CON_LAI"]] = f"={L(pos['INCOME_AMOUNT'])}{{r}}-{L(pos['CUM_BEFORE'])}{{r}}-{L(pos['CUM_IN'])}{{r}}"
+    return spec
+
+
+@app.route("/api/income_alloc_month/stream_csv", methods=["POST", "GET"])
+def get_income_alloc_month_stream_csv():
+    """Job xuất (xlsx/csv) — cùng đường tải-rồi-ghi chịu đứt mạng như các danh sách khác (Bẫy 25)."""
+    try:
+        args = request.args
+        total_estimate = int(args.get("total", 0) or 0)
+        months, labels = _income_month_range(args)
+        where_sql, w_params = _income_month_where(args, months)
+        order_by_sql = _resolve_order_by(args, _income_month_sort(months), "A.TRAN_DATE, A.TRAN_NO")
+        full = _income_month_export_cols(months, labels)
+        raw_cols = (args.get("cols") or "").strip()
+        if raw_cols:   # "MONTHS" (khối cột tháng trên màn hình) → bung ra các khoá tháng
+            keys = []
+            for k in raw_cols.split(","):
+                keys.extend([_month_key(m) for m in months] if k.strip() == "MONTHS" else [k.strip()])
+            args = {**{k: args.get(k) for k in args}, "cols": ",".join(keys)}
+        cols = _pick_export_cols(args, full)
+        sale_ok = _sale_link_ok()
+        sql = f"""{_income_month_cte(months)}, T AS (
+                SELECT {_income_month_select(months)}, ROW_NUMBER() OVER (ORDER BY {order_by_sql}) AS RowNum
+                {INCOME_MONTH_FROM} WHERE {where_sql})
+            SELECT T.*, {_income_month_sale_cols()} FROM T {_INCOME_MONTH_SALE_JOIN if sale_ok else ''}
+            ORDER BY T.RowNum"""
+
+        def transform(raw, sql_cols):   # ngày giữ kiểu ngày, số giữ Decimal — bộ ghi xlsx tự định dạng (Bẫy 12)
+            d = dict(zip(sql_cols, raw))
+            return [(d.get(key).strip() if isinstance(d.get(key), str) else d.get(key)) for key, _ in cols]
+
+        headers = [label for _, label in cols]
+        f0, f1 = months[0], months[-1]
+        fname = f"DoanhThuChoPhanBoTheoThang_{f0.month:02d}{f0.year}-{f1.month:02d}{f1.year}.{args.get('format', 'csv')}"
+        job_id = _start_export_job(fname, headers, sql, w_params, transform, total_estimate,
+                                   xlsx_spec=_income_month_xlsx_spec(cols, months))
         return jsonify({"status": "ok", "job_id": job_id, "filename": fname})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -6310,23 +7016,38 @@ def _rx_dec(v):
     return v if isinstance(v, Decimal) else Decimal(str(v or 0))
 
 
+def _rx_ledger_days(db, where, params):
+    """COUNT + SUM Nợ/Có của LEDGER_VIEW theo TỪNG NGÀY (1 lượt quét, cùng WHERE với câu tải) → (số dòng, Nợ, Có,
+    [(ngày, số dòng)]). Cộng các ngày lại = đúng câu đếm + tổng của màn hình (/api/journal, /api/account_details)."""
+    rows = db.all(f"""SELECT CONVERT(VARCHAR(8), TRAN_DATE, 112), COUNT(*),
+                             SUM(CASE WHEN DEBIT_CREDIT='DEB' THEN AMOUNT ELSE 0 END),
+                             SUM(CASE WHEN DEBIT_CREDIT='CRD' THEN AMOUNT ELSE 0 END)
+                      FROM dbo.LEDGER_VIEW WITH (NOLOCK) WHERE {where}
+                      GROUP BY CONVERT(VARCHAR(8), TRAN_DATE, 112)""", params, "dem dong + tong theo ngay")
+    return (sum(int(r[1] or 0) for r in rows), sum((_rx_dec(r[2]) for r in rows), Decimal(0)),
+            sum((_rx_dec(r[3]) for r in rows), Decimal(0)), [(r[0], r[1]) for r in rows])
+
+
 def _rx_plan(rpt, variant, info, p, payload):
     """Kế hoạch xuất 1 báo cáo. GỌI TRONG REQUEST (cần session cho bộ lọc đơn vị / cache sổ quỹ).
-    Trả dict {layout, total, rows(cur, ctx), prepare(cur, ctx)?, after(ctx)?, needs_db} hoặc chuỗi lỗi."""
+    Trả dict {layout, total, rows(src, ctx), prepare(db, ctx)?, after(ctx)?, needs_db} hoặc chuỗi lỗi.
+    prepare chạy ở job nền với db = _ExportDb (tự nối lại khi đứt mạng), trả tổng số dòng dự kiến và đặt
+    ctx['fetch'] = [(sql, params), …] = các khúc cần tải; job tải hết vào file tạm rồi gọi rows(src, ctx) với src = các
+    dòng đã tải theo đúng thứ tự (None nếu báo cáo không tải gì)."""
     payload = payload if isinstance(payload, dict) else {}
 
     # ---- Báo cáo gộp: dữ liệu = đúng các dòng app đang hiển thị ----
     if rpt == 'BC005':
         n = len(payload.get('rows') or [])
-        return dict(layout=XR.layout_bc005(info), total=n, rows=lambda cur, ctx: XR.rows_bc005(payload))
+        return dict(layout=XR.layout_bc005(info), total=n, rows=lambda src, ctx: XR.rows_bc005(payload))
     if rpt in ('BC006', 'BC011'):
         is11 = rpt == 'BC011'
         n = len(payload.get('rows') or []) + (1 if payload.get('total') else 0)
-        return dict(layout=XR.layout_bc006(info, is11), total=n, rows=lambda cur, ctx: XR.rows_bc006(payload, is11))
+        return dict(layout=XR.layout_bc006(info, is11), total=n, rows=lambda src, ctx: XR.rows_bc006(payload, is11))
     if rpt in ('BC009', 'BC010'):
         n = len(payload.get('rows') or [])
         return dict(layout=XR.layout_cash_flow(info, rpt == 'BC009'), total=n,
-                    rows=lambda cur, ctx: XR.rows_cash_flow(payload))
+                    rows=lambda src, ctx: XR.rows_cash_flow(payload))
 
     # ---- Báo cáo nhiều dòng: server truy vấn lại, CÙNG nguồn & thứ tự với màn hình ----
     try:
@@ -6339,15 +7060,6 @@ def _rx_plan(rpt, variant, info, p, payload):
     _oc, org_params = _org_filter_sql(org_ids, "ORGANIZATION_ID")
     org_where = (" AND " + _oc) if _oc else ""
 
-    def fetch_rows(cur, sql, params, size=5000):
-        cur.execute(sql, params)
-        while True:
-            batch = cur.fetchmany(size)
-            if not batch:
-                break
-            for r in batch:
-                yield r
-
     if rpt == 'BC007' and variant == 'full':
         # "Nhật ký chung đầy đủ cột" — mẫu SQL người dùng đưa (trước đây chỉ có ở CSV mode=detail)
         _lvc, _lvp = _org_filter_sql(org_ids, "LV.ORGANIZATION_ID")
@@ -6357,20 +7069,17 @@ def _rx_plan(rpt, variant, info, p, payload):
                          LV.DEBIT_CREDIT, LV.AMOUNT, LV.COMMENTS
                   FROM dbo.LEDGER_VIEW LV WITH (NOLOCK)
                   LEFT JOIN dbo.DM_ORGANIZATION O WITH (NOLOCK) ON LV.ORGANIZATION_ID = O.ORGANIZATION_ID
-                  WHERE LV.TRAN_DATE >= ? AND LV.TRAN_DATE <= ? {org_where_lv}
+                  WHERE LV.TRAN_DATE >= ? AND LV.TRAN_DATE <= ? {org_where_lv}{_CHUNK_MARK}
                   ORDER BY LV.TRAN_DATE, LV.TRAN_NO"""
 
-        def prepare(cur, ctx):
-            cur.execute(f"""SELECT COUNT(*), SUM(CASE WHEN DEBIT_CREDIT='DEB' THEN AMOUNT ELSE 0 END),
-                                   SUM(CASE WHEN DEBIT_CREDIT='CRD' THEN AMOUNT ELSE 0 END)
-                            FROM dbo.LEDGER_VIEW WITH (NOLOCK) WHERE TRAN_DATE >= ? AND TRAN_DATE <= ? {org_where}""",
-                        [d_from, d_to] + list(org_params))
-            r = cur.fetchone()
-            ctx['deb'], ctx['crd'] = r[1] or 0, r[2] or 0
-            return (r[0] or 0) + 1
+        def prepare(db, ctx):
+            n, ctx['deb'], ctx['crd'], days = _rx_ledger_days(
+                db, f"TRAN_DATE >= ? AND TRAN_DATE <= ? {org_where}", [d_from, d_to] + list(org_params))
+            ctx['fetch'] = _day_chunks(sql, [d_from, d_to] + list(_lvp), days, "LV.TRAN_DATE")
+            return n + 1
 
-        def rows(cur, ctx):
-            for r in fetch_rows(cur, sql, [d_from, d_to] + list(_lvp)):
+        def rows(src, ctx):
+            for r in src:
                 amt = r[12] if r[12] is not None else 0
                 yield [
                     'NKC', str(r[0] or '').strip(), r[1] or '', r[2] or '', str(r[3] or '').strip(), r[4], r[5] or '',
@@ -6382,31 +7091,32 @@ def _rx_plan(rpt, variant, info, p, payload):
 
     if rpt == 'BC007':
         view_mode = 'summary' if variant == 'summary' else 'detail'
+        sql = f"""SELECT TRAN_DATE, TRAN_NO, DESCRIPTION, ACCOUNT_ID, ACCOUNT_ID_CONTRA, DEBIT_CREDIT, AMOUNT,
+                         ORGANIZATION_ID, TRAN_ID
+                  FROM dbo.LEDGER_VIEW WITH (NOLOCK)
+                  WHERE TRAN_DATE >= ? AND TRAN_DATE <= ? {org_where}{_CHUNK_MARK}
+                  ORDER BY TRAN_DATE, TRAN_NO"""
 
-        def prepare(cur, ctx):
-            # đúng câu đếm + tổng của /api/journal → dòng "Cộng lũy kế" khớp màn hình
-            cur.execute(f"""SELECT COUNT(*), SUM(CASE WHEN DEBIT_CREDIT='DEB' THEN AMOUNT ELSE 0 END),
-                                   SUM(CASE WHEN DEBIT_CREDIT='CRD' THEN AMOUNT ELSE 0 END)
-                            FROM dbo.LEDGER_VIEW WITH (NOLOCK) WHERE TRAN_DATE >= ? AND TRAN_DATE <= ? {org_where}""",
-                        [d_from, d_to] + list(org_params))
-            r = cur.fetchone()
-            ctx['deb'], ctx['crd'] = r[1] or 0, r[2] or 0
-            return (r[0] or 0) + 1
-
-        def rows(cur, ctx):
-            org_map = {}
+        def prepare(db, ctx):
+            # đúng câu đếm + tổng của /api/journal (thêm GROUP BY ngày để chia khúc) → dòng "Cộng lũy kế" khớp màn hình
+            n, ctx['deb'], ctx['crd'], days = _rx_ledger_days(
+                db, f"TRAN_DATE >= ? AND TRAN_DATE <= ? {org_where}", [d_from, d_to] + list(org_params))
+            ctx['org_map'] = {}
             if view_mode == 'detail':
                 try:
-                    cur.execute("SELECT CAST(ORGANIZATION_ID AS NVARCHAR(100)), ORGANIZATION_NAME FROM dbo.DM_ORGANIZATION WITH (NOLOCK)")
-                    org_map = {(x[0] or '').strip(): (x[1] or '').strip() for x in cur.fetchall()}
+                    ctx['org_map'] = {(x[0] or '').strip(): (x[1] or '').strip() for x in db.all(
+                        "SELECT CAST(ORGANIZATION_ID AS NVARCHAR(100)), ORGANIZATION_NAME FROM dbo.DM_ORGANIZATION WITH (NOLOCK)",
+                        what="danh muc don vi")}
+                except (XR.ExportCancelled, _ExportNetError):
+                    raise
                 except Exception:
                     pass
-            sql = f"""SELECT TRAN_DATE, TRAN_NO, DESCRIPTION, ACCOUNT_ID, ACCOUNT_ID_CONTRA, DEBIT_CREDIT, AMOUNT,
-                             ORGANIZATION_ID, TRAN_ID
-                      FROM dbo.LEDGER_VIEW WITH (NOLOCK)
-                      WHERE TRAN_DATE >= ? AND TRAN_DATE <= ? {org_where}
-                      ORDER BY TRAN_DATE, TRAN_NO"""
-            for r in fetch_rows(cur, sql, [d_from, d_to] + list(org_params)):
+            ctx['fetch'] = _day_chunks(sql, [d_from, d_to] + list(org_params), days, "TRAN_DATE")
+            return n + 1
+
+        def rows(src, ctx):
+            org_map = ctx['org_map']
+            for r in src:
                 amt = r[6] if r[6] is not None else 0
                 tail = [str(r[8] if r[8] is not None else '').strip(), r[1] or '', r[0], r[2] or '', r[3] or '',
                         r[4] or '', amt if r[5] == 'DEB' else None, amt if r[5] == 'CRD' else None]
@@ -6424,43 +7134,39 @@ def _rx_plan(rpt, variant, info, p, payload):
             return "Vui lòng chọn Tài khoản để xuất Sổ chi tiết tài khoản."
         acc_clause, acc_params = _acc_like_sql(account_id)
         first_day = date(from_dt.year, 1, 1).strftime("%Y%m%d")
+        sql = f"""SELECT TRAN_DATE, TRAN_NO, DESCRIPTION, ACCOUNT_ID_CONTRA, DEBIT_CREDIT, AMOUNT
+                  FROM dbo.LEDGER_VIEW WITH (NOLOCK)
+                  WHERE {acc_clause} AND TRAN_DATE >= ? AND TRAN_DATE <= ? {org_where}{_CHUNK_MARK}
+                  ORDER BY TRAN_DATE, TRAN_NO"""
+        sql_params = acc_params + [d_from, d_to] + list(org_params)
 
-        def prepare(cur, ctx):
+        def prepare(db, ctx):
             # y hệt get_account_details: dư đầu = BALANCE_VIEW đầu năm + LEDGER_VIEW từ đầu năm tới trước kỳ
-            cur.execute(f"""SELECT SUM(CASE WHEN DEBIT_CREDIT='DEB' THEN AMOUNT ELSE 0 END),
-                                   SUM(CASE WHEN DEBIT_CREDIT='CRD' THEN AMOUNT ELSE 0 END)
-                            FROM dbo.BALANCE_VIEW WITH (NOLOCK) WHERE {acc_clause} AND TRAN_DATE = ? {org_where}""",
-                        acc_params + [first_day] + list(org_params))
-            r = cur.fetchone()
+            r = db.one(f"""SELECT SUM(CASE WHEN DEBIT_CREDIT='DEB' THEN AMOUNT ELSE 0 END),
+                                  SUM(CASE WHEN DEBIT_CREDIT='CRD' THEN AMOUNT ELSE 0 END)
+                           FROM dbo.BALANCE_VIEW WITH (NOLOCK) WHERE {acc_clause} AND TRAN_DATE = ? {org_where}""",
+                       acc_params + [first_day] + list(org_params), "so du dau nam")
             odeb, ocrd = _rx_dec(r[0] if r else 0), _rx_dec(r[1] if r else 0)
             if from_dt > date(from_dt.year, 1, 1):
-                cur.execute(f"""SELECT SUM(CASE WHEN DEBIT_CREDIT='DEB' THEN AMOUNT ELSE 0 END),
-                                       SUM(CASE WHEN DEBIT_CREDIT='CRD' THEN AMOUNT ELSE 0 END)
-                                FROM dbo.LEDGER_VIEW WITH (NOLOCK)
-                                WHERE {acc_clause} AND TRAN_DATE >= ? AND TRAN_DATE < ? {org_where}""",
-                            acc_params + [first_day, d_from] + list(org_params))
-                r = cur.fetchone()
+                r = db.one(f"""SELECT SUM(CASE WHEN DEBIT_CREDIT='DEB' THEN AMOUNT ELSE 0 END),
+                                      SUM(CASE WHEN DEBIT_CREDIT='CRD' THEN AMOUNT ELSE 0 END)
+                               FROM dbo.LEDGER_VIEW WITH (NOLOCK)
+                               WHERE {acc_clause} AND TRAN_DATE >= ? AND TRAN_DATE < ? {org_where}""",
+                           acc_params + [first_day, d_from] + list(org_params), "phat sinh truoc ky")
                 if r:
                     odeb += _rx_dec(r[0])
                     ocrd += _rx_dec(r[1])
-            cur.execute(f"""SELECT COUNT(*), SUM(CASE WHEN DEBIT_CREDIT='DEB' THEN AMOUNT ELSE 0 END),
-                                   SUM(CASE WHEN DEBIT_CREDIT='CRD' THEN AMOUNT ELSE 0 END)
-                            FROM dbo.LEDGER_VIEW WITH (NOLOCK)
-                            WHERE {acc_clause} AND TRAN_DATE >= ? AND TRAN_DATE <= ? {org_where}""",
-                        acc_params + [d_from, d_to] + list(org_params))
-            r = cur.fetchone()
-            ctx.update(odeb=odeb, ocrd=ocrd, deb=_rx_dec(r[1]), crd=_rx_dec(r[2]))
-            return (r[0] or 0) + 3
+            n, deb, crd, days = _rx_ledger_days(
+                db, f"{acc_clause} AND TRAN_DATE >= ? AND TRAN_DATE <= ? {org_where}", sql_params)
+            ctx.update(odeb=odeb, ocrd=ocrd, deb=deb, crd=crd)
+            ctx['fetch'] = _day_chunks(sql, sql_params, days, "TRAN_DATE")
+            return n + 3
 
-        def rows(cur, ctx):
+        def rows(src, ctx):
             open_net = ctx['odeb'] - ctx['ocrd']
             yield [XR.Span('SỐ DƯ ĐẦU KỲ', 5, 'right'), open_net if open_net > 0 else None,
                    -open_net if open_net < 0 else None], 'opening'
-            sql = f"""SELECT TRAN_DATE, TRAN_NO, DESCRIPTION, ACCOUNT_ID_CONTRA, DEBIT_CREDIT, AMOUNT
-                      FROM dbo.LEDGER_VIEW WITH (NOLOCK)
-                      WHERE {acc_clause} AND TRAN_DATE >= ? AND TRAN_DATE <= ? {org_where}
-                      ORDER BY TRAN_DATE, TRAN_NO"""
-            for r in fetch_rows(cur, sql, acc_params + [d_from, d_to] + list(org_params)):
+            for r in src:
                 amt = r[5] if r[5] is not None else 0
                 yield [r[0], r[1] or '', r[0], r[2] or '', r[3] or '',
                        amt if r[4] == 'DEB' else None, amt if r[4] == 'CRD' else None], 'data'
@@ -6479,12 +7185,13 @@ def _rx_plan(rpt, variant, info, p, payload):
         cached = _cashbook_cache.get(_cashbook_key(f_date, t_date, acc_ids, contra_ids, tran_no, org_ids))
         org_filter = (_oc, org_params)
 
-        def prepare(cur, ctx):
-            ctx['flat'] = cached if cached is not None else _build_cashbook_flat(
-                from_dt, to_dt, acc_ids, contra_ids, tran_no, org_ids, cur=cur, org_filter=org_filter)
+        def prepare(db, ctx):
+            # sổ quỹ dựng trong RAM (số dư luỹ kế) — đứt mạng giữa chừng thì nối lại và dựng lại từ đầu
+            ctx['flat'] = cached if cached is not None else db.run(lambda cur: _build_cashbook_flat(
+                from_dt, to_dt, acc_ids, contra_ids, tran_no, org_ids, cur=cur, org_filter=org_filter), "dung so quy")
             return len(ctx['flat'])
         return dict(layout=XR.layout_bc012(info), total=len(cached) if cached is not None else 0,
-                    prepare=prepare, rows=lambda cur, ctx: XR.rows_bc012(ctx['flat']), needs_db=cached is None)
+                    prepare=prepare, rows=lambda src, ctx: XR.rows_bc012(ctx['flat']), needs_db=cached is None)
 
     if rpt == 'BC013':
         mode = 'summary' if variant == 'summary' else 'detail'
@@ -6497,36 +7204,39 @@ def _rx_plan(rpt, variant, info, p, payload):
         base_where = f"DEBIT_CREDIT = 'CRD' AND VAT_TRAN_DATE >= ? AND VAT_TRAN_DATE <= ?{org_where}{acc_where}"
         group_by = "GROUP BY VAT_TRAN_SERIE, VAT_TRAN_NO, VAT_TRAN_DATE, PR_DETAIL_NAME, TAX_FILE_NUMBER, ACCOUNT_ID"
 
-        def prepare(cur, ctx):
+        if mode == 'summary':
+            sql = f"""SELECT ISNULL(VAT_TRAN_SERIE,''), ISNULL(VAT_TRAN_NO,''), VAT_TRAN_DATE, ISNULL(PR_DETAIL_NAME,''),
+                             ISNULL(TAX_FILE_NUMBER,''), N'Bán hàng hóa, dịch vụ', ISNULL(SUM(AMOUNT_ITEM),0),
+                             ISNULL(MAX(VAT_TAX_RATE),0), ISNULL(SUM(AMOUNT),0), N''
+                      FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK) WHERE {base_where} {group_by}
+                      ORDER BY VAT_TRAN_DATE, VAT_TRAN_NO"""
+        else:
+            sql = f"""SELECT ISNULL(VAT_TRAN_SERIE,''), ISNULL(VAT_TRAN_NO,''), VAT_TRAN_DATE, ISNULL(PR_DETAIL_NAME,''),
+                             ISNULL(TAX_FILE_NUMBER,''), ISNULL(ITEM_NAME,''), ISNULL(AMOUNT_ITEM,0),
+                             ISNULL(VAT_TAX_RATE,0), ISNULL(AMOUNT,0), ISNULL(COMMENTS,'')
+                      FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK) WHERE {base_where}
+                      ORDER BY VAT_TAX_RATE, VAT_TRAN_DATE, VAT_TRAN_NO"""
+
+        def prepare(db, ctx):
             # đúng 2 câu của /api/vat_sales_report: 3 số tổng dưới bảng + số dòng theo chế độ
-            cur.execute(f"""SELECT ISNULL(SUM(AMOUNT_ITEM), 0),
-                                   ISNULL(SUM(CASE WHEN VAT_TAX_RATE > 0 THEN AMOUNT_ITEM ELSE 0 END), 0),
-                                   ISNULL(SUM(AMOUNT), 0)
-                            FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK) WHERE {base_where}""", params)
-            t = cur.fetchone()
+            t = db.one(f"""SELECT ISNULL(SUM(AMOUNT_ITEM), 0),
+                                  ISNULL(SUM(CASE WHEN VAT_TAX_RATE > 0 THEN AMOUNT_ITEM ELSE 0 END), 0),
+                                  ISNULL(SUM(AMOUNT), 0)
+                           FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK) WHERE {base_where}""", params, "tong bang ke")
             ctx['totals'] = {'total_amount_item': t[0], 'taxable_amount_item': t[1], 'total_vat_amount': t[2]}
             if mode == 'summary':
-                cur.execute(f"""SELECT COUNT(*) FROM (SELECT VAT_TRAN_SERIE FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK)
-                                WHERE {base_where} {group_by}) AS Grp""", params)
+                c = db.one(f"""SELECT COUNT(*) FROM (SELECT VAT_TRAN_SERIE FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK)
+                               WHERE {base_where} {group_by}) AS Grp""", params, "dem dong")
             else:
-                cur.execute(f"SELECT COUNT(*) FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK) WHERE {base_where}", params)
-            return (cur.fetchone()[0] or 0) + 1
+                c = db.one(f"SELECT COUNT(*) FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK) WHERE {base_where}", params, "dem dong")
+            # 1 khúc: bảng kê sắp theo thuế suất trước rồi mới tới ngày → không chia theo ngày được. Vẫn tải vào file tạm
+            # trước khi ghi (kết nối không phải sống suốt lúc ghi file), đứt mạng thì tải lại cả truy vấn.
+            ctx['fetch'] = [(sql, params)]
+            return (c[0] or 0) + 1
 
-        def rows(cur, ctx):
-            if mode == 'summary':
-                sql = f"""SELECT ISNULL(VAT_TRAN_SERIE,''), ISNULL(VAT_TRAN_NO,''), VAT_TRAN_DATE, ISNULL(PR_DETAIL_NAME,''),
-                                 ISNULL(TAX_FILE_NUMBER,''), N'Bán hàng hóa, dịch vụ', ISNULL(SUM(AMOUNT_ITEM),0),
-                                 ISNULL(MAX(VAT_TAX_RATE),0), ISNULL(SUM(AMOUNT),0), N''
-                          FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK) WHERE {base_where} {group_by}
-                          ORDER BY VAT_TRAN_DATE, VAT_TRAN_NO"""
-            else:
-                sql = f"""SELECT ISNULL(VAT_TRAN_SERIE,''), ISNULL(VAT_TRAN_NO,''), VAT_TRAN_DATE, ISNULL(PR_DETAIL_NAME,''),
-                                 ISNULL(TAX_FILE_NUMBER,''), ISNULL(ITEM_NAME,''), ISNULL(AMOUNT_ITEM,0),
-                                 ISNULL(VAT_TAX_RATE,0), ISNULL(AMOUNT,0), ISNULL(COMMENTS,'')
-                          FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK) WHERE {base_where}
-                          ORDER BY VAT_TAX_RATE, VAT_TRAN_DATE, VAT_TRAN_NO"""
+        def rows(src, ctx):
             stt, s_amt, s_vat = 0, Decimal(0), Decimal(0)
-            for r in fetch_rows(cur, sql, params):
+            for r in src:
                 stt += 1
                 amt, vat = _rx_dec(r[6]), _rx_dec(r[8])
                 s_amt += amt
@@ -6559,66 +7269,77 @@ def _rx_start_job(path, fmt, plan, db_cfg, report_type):
             'status': 'running', 'phase': 'prepare', 'current': 0, 'total': int(plan.get('total') or 0),
             'sheet': 0, 'sheets': 0, 'file_path': None, 'filename': os.path.basename(path), 'error': None,
             'cancelled': False, 'started': started, 'elapsed': 0, 'size': 0, 'rows': 0,
-            'report_type': report_type, 'format': fmt,
+            'report_type': report_type, 'format': fmt, 'retries': 0, 'retry': None, 'timing': {},
         }
-
-    def upd(**kw):
-        with _export_jobs_lock:
-            job = _export_jobs.get(job_id)
-            if job is not None:
-                job.update(kw)
-                job['elapsed'] = round(time.time() - started, 1)
-
-    def cancelled():
-        with _export_jobs_lock:
-            job = _export_jobs.get(job_id)
-            return bool(job and job.get('cancelled'))
+    ctl = _ExportCtl(job_id, started, f"{report_type} {fmt}")
+    upd, cancelled = ctl.upd, ctl.cancelled
 
     def runner():
-        conn, writer = None, None
+        db, writer, spool = None, None, None
         tmp = path + '.part'   # ghi ra tên tạm, xong mới đổi tên → không bao giờ lộ file dở dang mang tên thật
+        timing = {}
         try:
-            cur = None
-            if plan.get('needs_db'):
-                upd(phase='query')
-                conn = _make_conn(db_cfg)
-                cur = conn.cursor()
+            ctl.log("bat dau: CSDL %s, %s", (db_cfg or {}).get('database'), os.path.basename(path))
             ctx = {}
             total = plan.get('total') or 0
+            t = time.time()
+            if plan.get('needs_db'):
+                upd(phase='query')
+                db = _ExportDb(db_cfg, ctl)
             if plan.get('prepare'):
-                total = plan['prepare'](cur, ctx)
+                total = plan['prepare'](db, ctx)
                 upd(total=total)
+            timing['query'] = round(time.time() - t, 1)
             if cancelled():
                 raise XR.ExportCancelled()
+            if ctx.get('fetch'):
+                # Giai đoạn TẢI: từng khúc vào file tạm, đứt mạng tự nối lại (xem khối "XUẤT FILE LỚN CHỊU ĐƯỢC MẠNG…")
+                ctl.log("dem: %d dong -> %d khuc, %.1fs", total, len(ctx['fetch']), timing['query'])
+                t = time.time()
+                upd(phase='fetch', current=0, chunk=0, chunks=len(ctx['fetch']))
+                spool = _ExportSpool()
+                db.fetch(ctx['fetch'], spool)
+                timing['fetch'] = round(time.time() - t, 1)
+                ctl.log("tai xong: %d dong, %.1fs, file tam %.1f MB, noi lai %d lan", spool.count, timing['fetch'],
+                        spool.size() / 1048576, db.reconnects)
+            if db is not None:
+                db.close()   # nhả kết nối TRƯỚC khi ghi file — khâu ghi dài nhất không còn phụ thuộc mạng
+            if cancelled():
+                raise XR.ExportCancelled()
+            t = time.time()
+            upd(phase='write', current=0, timing=dict(timing))
             W = XR.CsvReportWriter if fmt == 'csv' else XR.XlsxReportWriter
             writer = W(tmp, plan['layout'], total_rows=total, is_cancelled=cancelled,
                        progress=lambda n, s, ss: upd(current=n, sheet=s, sheets=ss))
-            first = True
-            for item in plan['rows'](cur, ctx):
-                if first:
-                    upd(phase='write')
-                    first = False
+            for item in plan['rows'](spool.iter_rows() if spool is not None else None, ctx):
                 writer.add_row(*item)
-            upd(phase='finalize', current=writer.rows_written)
+            timing['write'] = round(time.time() - t, 1)
+            t = time.time()
+            upd(phase='finalize', current=writer.rows_written, timing=dict(timing))
             writer.close(after_rows=plan['after'](ctx) if plan.get('after') else None)
             rows_written, sheets = writer.rows_written, writer.sheet_count
             writer = None
             os.replace(tmp, path)
-            upd(status='done', phase='done', file_path=path, size=os.path.getsize(path),
+            timing['finalize'] = round(time.time() - t, 1)
+            size = os.path.getsize(path)
+            upd(status='done', phase='done', file_path=path, size=size, timing=dict(timing),
                 current=rows_written, total=max(total, rows_written), rows=rows_written, sheet=sheets, sheets=sheets)
+            ctl.log("xong: %d dong, %d sheet, %.1f MB, tong %.1fs %s", rows_written, sheets, size / 1048576,
+                    time.time() - started, timing)
         except XR.ExportCancelled:
             _rx_cleanup(writer, tmp)
             upd(status='cancelled', phase='cancelled')
+            ctl.log("nguoi dung huy")
         except Exception as e:
+            ctl.log("loi: %s", _err_brief(e), level=logging.ERROR)
             logger.exception(f"Loi xuat bao cao {report_type}")
             _rx_cleanup(writer, tmp)
             upd(status='error', phase='error', error=_rx_error_text(e))
         finally:
-            if conn:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
+            if db is not None:
+                db.close()
+            if spool is not None:
+                spool.close()
             with _export_jobs_lock:
                 _export_reserved.discard(path.lower())
 

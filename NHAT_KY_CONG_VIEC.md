@@ -1112,3 +1112,77 @@ CSS `.ds-errtext` / `.ds-err-box`; 5 chỗ hiện lỗi dùng `ErrText`; `alert`
   (`pt\harness.js` API giả + `__delay` / `__fail` (có `code`) / `__abort` / `__mock` / `update`, các bài `pt\*.js`; `test_*.py` chạy `server.py` bằng
   test_client + Windows auth vào `localhost\SQLEXPRESS` TRUNGDEMO). Thư mục tạm — có thể đã bị dọn.
 - Chưa: build EXE, phát hành, test cập nhật thật (xem mục 29).
+
+## 31. v1.10.6 (phần 2, CHƯA build/phát hành): xuất file lớn chịu đứt mạng *(29/09/2026)*
+
+**Yêu cầu Trum:** "tiếp tục task cải thiện tải file Excel hơn 2 triệu dòng bị đứt kết nối… chậm hơn chút cũng được miễn là xuất ra được
+file đẹp, chuẩn, không bị đứt giữa chừng". Nối tiếp mục 30 (sự cố 10054 khi xuất BC007 ≈ 2.856.815 dòng CHULONG qua VPN) và CLAUDE.md mục 6 cũ.
+
+**Đã sửa:** xem CLAUDE.md Bẫy 25. `server.py`: khối "XUẤT FILE LỚN CHỊU ĐƯỢC MẠNG CHẬP CHỜN" (`_ExportDb`, `_ExportSpool`, `_ExportCtl`,
+`_day_chunks`, `_list_day_split`, `_is_net_error`, nhật ký `datastudio.export`); `_start_export_job` + `_rx_start_job` viết lại theo 2 giai đoạn
+tải → ghi; `_rx_plan` BC007/BC008/BC012/BC013 đổi sang `prepare(db, ctx)` + `ctx['fetch']` + `rows(src, ctx)` (thêm `_rx_ledger_days` = COUNT + SUM
+theo ngày); 4 bộ xuất danh sách (sổ cái, nhập, kho, bán hàng) có `_CHUNK_MARK` + `day_split`; `_write_xlsx/_csv_to_disk` báo `cancelled` khi người
+dùng huỷ. `index.html`: `ReportExportDialog` thêm pha "Tải dữ liệu" (5 bước), % pha tải, khung đếm ngược nối lại, thẻ "Tự nối lại N lần" + tooltip
+thời gian từng khâu, lời nhắc dữ liệu lớn; hộp xuất danh sách hiện pha đếm/tải/ghi, khung nối lại, nút **Hủy xuất** (`cancelServerExport`), bỏ câu
+cũ sai "stream → browser tải file CSV trực tiếp".
+
+**Cân nhắc đã chọn:**
+- Tự nối lại bằng **khúc ngày**, không dùng keyset: dòng trùng TRAN_DATE + TRAN_NO không có thứ tự cố định (Bẫy 20) → keyset cần khoá duy nhất
+  (PR_KEY_LEDGER — LEDGER_VIEW có, bộ xuất danh sách/VIEW khác chưa chắc) và đổi ORDER BY; khúc ngày giữ nguyên ORDER BY, chạy SQL 2008.
+- **Tối đa 8 khúc, ≥ 200.000 dòng/khúc** (ban đầu viết 200.000 cố định = 15–16 khúc cho tháng 8): khúc trăm nghìn dòng SQL chọn quét cả LEDGER
+  (ước tính chi phí tra khoá 184k dòng ≈ 600 đơn vị > quét 224k trang ≈ 190) → 16 lượt đọc 1,75 GB trên buffer pool 1,4 GB làm chậm người đang nhập
+  liệu. Gộp ngày tới khi CHẠM mốc (không phải "dừng trước khi vượt") — cách sau ra 9–11 khúc. Tháng 8 CHULONG (giả lập 92k/ngày, ngày 31 gấp 3) = 7 khúc.
+- Không gợi ý CSV cho > 1 triệu dòng (mục 6 cũ bước 5) — Trum muốn file đẹp chuẩn.
+- Không chồng tải/ghi song song (nhanh hơn nhưng phức tạp: writer chỉ được đọc khúc đã tải xong) — Trum chấp nhận chậm hơn.
+
+**Verify** (bộ kiểm ngoài repo: `%TEMP%\claude\D--IACC-HCM-iPOS-ACC-ACC-PMKT-LedgerStudio\d2c807e5-cb37-4185-be0d-3bc2daccf9d7\scratchpad\`,
+`common.py` nạp server.py + bản HEAD trong 1 tiến trình, vá `_make_conn` sang Windows auth, driver "SQL Server"):
+
+| Mức | Bài | Kết quả |
+|---|---|---|
+| M1 | `ast.parse`, `import server` thật (chặn `kill_process_on_port`), `node check_babel.js`, `webbuild/build.js` | qua |
+| M3 SQL thật | `test_compare.py`: server MỚI (ép khúc nhỏ → 7–10 khúc) vs HEAD, TRUNGDEMO 2018–2026: BC007 chi tiết/tổng hợp/đầy đủ (xlsx + csv), BC008 TK 1,3, BC012, BC013 chi tiết/tổng hợp, kỳ rỗng; danh sách sổ cái (mặc định, sắp ngày tăng, sắp số tiền → 1 khúc, ô tìm tên → câu đếm có JOIN, csv "Như đang xem"), nhập, kho, bán hàng, tiền | **123/123** — khối tiêu đề, tập dòng, chuỗi khoá sắp xếp, dòng tổng/chữ ký trùng. 2 lệch ban đầu là dòng trùng khoá đổi chỗ (Bẫy 20) → bài so theo tập dòng |
+| M3 đứt mạng thật | `test_net.py` T1: `KILL` phiên SQL của job 3 lần giữa lúc tải (lỗi thật: `01000 · [DBNETLIB]ConnectionRead (WrapperRead()). (233)`); T1b: KILL khi xuất danh sách | tự nối lại đúng 3 / 1 lần, file trùng mốc không lỗi |
+| M2 | T2: giả 10054 / 08S01 5 chỗ (cả câu đếm, 2 lần liền); T3: lỗi mãi → bỏ cuộc sau 8 lần, câu 3 phần + đường dẫn nhật ký, không để `.part`; T4: Hủy lúc đang chờ nối lại (dừng 0,26 s); T5: thiếu cột → báo ngay, 0 lần thử; T6: `_day_chunks` 300 bộ ngẫu nhiên (giờ lẻ, giảm dần, khúc 1 ngày); T7: `_is_net_error` 9 mẫu; file tạm dọn sạch | **35/35** |
+| M2 cỡ thật | `test_big.py`: BC007 chi tiết 2.856.816 dòng qua kết nối giả + 3 lần đứt 10054 | xong 355,5 s (tải 14 s giả · ghi 308 s · đóng gói 34 s), 3 sheet 1.000.000 / 1.000.000 / 856.815, 152 MB, **RAM +10 MB**, file tạm 38 MB; đọc lại: đủ dòng, tổng Nợ/Có = dòng Cộng lũy kế, cộng chuyển sang = số cộng sheet trước |
+| M3 giao diện | `xuat_ui.js` (harness puppeteer phiên 28/09, API giả, BC007 thật TRUNGDEMO với total_rows = 2.856.815): lời nhắc, 5 bước, pha đếm/tải/nối lại/ghi/xong, đếm ngược, lỗi hết lượt 3 phần, danh sách: pha + nối lại + Hủy (không alert) + hộp xong | **30/30** (2 trượt đầu: số `950,000` theo ngôn ngữ trình duyệt → đổi sang `fmtCount`) |
+
+- Ước tính trên CHULONG thật (chưa đo): tải ≈ 47 s/600k dòng (mục 8) → ~4 phút cho 2,86 triệu dòng + ghi ~4–5 phút → tổng ~9–10 phút. Bản cũ cũng
+  tải rồi ghi TUẦN TỰ trên 1 luồng (fetch 5.000 → ghi → fetch…) nên tổng gần như cũ, cộng thêm ~15 s file tạm + thời gian các câu khúc (mỗi khúc có
+  thể là 1 lượt quét LEDGER). Khác biệt: kết nối chỉ mở lúc tải (~4 phút thay vì ~9), đứt thì tải lại tối đa 1 khúc (~40 s).
+- Chưa: build EXE, phát hành, đo trên CHULONG (CLAUDE.md mục 6), "Tách sheet theo đơn vị" vẫn chạy trong trình duyệt.
+
+## 32. v1.10.6 (phần 3, CHƯA build/phát hành): danh sách "Doanh thu chờ phân bổ theo tháng" + tooltip thanh bên *(29/09/2026)*
+
+**Yêu cầu Trum:** xem bảng DT chờ phân bổ, đọc mẫu `D:\Tele Download\Bao cao_DTCTH_sample.xlsx` (14 dòng, 30 cột A–AD: ... Lũy kế năm
+trước · 12 cột tháng 2026 (điền tới T8) · Lũy kế năm nay `=SUM(O:Z)` · Giá trị còn lại `=I-N-AA` · Tên đối tượng (trống) · Loại doanh thu),
+tạo thêm bảng theo tháng, cột thiếu thì tự map (vd Tên đối tượng từ danh mục đối tượng). Trả lời 2 vòng câu hỏi:
+1. chọn Từ tháng – Đến tháng, cột tháng tự xoay; chọn năm nay = T1 → tháng hiện tại · 2. hiện hết · 3. Số hợp đồng = `COMMENTS` bảng **SALE**
+· 4. Số HĐ = VAT_TRAN_NO phiếu gốc · 5. Loại doanh thu = tên tài khoản doanh thu → tiêu đề "Tên tài khoản DT (Loại doanh thu)" · 6. kỳ vắt nhiều
+tháng tính vào tháng kết thúc · 7. danh sách mới tên "Doanh thu chờ phân bổ theo tháng" · 8. tên đối tượng tham chiếu DM_PR_DETAIL theo mã trên
+INCOME_ALLOCATION (cả bảng cũ) · 9. tooltip khi rê chuột vào tên bảng/báo cáo quá dài · nhãn lũy kế: T1 → Tn cùng năm "năm trước / năm nay",
+khác thì "trước kỳ / trong kỳ" · bộ lọc trạng thái để người dùng tự lọc.
+
+**Phát hiện khi tra DB demo (đổi thiết kế):** `PR_KEY_CTU` KHÔNG nối được chứng từ gốc tin cậy — PR_KEY trùng giữa SALE và VOUCHER (120 khoá),
+dòng KT_KHAC trỏ vào `LEDGER.PR_KEY_DETAIL`; số phiếu lặp lại giữa đơn vị (1.049 phiếu / 894 bộ Mã+Số+Ngày) → nối SALE theo Mã + Số + Ngày +
+Đơn vị (1.048/1.049). Metadata `pr_details` chỉ nạp ACTIVE=1 → bảng cũ trống tên khách ngừng dùng. Driver "SQL Server" cũ không bind được
+kiểu `date` của Python (HYC00) — chỉ `datetime`.
+
+**Đã sửa:** xem CLAUDE.md mục 3.2 (7), 3.0 (tooltip), Bẫy 26. `server.py`: khối "DOANH THU CHỜ PHÂN BỔ THEO THÁNG" (`/api/income_alloc_month`,
+`/count`, `/stream_csv`, `_income_month_*`, `_sale_link_ok`, `_add_month`); `_write_xlsx_to_disk(spec=…)` + `_start_export_job(xlsx_spec=…)`;
+bảng cũ `INCOME_ALLOC_FROM` JOIN DM_PR_DETAIL. `index.html`: `INCOME_MONTH_GRID` (khối `MONTHS`), `incomeMonthGrid`, `incomeMonthRangeMeta`,
+`MonthRangePicker`, state/loader/tab, `useNavTip` + CSS `.ds-navtip`, `.ds-cell.is-in/.is-edge`, `.ds-mr-*`; ExportButton đếm cột bung
+(`viewCounts`).
+
+**Verify** (bộ kiểm ngoài repo: `%TEMP%\claude\D--IACC-HCM-iPOS-ACC-ACC-PMKT-LedgerStudio\d2c807e5-cb37-4185-be0d-3bc2daccf9d7\scratchpad\`):
+
+| Mức | Bài | Kết quả |
+|---|---|---|
+| M1 | `ast.parse`, `import server` thật, `node check_babel.js`, `webbuild/build.js` | qua |
+| M3 SQL thật | `mk_dtcth_db.py` dựng DB thử `DS_TEST_DTCTH` trên SQL Express (cấu trúc 5 bảng chép TOP 0 từ TRUNGDEMO; 14 dòng file mẫu + phiếu trùng số ở đơn vị 09 (số HĐ "SAI…") + phiếu KT_KHAC ACTIVE=0 + tiêu thức Quý + dòng xong từ 2024 + phiếu 09/2026). Lịch phân bổ sinh theo quy luật iPOS → **khớp 14/14 dòng mẫu** (LK năm trước + T1–T8). Đã xoá DB sau kiểm | lịch lệch mẫu: 0 |
+| M3 SQL thật | `test_dtcth.py`: API vs file mẫu 14 dòng × 26 cột; ca biên; nhãn + 36 tháng + đảo từ/đến; Còn lại = bảng cũ 17/17; tên đối tượng bảng cũ; 7 bộ lọc; sắp theo cột tháng; 4 trang × 5 dòng; /count; xlsx (tiêu đề ngày mm/yyyy, `=SUM(O2:V2)`, `=I2-N2-W2`, dòng Tổng cộng `=SUM`, giá trị tính sẵn = API); "Như đang xem" có MONTHS; thiếu tháng → ghi số; csv | **38/38** (4 trượt đầu là kỳ vọng tui đếm tay sai: 3 dòng "đã hết" không phải 1, "BH000" có 4 phiếu) |
+| M3 giao diện | `dtcth_ui.js` (harness puppeteer, API giả = JSON thật từ DB thử): tooltip (tên cắt / tên ngắn / báo cáo viết tắt / thu gọn), mục mới ngay dưới DT chờ phân bổ, chip kỳ mặc định, cột T1…T9 trước truy vấn, thứ tự cột = mẫu, nút nhanh + lịch 2 bên + chặn 36 tháng, truy vấn gửi đúng tham số, cột theo months server, dòng BH19706 đúng mẫu, dòng tổng, lọc cột tháng + tổng dòng lọc, kéo 1 cột tháng = cả khối, Khôi phục mặc định, Bộ lọc khác, dấu "Áp dụng bộ lọc", xuất "Như đang xem" 26 cột + MONTHS, thanh lọc 1 hàng ở 1366px | **34/34** (trượt đầu: thanh lọc rớt 2 hàng ở 1366 → bỏ "· N tháng" khỏi chip, thu ô Số CT) |
+| Hồi quy | `test_compare` 123 · `test_net` 35 · `xuat_ui` 30 | đạt |
+
+- 404 `/icon.svg`, `/manifest.json` lúc nạp trang trong harness: harness chỉ phục vụ `build_web/` (EXE thật có 2 file này) — có từ trước, không liên quan.
+- Chưa: chạy trên DB thật của iPOS so 14 dòng mẫu (CLAUDE.md mục 6 việc 5), đo tốc độ trang (CTE S quét SALE mỗi trang), build EXE, phát hành.
