@@ -1335,3 +1335,66 @@ trên DB thật (M4); bản xuất vẫn nối CTE S; EXE chưa mở thử bằn
   `/api/check_update` với APP_VERSION giả 1.10.6 → `has_update` + 1 bản thay đổi 6 ý; 1.10.7 → không báo lại.
 - Chưa: test cập nhật thật (mở bản v1.10.6, bấm "Cập nhật ngay" — lần mở app kế tiếp trên máy Trum chính là bài này); Trum gửi số đo
   tab theo tháng trên DB thật (thanh trạng thái hoặc `datastudio.log`); bản xuất tra theo lô nếu số đo cho thấy xuất chậm.
+
+## 36. v1.10.8 (build xem trước, CHƯA commit / phát hành): màn đăng nhập "Kết nối gần đây" + họa tiết công nghệ, phiên chỉ sống 1 lần chạy app, lưu mật khẩu DPAPI, tắt app là tắt hẳn *(30/09/2026)*
+
+**Yêu cầu Trum (29/09 tối):** (1) "có design nào đẹp cho phần login bên phải không, thiết kế đẹp cho hợp concept"; (2) "khi tắt app thì
+sẽ tự kill hết các tác vụ chạy ngầm, để lần sau mở app thì phải đăng nhập lại, vẫn cho phép lưu thông tin server, dbname, user và pass đã
+đăng nhập trước đó". Tui trình 3 mockup (A phiếu chứng từ · B kết nối gần đây · C form gọn) + 5 câu hỏi; Trum: "chọn B, và design xung
+quanh vài họa tiết technology" + "ok" 4 câu còn lại theo mặc định: cập nhật xong phải đăng nhập lại (thẻ chọn sẵn); Ghi nhớ mật khẩu mặc
+định bật; tối đa 5 kết nối; chỉ build EXE xem trước. Làm qua 2 phiên (4f1202a2 hết lượt dùng giữa chừng; 015249d4 build EXE cuối + tài liệu).
+
+**Đọc code trước khi sửa thấy:**
+- Đóng cửa sổ vốn đã tắt server, nhưng còn 2 nhánh server chạy ngầm mãi: Chrome bàn giao cửa sổ cho instance cũ (tiến trình app mở ra
+  thoát < 5 s); máy không có Chrome/Edge (mở trình duyệt mặc định).
+- Mở lại vào thẳng: cookie phiên Flask ký bằng `.session_key` lưu file → Chrome còn cookie là còn phiên.
+- Cookie đó chứa nguyên `db_config` KỂ CẢ mật khẩu (Flask chỉ ký, không mã hoá — base64 đọc được).
+- App chỉ tự nhớ máy chủ + CSDL (`localStorage`); tài khoản / mật khẩu trong ảnh Trum là Chrome tự điền.
+
+**Đã sửa:** xem CLAUDE.md mục 3.1, 3.4 (cập nhật xong phải đăng nhập lại), Bẫy 28, Bẫy 9 (icon `shield-check` → 47).
+- `server.py`: `_RamSession` + `_RamSessionInterface` (phiên RAM, cookie `ds_sid`), `_only_localhost` (Host lạ → 403), khối "KẾT NỐI ĐÃ
+  LƯU" (`_dpapi`, `_pw_protect` / `_pw_unprotect`, `_saved_key`, `_saved_read` / `_saved_public` / `_saved_write` / `_saved_put`,
+  `GET /api/saved_logins`, `POST /api/saved_logins/delete`, `_is_login_rejected`), `/api/login` nhận `saved_id` / `remember` + bỏ khoảng
+  trắng 2 đầu máy chủ / CSDL / tài khoản; `/api/presence` (EventSource) + `_watch_presence` trong `__main__`; `_live_spools` +
+  `_drop_live_spools` (tắt app xoá file tạm của job đang chạy), `_cleanup_orphan_exports` (mở app xoá `ds_spool_*.tmp` + `*.part` mồ côi),
+  `_app_log` (dòng `[app]` trong `datastudio.log`: trang mở / đóng, lý do tắt app).
+- `index.html`: `LoginPanel` (cấp trên cùng, giữ hết state đăng nhập; App bỏ `loginData` / `loginError` / `loginLoading` / `showPw`, chỉ
+  còn `handleLoggedIn`), `loginAgo`, `LOGIN_SAVED_MAX`, `LoginTech` + `LOGIN_CIRCUIT` (họa tiết), CSS `ds-lg-*`, App mở
+  `EventSource('/api/presence')`.
+
+**Cân nhắc đã chọn / đã thử, không lợi:**
+- Phiên RAM thay vì chỉ đổi khoá ký mỗi lần chạy: đổi khoá cũng làm cookie cũ mất hiệu lực nhưng mật khẩu vẫn nằm trong cookie.
+- Mật khẩu KHÔNG gửi về trang (đăng nhập thẻ chỉ gửi `saved_id`); file ở `%LocalAppData%` cạnh AppProfile, không ở Downloads / localStorage.
+- Presence bằng EventSource, không ping `setInterval`: Chrome hãm hẹn giờ cửa sổ ẩn (> 5 phút còn 1 lần/phút) → thu nhỏ lâu là tắt nhầm.
+- Không canh presence ở nhánh theo dõi được tiến trình Chrome (đóng cửa sổ → tắt ngay như cũ). Edge hồ sơ mới: đóng cửa sổ (WM_CLOSE) là
+  tiến trình thoát hẳn, không chạy nền.
+- Họa tiết: thử mặt nạ theo dải giữa 380px → màn 1754px mạch in bị cắt, thưa → bỏ, dùng quầng nền cùng màu panel quanh form.
+- Xung dữ liệu: bản đầu 8 xung SVG `stroke-dashoffset` → CPU Chrome lúc đứng yên 9,0% một nhân (bản cũ 4,5%). Đo tách (15,4 s mỗi lượt):
+  bỏ xung 3,5% · bỏ vệt sáng 9,5% · bỏ mặt nạ chấm 8,4% · bỏ cả họa tiết 3,3% → thủ phạm là xung (vẽ lại mỗi khung hình). Đổi sang 10 vạch
+  `<span>` chạy bằng `transform` trong khe `overflow: hidden` → 4,9–5,2% (bản cũ cùng lượt 4,5–5,4%).
+
+**Verify** (bộ kiểm ngoài repo, scratchpad phiên 4f1202a2; máy chủ thử `ui_server.py` chạy từ `build_web`, `_make_conn` giả nối SQL
+Express thật, file lưu kết nối nằm trong scratchpad):
+
+| Mức | Bài | Kết quả |
+|---|---|---|
+| M1 | `ast.parse`, `import server` (chặn `kill_process_on_port`), `webbuild/build.js` | qua |
+| M2 | `test_login.py` (`test_client`): Host lạ 403 kể cả trang chủ, localhost / 127.0.0.1 qua; sai mật khẩu 401 câu tiếng Việt 3 phần, không lưu, không cookie; cookie `ds_sid` HttpOnly + SameSite=Strict, không còn cookie `session`, không chứa mật khẩu; `db_config` 5 khoá đã bỏ khoảng trắng; file không có mật khẩu thô, DPAPI giải đúng; "mở lại app" (xoá phiên RAM) → metadata 401; thẻ đã lưu vào được, mật khẩu lưu sai → `need_password` + giữ mật khẩu cũ, gõ lại → lưu mới; lỗi mạng không hỏi mật khẩu; khoá không phân biệt hoa thường, hiện theo lần gõ gần nhất; `remember` False / mặc định True; tối đa 5, mới nhất trước; xoá; `saved_id` lạ → 404; đăng xuất xoá cookie + phiên; 2 phiên riêng; body không phải JSON; DPAPI unicode / blob hỏng / mật khẩu rỗng; file hỏng → rỗng + vẫn đăng nhập + ghi lại; presence (đếm, header, dòng đầu); dọn mồ côi chỉ `ds_spool_*` + `.part`; tắt app xoá spool đang chạy | **61/61** |
+| M2 socket thật | `test_presence_http.py` (Werkzeug đa luồng): 2 kết nối → n = 2, API khác vẫn chạy song song (0,04 s), ping sau 4,8 s, đóng 1 → n = 1 sau 5,0 s, đóng hết → n = 0 sau 5,0 s | qua |
+| M3 giao diện | `ui_login.js` (puppeteer): lần đầu = form, Ghi nhớ bật, focus máy chủ; họa tiết (2 mạch in, 10 vạch sáng transform, SVG không animate, không chặn chuột); sai mật khẩu 18456 tiếng Việt; vào app, presence mở; "mở lại" 1 thẻ chọn sẵn có khoá, nút "Kết nối TRUNGDEMO" được focus, Enter vào không gõ mật khẩu; 3 thẻ mới nhất trước; rê chuột chỉ thẻ đó hiện ×, hỏi xác nhận, Không / Xoá; ↑↓; bấm đúp (đang kết nối → vào, lên đầu); Kết nối khác giữ máy chủ + tài khoản, focus CSDL; Quay lại; bỏ Ghi nhớ → thẻ không mật khẩu → hiện ô mật khẩu; mật khẩu lưu sai → báo lỗi + ô mật khẩu; đăng xuất về danh sách; 1366 / 1440 / 1920 / 820 px × 5 thẻ không tràn, không đè chân trang; không lỗi JS | **37/37** |
+| Hồi quy | `test_regress.py` (SQL Express thật, phiên RAM): đăng nhập, metadata, 5 danh sách, BC006, job xuất sổ cái tới xong, đăng xuất → 401 | 11/11 |
+| M3 EXE (bản 00:40) | `m3_exe.ps1`: đóng cửa sổ → server + EXE tắt sau 2,6 s; Host lạ 403; file tạm / `.part` mồ côi bị dọn; nhánh bàn giao (mở trước 1 Chrome cùng AppProfile): sau 40 s server còn sống; thu nhỏ → ~100 s sau server tắt, CÙNG LÚC instance Chrome cũ biến mất | Chrome tự thoát chưa rõ vì sao (không dump, không sự kiện lỗi) → thêm `_app_log` rồi thử lại |
+| M3 EXE (bản 00:48, tạm mang số 1.10.9, có nhật ký) | `m3_b2.ps1`, theo dõi 5 s/lần: thu nhỏ > 150 s server vẫn sống; trang đóng → server tắt sau ~20,6 s; Chrome cũ vẫn sống | qua |
+| M3 EXE đóng thường | `m3_exit.ps1` 2 vòng: bản 00:48 vòng 1 2,8 s, vòng 2 24,5 s (đóng khi cửa sổ mới mở 4,9 s → bị coi là bàn giao → canh presence → vẫn tắt); bản 00:56 đợi 8 s như người dùng thật: 2,5 / 2,7 s, nhật ký "tat app: Cua so app da bi dong" | qua |
+| M3 thời gian vẽ | `paint_probe.ps1` (Chrome `--app` như EXE, PrintWindow ~150 ms/lần), logo nửa phải cũ / mới: hồ sơ mới 1754×993 2,0 / 1,6 s; phóng to 2576×1408 2,2 / 2,0 s; hồ sơ Chrome thật + tự điền (cổng 5050) mới 2,2 s, không vùng trắng | mới không chậm hơn |
+| M3 CPU đứng yên | `cpu_probe.ps1` (15,4 s / lượt) — số ở mục Cân nhắc | 4,9–5,2% ≈ cũ 4,5–5,4% |
+| M3 EXE cuối | phiên 015249d4: trả `version.txt` về 1.10.7 → `python build_exe.py iPOS_Ledger_Studio` → v1.10.8, 01:47 30/09, 16.683.521 byte, SHA-256 `93d383ed…7e97`; `verify_exe.py` đọc gói: `version.txt` 1.10.8, app.js / app.css / index.html trùng từng byte `build_web` đã chạy 37/37, có `.ds-lg-trk`, không còn `.pulse` cũ, server đủ 17 hàm / lớp mới | qua — không mở lại EXE: `server.py` không đổi từ bản 00:56 đã chạy thật |
+
+- Bản EXE 00:56 KHÔNG có sửa vạch sáng (index.html sửa lúc 01:16) — bản 01:47 mới là bản xem trước đúng.
+- Bẫy môi trường thử (đã ghi ở Bẫy 28): máy chủ thử chạy từ `build_web` không có `version.txt` → "dev" → hộp bắt buộc cập nhật đè màn đăng
+  nhập; `manifest.json` 404 ở đó là bình thường; `.ps1` không BOM bị PowerShell 5.1 đọc theo ANSI. Thêm: `taskkill` theo `$!` của Git Bash
+  (PID MSYS, không phải PID Windows) không tắt được máy chủ thử cũ → lượt chụp ảnh cuối phiên 4f1202a2 treo vì 2 máy chủ thử cùng chạy
+  (tái hiện in-process: lưu kết nối khi thư mục chưa có vẫn đúng). Chạy máy chủ thử bằng `Start-Process -PassThru` để có PID thật.
+- `exit_type=Crashed` trong Preferences của AppProfile có từ trước, đóng app thường không đổi — không do bản này.
+- Chưa: Trum mở EXE xem trước → duyệt → `pre-push-qa` → commit + phát hành; test cập nhật thật 1.10.7 → 1.10.8 (phải về màn đăng nhập,
+  thẻ vừa dùng chọn sẵn).

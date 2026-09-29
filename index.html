@@ -593,8 +593,11 @@ window.showConnectionLost = function() {
         .ds-bars i { width: 10px; border-radius: 3px 3px 0 0; background: var(--ds-brand-line); }
         .ds-bars i:last-child { background: var(--ds-brand); }
         @keyframes dsFloat { 50% { transform: translateY(-5px); } }
-        .ds-login-side { position: relative; display: flex; flex-direction: column; min-height: 0; overflow-y: auto; border-left: 1px solid var(--ds-line); background: #fff; }
-        .ds-login-form { width: 360px; max-width: calc(100% - 48px); margin: auto; padding: 24px 0; }
+        .ds-login-side { position: relative; display: flex; flex-direction: column; min-height: 0; overflow-y: auto; border-left: 1px solid var(--ds-line); background: #FAFCFE; }
+        .ds-login-form { position: relative; z-index: 1; width: 380px; max-width: calc(100% - 48px); margin: auto; padding: 24px 0; }
+        /* Quầng nền cùng màu panel quanh form: họa tiết công nghệ (v1.10.8) chạy tới đâu cũng mờ dần trước khi tới chữ — màn hẹp /
+           thấp (1366×768, 5 thẻ) mạch in góc không đè lên tiêu đề, "5/5" */
+        .ds-login-side .ds-login-form { background: #FAFCFE; border-radius: 28px; box-shadow: 0 0 36px 30px #FAFCFE; }
         .ds-login-logo { display: flex; align-items: center; gap: 12px; margin-bottom: 28px; }
         .ds-login-logo h1 { margin: 0; font-size: 21px; line-height: 1.25; font-weight: 600; letter-spacing: -0.02em; color: var(--ds-ink); }
         .ds-login-logo span { display: block; margin-top: 1px; font-size: 12.5px; color: var(--ds-ink-3); }
@@ -611,9 +614,90 @@ window.showConnectionLost = function() {
         .ds-login-go { width: 100%; height: 40px; justify-content: center; margin-top: 4px; font-size: 13.5px; }
         .ds-login-go .ds-arrow { transition: transform .12s; }
         .ds-login-go:hover:not(:disabled) .ds-arrow { transform: translateX(3px); }
-        .ds-login-foot { display: flex; justify-content: space-between; flex: none; padding: 0 24px 16px; font-size: 11.5px; color: var(--ds-ink-4); }
-        @media (max-width: 900px) { .ds-login { grid-template-columns: 1fr; } .ds-login-art { display: none; } .ds-login-side { border-left: 0; } }
-        @media (prefers-reduced-motion: reduce) { .ds-fc { animation: none; } }
+        .ds-login-foot { position: relative; z-index: 1; display: flex; justify-content: space-between; flex: none; padding: 10px 24px 16px; font-size: 11.5px; color: var(--ds-ink-4); background: linear-gradient(to bottom, rgba(250,252,254,0), #FAFCFE 10px); }
+        /* ===== NỬA PHẢI: KẾT NỐI GẦN ĐÂY + HỌA TIẾT CÔNG NGHỆ (v1.10.8, Trum 30/09 — phương án B) =====
+           Thẻ kết nối đã lưu (máy chủ giữ danh sách + mật khẩu mã hoá DPAPI — server.py "KẾT NỐI ĐÃ LƯU"): chọn sẵn thẻ dùng gần nhất,
+           Enter / bấm đúp là vào. Họa tiết chỉ vẽ bằng CSS + SVG nội tuyến (không ảnh): lưới chấm mờ dần vào giữa, mạch in 2 góc có
+           vạch sáng chạy trên đoạn mạch thẳng, 1 vệt sáng chạy dọc vạch chia 2 nửa. Mọi chuyển động CHỈ dùng transform (không vẽ
+           lại) — tắt hết khi prefers-reduced-motion. Lớp họa tiết pointer-events: none, nằm dưới form (z-index). */
+        .ds-lg-tech { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+        .ds-lg-dots { position: absolute; inset: 0; background-image: radial-gradient(rgba(0,104,172,.22) 1px, transparent 1.4px); background-size: 20px 20px;
+            -webkit-mask-image: radial-gradient(ellipse 62% 56% at 50% 48%, transparent 48%, #000 100%); mask-image: radial-gradient(ellipse 62% 56% at 50% 48%, transparent 48%, #000 100%); }
+        .ds-lg-rail { position: absolute; left: 0; top: 0; bottom: 0; width: 1px; overflow: hidden; }
+        .ds-lg-rail::after { content: ''; position: absolute; left: 0; top: 0; width: 1px; height: 140px; background: linear-gradient(to bottom, transparent, var(--ds-brand), transparent); animation: dsRail 7s linear infinite; }
+        @keyframes dsRail { from { transform: translateY(-140px); } to { transform: translateY(100vh); } }
+        .ds-lg-circuit { position: absolute; width: clamp(220px, 34%, 300px); height: auto; aspect-ratio: 300 / 230; }
+        .ds-lg-circuit.is-tr { top: 0; right: 0; }
+        .ds-lg-circuit.is-bl { left: 0; bottom: 44px; transform: rotate(180deg); }
+        .ds-lg-circuit > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+        .ds-lg-circuit .tr { fill: none; stroke: #0068AC; stroke-opacity: .2; stroke-width: 1.25; stroke-linejoin: round; }
+        .ds-lg-circuit .pad { fill: #FAFCFE; stroke: #0068AC; stroke-opacity: .38; stroke-width: 1.25; }
+        .ds-lg-circuit .via { fill: #0068AC; fill-opacity: .28; }
+        .ds-lg-circuit .chip { fill: #fff; stroke: #0068AC; stroke-opacity: .34; stroke-width: 1.25; }
+        .ds-lg-circuit .core { fill: #0068AC; fill-opacity: .08; }
+        /* Vạch sáng chạy dọc 1 đoạn mạch thẳng: khe (.ds-lg-trk) cắt phần thừa, vạch (<i>) = 40% khe, chạy hết khe trong 35% chu kỳ
+           rồi nằm ngoài khe (ẩn) phần còn lại → nháy từng đợt. Chỉ transform → card đồ hoạ chạy, không vẽ lại (xem LOGIN_CIRCUIT). */
+        .ds-lg-trk { position: absolute; overflow: hidden; }
+        .ds-lg-trk.is-h { height: 2px; margin-top: -1px; }
+        .ds-lg-trk.is-v { width: 2px; margin-left: -1px; }
+        .ds-lg-trk > i { position: absolute; display: block; border-radius: 1px; animation: dsTrkL 4.8s linear infinite; }
+        .ds-lg-trk.is-h > i { top: 0; bottom: 0; left: 0; width: 40%; background: linear-gradient(90deg, transparent, var(--ds-brand), transparent); }
+        .ds-lg-trk.is-v > i { left: 0; right: 0; top: 0; height: 40%; background: linear-gradient(180deg, transparent, var(--ds-brand), transparent); animation-name: dsTrkD; }
+        .ds-lg-trk.is-up > i { animation-name: dsTrkU; }
+        .ds-lg-circuit.is-bl .ds-lg-trk > i { animation-duration: 6s; }
+        @keyframes dsTrkL { 0% { transform: translateX(250%); } 35%, 100% { transform: translateX(-100%); } }
+        @keyframes dsTrkD { 0% { transform: translateY(-100%); } 35%, 100% { transform: translateY(250%); } }
+        @keyframes dsTrkU { 0% { transform: translateY(250%); } 35%, 100% { transform: translateY(-100%); } }
+        .ds-lg-wait { height: 214px; }
+        .ds-lg-h { display: flex; align-items: center; justify-content: space-between; margin: 0 0 8px; font-size: 11.5px; font-weight: 600; letter-spacing: .02em; color: var(--ds-ink-3); }
+        .ds-lg-h span + span { font-weight: 500; color: var(--ds-ink-4); font-variant-numeric: tabular-nums; }
+        .ds-lgc-list { display: grid; gap: 8px; }
+        .ds-lgc { position: relative; border: 1px solid var(--ds-line); border-radius: 12px; background: #fff; transition: border-color .12s, box-shadow .12s, background-color .12s; }
+        .ds-lgc:hover { border-color: var(--ds-line-strong); box-shadow: 0 4px 14px rgba(14,26,43,.06); }
+        .ds-lgc.is-on { border-color: var(--ds-brand); background: #F5F9FD; box-shadow: 0 0 0 3px var(--ds-brand-soft); }
+        .ds-lgc-main { display: flex; align-items: center; gap: 12px; width: 100%; padding: 11px 14px 11px 12px; border-radius: 11px; text-align: left; }
+        .ds-lgc-main:focus-visible { outline: 2px solid var(--ds-brand); outline-offset: 2px; }
+        .ds-lgc-main:disabled { cursor: default; }
+        .ds-lgc-ic { flex: none; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px; background: var(--ds-tint); color: var(--ds-ink-3); transition: background-color .12s, color .12s; }
+        .ds-lgc.is-on .ds-lgc-ic { background: var(--ds-brand); color: #fff; }
+        .ds-lgc-txt { flex: 1; min-width: 0; }
+        .ds-lgc-txt b, .ds-lgc-txt small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .ds-lgc-txt b { font-size: 13.5px; font-weight: 600; color: var(--ds-ink); }
+        .ds-lgc-txt small { margin-top: 2px; font: 11.5px/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--ds-ink-3); }
+        .ds-lgc-meta { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font-size: 11.5px; color: var(--ds-ink-4); white-space: nowrap; }
+        .ds-lgc-meta svg { display: block; }
+        .ds-lgc.is-on .ds-lgc-meta svg { color: var(--ds-brand); }
+        .ds-lgc-del { position: absolute; top: -8px; right: -8px; display: grid; place-items: center; width: 22px; height: 22px; border: 1px solid var(--ds-line); border-radius: 50%; background: #fff; color: var(--ds-ink-3);
+            box-shadow: 0 2px 6px rgba(14,26,43,.10); opacity: 0; transform: scale(.85); transition: opacity .12s, transform .12s, color .12s, border-color .12s; }
+        .ds-lgc:hover .ds-lgc-del, .ds-lgc-del:focus-visible { opacity: 1; transform: none; }
+        .ds-lgc-del:hover { color: var(--ds-bad-ink); border-color: #F2C4CD; }
+        .ds-lgc.is-del { display: flex; align-items: center; gap: 8px; min-height: 62px; padding: 8px 10px 8px 14px; border-color: #F2C4CD; background: var(--ds-bad-soft); font-size: 12.5px; color: var(--ds-bad-ink); }
+        .ds-lgc.is-del > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .ds-lgc.is-del .ds-btn { height: 30px; }
+        .ds-lgc.is-busy::after { content: ''; position: absolute; left: 14px; right: 14px; bottom: 5px; height: 2px; border-radius: 2px; background: linear-gradient(90deg, transparent, var(--ds-brand), transparent) no-repeat; background-size: 40% 100%; animation: dsScan 1.1s linear infinite; }
+        @keyframes dsScan { from { background-position: -70% 0; } to { background-position: 170% 0; } }
+        .ds-lg-link { display: inline-flex; align-items: center; gap: 6px; height: 30px; margin-top: 10px; padding: 0 10px 0 6px; border-radius: 8px; font-size: 12.5px; font-weight: 500; color: var(--ds-brand); transition: background-color .12s; }
+        .ds-lg-link:hover:not(:disabled) { background: var(--ds-brand-soft); }
+        .ds-lg-link:disabled { opacity: .5; }
+        .ds-lg-link.is-back { margin: -6px 0 14px -6px; color: var(--ds-ink-3); }
+        .ds-lg-link.is-back:hover { background: var(--ds-tint); color: var(--ds-ink); }
+        .ds-lg-pw { margin-top: 12px; }
+        .ds-lg-pw label b { font-weight: 600; color: var(--ds-ink); }
+        .ds-lg-check { position: relative; display: flex; align-items: center; gap: 8px; width: fit-content; margin: 2px 0 14px; font-size: 12.5px; color: var(--ds-ink-2); cursor: pointer; user-select: none; }
+        .ds-lg-check input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+        .ds-lg-check .ds-cbox { flex: none; display: grid; place-items: center; width: 16px; height: 16px; border: 1.5px solid var(--ds-line-strong); border-radius: 4px; background: #fff; color: #fff; transition: background-color .12s, border-color .12s; }
+        .ds-lg-check input:checked + .ds-cbox { background: var(--ds-brand); border-color: var(--ds-brand); }
+        .ds-lg-check input:not(:checked) + .ds-cbox svg { opacity: 0; }
+        .ds-lg-check input:focus-visible + .ds-cbox { outline: 2px solid var(--ds-brand); outline-offset: 2px; }
+        .ds-lg-saved-go { margin-top: 16px; }
+        .ds-login-go:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(0,104,172,.24); }   /* nút tự focus lúc mở app (Enter = kết nối): vòng mềm thay viền đôi */
+        .ds-login-go .ds-lg-db { overflow: hidden; max-width: 230px; text-overflow: ellipsis; white-space: nowrap; }
+        .ds-lg-secure { display: flex; align-items: flex-start; gap: 7px; margin: 14px 0 0; font-size: 11.5px; line-height: 1.5; color: var(--ds-ink-3); }
+        .ds-lg-secure svg { flex: none; margin-top: 1px; color: var(--ds-ok-ink); }
+        /* Màn thấp (1366×768: 5 thẻ + ô mật khẩu cao ~800px): thu khoảng cách để khỏi phải cuộn */
+        @media (max-height: 820px) { .ds-login-logo { margin-bottom: 18px; } .ds-lgc-list { gap: 6px; } .ds-lgc-main { padding-top: 8px; padding-bottom: 8px; } .ds-lg-link { margin-top: 6px; } .ds-lg-pw { margin-top: 8px; } }
+        @media (max-width: 900px) { .ds-login { grid-template-columns: 1fr; } .ds-login-art { display: none; } .ds-login-side { border-left: 0; } .ds-lg-rail { display: none; } }
+        @media (prefers-reduced-motion: reduce) { .ds-fc { animation: none; } .ds-lg-rail::after, .ds-lgc.is-busy::after { animation: none; } .ds-lg-trk { display: none; } }
 
         /* ===== BỘ LỌC NÂNG CAO (27/09/2026): panel "Bộ lọc khác" + chọn ô lọc hiện ngoài thanh lọc =====
            Lưới ô lọc đang ẩn · Xoá tất cả · Cấu hình tham số lọc (công tắc, tối đa 4 ô ra ngoài, kéo đổi thứ tự) · Đóng / Lọc.
@@ -1822,6 +1906,8 @@ window.showConnectionLost = function() {
                 // Bộ lọc Thời gian — lùi / tới 1 năm (v1.10.7)
                 "chevrons-left": '<path d="m11 17-5-5 5-5"/><path d="m18 17-5-5 5-5"/>',
                 "chevrons-right": '<path d="m6 17 5-5-5-5"/><path d="m13 17 5-5-5-5"/>',
+                // Màn đăng nhập "Kết nối gần đây" — dòng mật khẩu mã hoá (v1.10.8)
+                "shield-check": '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
             };
             return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" className={className} dangerouslySetInnerHTML={{ __html: icons[name] || '' }} />;
         };
@@ -4479,6 +4565,270 @@ window.showConnectionLost = function() {
             );
         };
 
+        // ===== MÀN ĐĂNG NHẬP — NỬA PHẢI (v1.10.8, Trum 30/09 — phương án B "Kết nối gần đây" + họa tiết công nghệ) =====
+        // Mở app → thẻ kết nối dùng gần nhất chọn sẵn, bấm Kết nối (Enter / bấm đúp thẻ) là vào. Danh sách + mật khẩu do MÁY CHỦ giữ
+        // (server.py "KẾT NỐI ĐÃ LƯU": %LocalAppData%\iPOS_Ledger_Studio\saved_logins.json, mật khẩu mã hoá DPAPI) — trang chỉ nhận
+        // máy chủ / CSDL / tài khoản + cờ has_pw, đăng nhập bằng thẻ gửi saved_id. "Kết nối khác" = form 4 ô như cũ + Ghi nhớ mật khẩu.
+        // Phiên đăng nhập chỉ sống trong 1 lần chạy app (phiên RAM phía máy chủ) → tắt app mở lại luôn về màn này.
+        const LOGIN_SAVED_MAX = 5;   // = _SAVED_MAX (server.py)
+
+        const loginAgo = (sec) => {
+            if (!sec) return '';
+            const d = Date.now() / 1000 - sec, t = new Date(sec * 1000), now = new Date();
+            if (d < 60) return 'vừa xong';
+            if (d < 3600) return `${Math.floor(d / 60)} phút trước`;
+            const days = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()) - new Date(t.getFullYear(), t.getMonth(), t.getDate())) / 86400000);
+            if (days <= 0) return `${Math.floor(d / 3600)} giờ trước`;
+            if (days === 1) return 'hôm qua';
+            if (days < 7) return `${days} ngày trước`;
+            return fmtDMY(t);
+        };
+
+        // Mạch in 1 góc (khung 300×230 = viewBox, gốc phải-trên); góc trái-dưới = cùng hình xoay 180°. Mạch là SVG TĨNH; vạch sáng
+        // chạy trên đoạn thẳng là <span> đặt theo % toạ độ viewBox (x/300, y/230), chạy bằng transform trong khe overflow: hidden
+        // → card đồ hoạ tự lo, không vẽ lại. Đo 30/09: xung cũ vẽ bằng animation stroke-dashoffset trong SVG làm CPU Chrome lúc
+        // đứng yên ở màn đăng nhập 4,5% → 9,0% một nhân (bỏ xung còn 3,5%) — đừng quay lại animate thuộc tính SVG.
+        const LOGIN_CIRCUIT = (
+            <>
+                <svg viewBox="0 0 300 230">
+                    <path className="tr" d="M300 22 H238 L214 46 H128" />
+                    <path className="tr" d="M300 64 H252 L238 78 V120 L222 136 H158" />
+                    <path className="tr" d="M300 108 H278 L264 122 V196" />
+                    <path className="tr" d="M128 60 H160 L176 76 V94" />
+                    <path className="tr" d="M96 78 V104 L110 118 H126" />
+                    <path className="tr" d="M108 30 V0" />
+                    <path className="tr" d="M84 30 V16 L68 0" />
+                    <path className="tr" d="M72 46 H40 L26 32 V0" />
+                    <rect className="chip" x="72" y="30" width="56" height="48" rx="6" />
+                    <rect className="core" x="84" y="42" width="32" height="24" rx="3" />
+                    <circle className="pad" cx="158" cy="136" r="3.5" /><circle className="pad" cx="264" cy="196" r="3.5" />
+                    <circle className="pad" cx="176" cy="94" r="3.5" /><circle className="pad" cx="126" cy="118" r="3.5" />
+                    <circle className="via" cx="200" cy="100" r="2" /><circle className="via" cx="246" cy="160" r="2" />
+                    <circle className="via" cx="286" cy="150" r="2" /><circle className="via" cx="150" cy="18" r="2" />
+                </svg>
+                <span className="ds-lg-trk is-h" style={{ left: '79.333%', top: '9.565%', width: '20.667%' }}><i></i></span>
+                <span className="ds-lg-trk is-h" style={{ left: '42.667%', top: '20%', width: '28.667%' }}><i style={{ animationDelay: '-1.7s' }}></i></span>
+                <span className="ds-lg-trk is-h" style={{ left: '52.667%', top: '59.13%', width: '21.333%' }}><i style={{ animationDelay: '-3.2s' }}></i></span>
+                <span className="ds-lg-trk is-v" style={{ left: '88%', top: '53.043%', height: '32.174%' }}><i style={{ animationDelay: '-0.8s' }}></i></span>
+                <span className="ds-lg-trk is-v is-up" style={{ left: '8.667%', top: '0%', height: '13.913%' }}><i style={{ animationDelay: '-2.5s' }}></i></span>
+            </>
+        );
+        const LoginTech = React.memo(() => (
+            <div className="ds-lg-tech" aria-hidden="true">
+                <div className="ds-lg-dots"></div>
+                <div className="ds-lg-rail"></div>
+                <div className="ds-lg-circuit is-tr">{LOGIN_CIRCUIT}</div>
+                <div className="ds-lg-circuit is-bl">{LOGIN_CIRCUIT}</div>
+            </div>
+        ));
+
+        const LoginPanel = ({ appVersion, blocked, onLoggedIn }) => {
+            const [saved, setSaved] = useState(null);         // null = đang đọc danh sách; [] = chưa có kết nối nào
+            const [canSavePw, setCanSavePw] = useState(true);
+            const [selId, setSelId] = useState(null);
+            const [mode, setMode] = useState('saved');        // 'saved' = thẻ kết nối gần đây · 'form' = nhập 4 ô
+            const [form, setForm] = useState(() => {
+                let server = '', database = '';
+                try { server = localStorage.getItem('iacc_server') || ''; database = localStorage.getItem('iacc_db') || ''; } catch (e) {}
+                return { driver: 'SQL Server', server, database, user: '', password: '' };
+            });
+            const [pw, setPw] = useState('');                 // mật khẩu gõ cho thẻ chưa lưu mật khẩu / mật khẩu đã lưu bị từ chối
+            const [needPw, setNeedPw] = useState(false);
+            const [remember, setRemember] = useState(true);
+            const [showPw, setShowPw] = useState(false);      // nút con mắt (chỉ đổi type ô mật khẩu)
+            const [busy, setBusy] = useState(false);
+            const [error, setError] = useState('');
+            const [confirmDel, setConfirmDel] = useState(null);
+            const pwRef = useRef(null);
+
+            useEffect(() => {
+                fetch('/api/saved_logins').then(r => r.json()).then(res => {
+                    const items = res.items || [];
+                    setSaved(items);
+                    setCanSavePw(res.can_save_pw !== false);
+                    if (items.length) setSelId(items[0].id); else setMode('form');
+                }).catch(() => { setSaved([]); setMode('form'); });
+            }, []);
+
+            const sel = (saved || []).find(s => s.id === selId) || null;
+            const askPw = mode === 'saved' && !!sel && (needPw || !sel.has_pw);
+
+            const pick = (id) => {
+                if (id === selId) return;
+                setSelId(id); setPw(''); setNeedPw(false); setShowPw(false); setError(''); setConfirmDel(null);
+            };
+
+            const login = async (body) => {
+                setBusy(true); setError('');
+                try {
+                    const r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                    const res = await r.json();
+                    if (res.status === 'ok') {
+                        try { localStorage.setItem('iacc_server', res.server || ''); localStorage.setItem('iacc_db', res.database || ''); } catch (e) {}
+                        await onLoggedIn();
+                        return;
+                    }
+                    setError(res.message || 'Không kết nối được máy chủ.');
+                    if (res.need_password) { setNeedPw(true); setPw(''); setTimeout(() => pwRef.current && pwRef.current.focus(), 0); }
+                    if (res.items) {   // thẻ vừa bấm không còn trong danh sách (xoá ở cửa sổ khác)
+                        setSaved(res.items);
+                        setSelId(res.items.length ? res.items[0].id : null);
+                        if (!res.items.length) setMode('form');
+                    }
+                } catch (err) {
+                    setError(viErr('Failed to fetch'));
+                } finally {
+                    setBusy(false);
+                }
+            };
+
+            // Bấm đúp / Enter trên thẻ: thẻ đã lưu mật khẩu thì vào luôn, chưa có (hoặc vừa bị từ chối) thì chờ gõ mật khẩu
+            const quick = (s) => {
+                if (busy) return;
+                const rejected = s.id === selId && needPw;
+                pick(s.id);
+                if (s.has_pw && !rejected) login({ saved_id: s.id });
+                else setTimeout(() => pwRef.current && pwRef.current.focus(), 0);
+            };
+            const cardKey = (e, i) => {
+                if (e.key === 'Enter') { e.preventDefault(); quick(saved[i]); return; }
+                if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+                e.preventDefault();
+                const j = (i + (e.key === 'ArrowDown' ? 1 : saved.length - 1)) % saved.length;
+                pick(saved[j].id);
+                const btn = e.currentTarget.closest('.ds-lgc-list').querySelectorAll('.ds-lgc')[j];
+                const main = btn && btn.querySelector('.ds-lgc-main');
+                if (main) main.focus();
+            };
+            const connectSaved = (e) => {
+                e.preventDefault();
+                if (!sel || busy) return;
+                if (!askPw) login({ saved_id: sel.id });
+                else if (pw) login({ saved_id: sel.id, password: pw, remember });
+                else if (pwRef.current) pwRef.current.focus();
+            };
+            const connectForm = (e) => {
+                e.preventDefault();
+                if (!busy) login({ ...form, remember });
+            };
+            // "Kết nối khác": giữ máy chủ + tài khoản của thẻ đang chọn (hay đổi CSDL trên cùng máy chủ), để trống CSDL + mật khẩu
+            const openForm = () => {
+                if (sel) setForm(f => ({ ...f, server: sel.server, user: sel.user, database: '', password: '' }));
+                setMode('form'); setError(''); setShowPw(false); setRemember(true); setConfirmDel(null);
+            };
+            const backToSaved = () => { setMode('saved'); setError(''); setShowPw(false); setRemember(true); };
+            const delSaved = async (id) => {
+                try {
+                    const r = await fetch('/api/saved_logins/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+                    const res = await r.json();
+                    const items = res.items || [];
+                    setSaved(items); setConfirmDel(null);
+                    if (!items.some(s => s.id === selId)) { setSelId(items.length ? items[0].id : null); setPw(''); setNeedPw(false); setError(''); }
+                    if (!items.length) setMode('form');
+                    if (res.status !== 'ok') setError(res.message || 'Không xoá được kết nối.');
+                } catch (err) {
+                    setError(viErr('Failed to fetch'));
+                }
+            };
+
+            const eyeBtn = (
+                <button type="button" tabIndex={-1} onMouseDown={e => e.preventDefault()} onClick={() => setShowPw(v => !v)} className="ds-iconbtn ds-eye" title={showPw ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}><Icon name={showPw ? 'eye-off' : 'eye'} size={16} stroke={2} /></button>
+            );
+            const rememberBox = canSavePw && (
+                <label className="ds-lg-check">
+                    <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} />
+                    <span className="ds-cbox"><Icon name="check" size={11} stroke={3} /></span>
+                    Ghi nhớ mật khẩu trên máy này
+                </label>
+            );
+            const errBox = error && <div className="ds-note is-bad mb-3"><Icon name="alert-circle" size={15} stroke={2} /><ErrText text={error} /></div>;
+            const goLabel = (txt) => busy
+                ? <><Icon name="loader" size={15} className="animate-spin" /> Đang kết nối</>
+                : <>{txt}<Icon name="arrow-right" size={15} stroke={2} className="ds-arrow" /></>;
+            const firstEmpty = !form.server ? 'server' : !form.database ? 'database' : !form.user ? 'user' : 'password';
+
+            return (
+                <div className={`ds-login-side${blocked ? ' ds-login-blocked' : ''}`}>
+                    <LoginTech />
+                    <div className="ds-login-form">
+                        <div className="ds-login-logo">
+                            <svg viewBox="0 0 200 200" width="44" height="44" aria-hidden="true">
+                                <rect width="200" height="200" rx="45" fill="#FF9D3D"/>
+                                <rect x="40" y="40" width="120" height="120" rx="30" fill="none" stroke="white" strokeWidth="20"/>
+                            </svg>
+                            <div>
+                                <h1>{APP_NAME}</h1>
+                                <span>Tra cứu sổ sách và báo cáo kế toán iPOS</span>
+                            </div>
+                        </div>
+
+                        {saved === null ? <div className="ds-lg-wait"></div> : (mode === 'saved' && sel) ? (
+                            <form onSubmit={connectSaved}>
+                                <div className="ds-lg-h"><span>Kết nối gần đây</span><span>{saved.length}/{LOGIN_SAVED_MAX}</span></div>
+                                <div className="ds-lgc-list" role="radiogroup" aria-label="Kết nối gần đây">
+                                    {saved.map((s, i) => confirmDel === s.id ? (
+                                        <div key={s.id} className="ds-lgc is-del">
+                                            <span>Xoá <b>{s.database}</b> khỏi danh sách?</span>
+                                            <button type="button" className="ds-btn" onClick={() => setConfirmDel(null)}>Không</button>
+                                            <button type="button" className="ds-btn ds-btn-danger" autoFocus onClick={() => delSaved(s.id)}>Xoá</button>
+                                        </div>
+                                    ) : (
+                                        <div key={s.id} className={`ds-lgc${s.id === selId ? ' is-on' : ''}${busy && s.id === selId ? ' is-busy' : ''}`}>
+                                            <button type="button" role="radio" aria-checked={s.id === selId} className="ds-lgc-main" disabled={busy}
+                                                onClick={() => pick(s.id)} onDoubleClick={() => quick(s)} onKeyDown={e => cardKey(e, i)}>
+                                                <span className="ds-lgc-ic"><Icon name="database" size={18} stroke={2} /></span>
+                                                <span className="ds-lgc-txt"><b>{s.database}</b><small>{s.server} · {s.user}</small></span>
+                                                <span className="ds-lgc-meta">
+                                                    <span>{loginAgo(s.last_used)}</span>
+                                                    {s.has_pw ? <span title="Đã lưu mật khẩu"><Icon name="lock" size={12} stroke={2} /></span> : <span>chưa lưu mật khẩu</span>}
+                                                </span>
+                                            </button>
+                                            <button type="button" className="ds-lgc-del" disabled={busy} title="Xoá khỏi danh sách" aria-label={`Xoá ${s.database} khỏi danh sách`}
+                                                onClick={() => setConfirmDel(s.id)}><Icon name="x" size={12} stroke={2.5} /></button>
+                                        </div>
+                                    ))}
+                                </div>
+                                <button type="button" className="ds-lg-link" disabled={busy} onClick={openForm}><Icon name="plus" size={14} stroke={2.2} />Kết nối khác</button>
+                                {askPw && (
+                                    <div className="ds-fld ds-lg-pw">
+                                        <label htmlFor="lg-spw">Mật khẩu của <b>{sel.user}</b></label>
+                                        <div className="ds-ipt"><Icon name="lock" size={16} stroke={2} />
+                                            <input id="lg-spw" ref={pwRef} required autoFocus type={showPw ? 'text' : 'password'} className="has-eye" autoComplete="current-password"
+                                                value={pw} onChange={e => setPw(e.target.value)} placeholder="••••••••" />
+                                            {eyeBtn}
+                                        </div>
+                                    </div>
+                                )}
+                                {askPw && rememberBox}
+                                {errBox}
+                                <button type="submit" disabled={busy} autoFocus={!askPw} className={`ds-btn ds-btn-pri ds-login-go${askPw ? '' : ' ds-lg-saved-go'}`}>
+                                    {goLabel(<>Kết nối <span className="ds-lg-db">{sel.database}</span></>)}
+                                </button>
+                            </form>
+                        ) : (
+                            <form onSubmit={connectForm}>
+                                {saved.length > 0 && <button type="button" className="ds-lg-link is-back" disabled={busy} onClick={backToSaved}><Icon name="chevron-left" size={14} stroke={2.2} />Kết nối gần đây</button>}
+                                <div className="ds-fld"><label htmlFor="lg-server">Máy chủ</label><div className="ds-ipt"><Icon name="server" size={16} stroke={2} /><input id="lg-server" required autoFocus={firstEmpty === 'server'} value={form.server} onChange={e => setForm({ ...form, server: e.target.value })}/></div></div>
+                                <div className="ds-fld"><label htmlFor="lg-db">Cơ sở dữ liệu</label><div className="ds-ipt"><Icon name="database" size={16} stroke={2} /><input id="lg-db" required autoFocus={firstEmpty === 'database'} value={form.database} onChange={e => setForm({ ...form, database: e.target.value })}/></div></div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="ds-fld"><label htmlFor="lg-user">Tài khoản</label><div className="ds-ipt"><Icon name="user" size={16} stroke={2} /><input id="lg-user" required autoFocus={firstEmpty === 'user'} value={form.user} onChange={e => setForm({ ...form, user: e.target.value })} placeholder="sa"/></div></div>
+                                    <div className="ds-fld"><label htmlFor="lg-pw">Mật khẩu</label><div className="ds-ipt"><Icon name="lock" size={16} stroke={2} />
+                                        <input id="lg-pw" required autoFocus={firstEmpty === 'password'} type={showPw ? 'text' : 'password'} className="has-eye" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} placeholder="••••••••"/>
+                                        {eyeBtn}
+                                    </div></div>
+                                </div>
+                                {rememberBox}
+                                {errBox}
+                                <button disabled={busy} type="submit" className="ds-btn ds-btn-pri ds-login-go">{goLabel('Kết nối ')}</button>
+                            </form>
+                        )}
+                        {canSavePw && saved !== null && <p className="ds-lg-secure"><Icon name="shield-check" size={14} stroke={2} />Mật khẩu đã lưu được mã hoá theo tài khoản Windows, chỉ dùng được trên máy này.</p>}
+                    </div>
+                    <div className="ds-login-foot"><span>© {new Date().getFullYear()} iPOS.vn · IACC</span><span>{appVersion}</span></div>
+                </div>
+            );
+        };
+
         const App = () => {
             const appVersion = useAppVersion();   // lấy từ /api/version — hiện ở màn hình login + header
             const autoUpdate = useAutoUpdate();   // kiểm tra + tự cập nhật bản mới từ GitHub Releases
@@ -4513,9 +4863,6 @@ window.showConnectionLost = function() {
             const showNotice = (message, title = 'Thông báo') => setNoticeModal({ title, message });
             const [meta, setMeta] = useState({ accounts: [], orgs: [], pr_details: [], tran_ids: [], jobs: [], items: [], products: [], expenses: [], warehouses: [], db_info: {}, global_total: 0 });
             const [loading, setLoading] = useState(false);
-            const [loginLoading, setLoginLoading] = useState(false);
-            const [loginError, setLoginError] = useState("");
-            const [showPw, setShowPw] = useState(false);   // nút con mắt ở ô Mật khẩu (chỉ đổi type input)
             const [activeDropdown, setActiveDropdown] = useState(null);
             const [timeMode, setTimeMode] = useState('month');   // bộ lọc Thời gian: lần mở sau vào đúng chế độ vừa chọn (ngày / tuần / tháng)
             const [queryTiming, setQueryTiming] = useState(null);   // đo lần Truy vấn sổ cái gần nhất (thanh trạng thái)
@@ -4554,7 +4901,6 @@ window.showConnectionLost = function() {
                 return { field: null, dir: 'desc' };
             };
 
-            const [loginData, setLoginData] = useState({ driver: "SQL Server", server: localStorage.getItem("iacc_server") || "", database: localStorage.getItem("iacc_db") || "", user: "", password: "" });
             const [showDriverDialog, setShowDriverDialog] = useState(false);
             const [driverInstalling, setDriverInstalling] = useState(false);
             const [driverDropdownOpen, setDriverDropdownOpen] = useState(false);
@@ -4585,33 +4931,19 @@ window.showConnectionLost = function() {
                     else return r.json();
                 }).then(res => { if(res) { setMeta(res); setIsLoggedIn(true); } })
                   .catch(err => { if (window.isNetworkError(err)) window.showConnectionLost(); });
+
+                // Giữ 1 kết nối /api/presence suốt lúc trang mở (v1.10.8): máy chủ không theo dõi được cửa sổ (Chrome bàn giao cho
+                // instance cũ, trình duyệt mặc định) thì tự tắt khi không còn trang nào giữ kết nối — tắt app là tắt hẳn (_watch_presence).
+                let presence = null;
+                try { presence = new EventSource('/api/presence'); } catch (e) {}
+                return () => { if (presence) presence.close(); };
             }, []);
 
-            const handleLogin = async (e) => {
-                e.preventDefault();
-                setLoginLoading(true);
-                setLoginError("");
-                try {
-                    const r = await fetch('/api/login', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(loginData)
-                    });
-                    const res = await r.json();
-                    if (res.status === 'ok') {
-                        localStorage.setItem("iacc_server", loginData.server);
-                        localStorage.setItem("iacc_db", loginData.database);
-                        setIsLoggedIn(true);
-                        const metaRes = await fetch('/api/metadata').then(r => r.json());
-                        setMeta(metaRes);
-                    } else {
-                        setLoginError(res.message);
-                    }
-                } catch (err) {
-                    setLoginError(viErr('Failed to fetch'));
-                } finally {
-                    setLoginLoading(false);
-                }
+            // LoginPanel gọi sau khi /api/login trả ok — như handleLogin cũ: vào app rồi mới nạp danh mục
+            const handleLoggedIn = async () => {
+                setIsLoggedIn(true);
+                const metaRes = await fetch('/api/metadata').then(r => r.json());
+                setMeta(metaRes);
             };
 
             const handleLogout = async () => {
@@ -6483,40 +6815,8 @@ window.showConnectionLost = function() {
                             </div>
                         </div>
 
-                        {/* Phải: form kết nối — logic như cũ (handleLogin, loginData) */}
-                        <div className={`ds-login-side${autoUpdate.hasForceUpdate ? ' ds-login-blocked' : ''}`}>
-                            <div className="ds-login-form">
-                                <div className="ds-login-logo">
-                                    <svg viewBox="0 0 200 200" width="44" height="44" aria-hidden="true">
-                                        <rect width="200" height="200" rx="45" fill="#FF9D3D"/>
-                                        <rect x="40" y="40" width="120" height="120" rx="30" fill="none" stroke="white" strokeWidth="20"/>
-                                    </svg>
-                                    <div>
-                                        <h1>{APP_NAME}</h1>
-                                        <span>Tra cứu sổ sách và báo cáo kế toán iPOS</span>
-                                    </div>
-                                </div>
-
-                                <form onSubmit={handleLogin}>
-                                    <div className="ds-fld"><label htmlFor="lg-server">Máy chủ</label><div className="ds-ipt"><Icon name="server" size={16} stroke={2} /><input id="lg-server" required value={loginData.server} onChange={e => setLoginData({...loginData, server: e.target.value})}/></div></div>
-                                    <div className="ds-fld"><label htmlFor="lg-db">Cơ sở dữ liệu</label><div className="ds-ipt"><Icon name="database" size={16} stroke={2} /><input id="lg-db" required value={loginData.database} onChange={e => setLoginData({...loginData, database: e.target.value})}/></div></div>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div className="ds-fld"><label htmlFor="lg-user">Tài khoản</label><div className="ds-ipt"><Icon name="user" size={16} stroke={2} /><input id="lg-user" required value={loginData.user} onChange={e => setLoginData({...loginData, user: e.target.value})} placeholder="sa"/></div></div>
-                                        <div className="ds-fld"><label htmlFor="lg-pw">Mật khẩu</label><div className="ds-ipt"><Icon name="lock" size={16} stroke={2} />
-                                            <input id="lg-pw" required type={showPw ? 'text' : 'password'} className="has-eye" value={loginData.password} onChange={e => setLoginData({...loginData, password: e.target.value})} placeholder="••••••••"/>
-                                            <button type="button" tabIndex={-1} onMouseDown={e => e.preventDefault()} onClick={() => setShowPw(v => !v)} className="ds-iconbtn ds-eye" title={showPw ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}><Icon name={showPw ? 'eye-off' : 'eye'} size={16} stroke={2} /></button>
-                                        </div></div>
-                                    </div>
-
-                                    {loginError && <div className="ds-note is-bad mb-3"><Icon name="alert-circle" size={15} stroke={2} /><ErrText text={loginError} /></div>}
-
-                                    <button disabled={loginLoading} type="submit" className="ds-btn ds-btn-pri ds-login-go">
-                                        {loginLoading ? <><Icon name="loader" size={15} className="animate-spin" /> Đang kết nối</> : <>Kết nối <Icon name="arrow-right" size={15} stroke={2} className="ds-arrow" /></>}
-                                    </button>
-                                </form>
-                            </div>
-                            <div className="ds-login-foot"><span>© {new Date().getFullYear()} iPOS.vn · IACC</span><span>{appVersion}</span></div>
-                        </div>
+                        {/* Phải: kết nối gần đây + form nhập mới (LoginPanel, v1.10.8) */}
+                        <LoginPanel appVersion={appVersion} blocked={autoUpdate.hasForceUpdate} onLoggedIn={handleLoggedIn} />
 
                         {showDriverDialog && (
                             <div className="ds-scrim z-[9999]">

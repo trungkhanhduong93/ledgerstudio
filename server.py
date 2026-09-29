@@ -121,6 +121,65 @@ CORS(app, supports_credentials=True,
      origins=[r"http://localhost:5050", r"http://127.0.0.1:5050"])
 
 
+# ===== PHIÊN ĐĂNG NHẬP CHỈ SỐNG TRONG 1 LẦN CHẠY APP (v1.10.8, Trum 30/09) =====
+# Trước đây phiên là cookie Flask: chỉ KÝ (khoá .session_key lưu file), KHÔNG mã hoá, chứa nguyên db_config kể cả mật khẩu → ai
+# đọc được cookie là đọc được mật khẩu; cửa sổ Chrome cũ còn sống (bàn giao, chạy nền) thì mở lại app vẫn vào thẳng vì khoá cũ còn
+# khớp. Nay phiên nằm trong RAM của tiến trình, cookie chỉ giữ 1 mã ngẫu nhiên → tắt app (tiến trình chết) là hết phiên, lần mở sau
+# phải đăng nhập lại; F5 trong cùng lần chạy vẫn giữ phiên. Mọi chỗ gọi session.get('db_config') giữ nguyên.
+from flask.sessions import SessionInterface, SessionMixin
+from werkzeug.datastructures import CallbackDict
+import secrets
+
+_ram_sessions = {}
+_ram_sessions_lock = threading.Lock()
+_SID_COOKIE = "ds_sid"
+
+
+class _RamSession(CallbackDict, SessionMixin):
+    def __init__(self, initial=None, sid=None):
+        def on_update(s):
+            s.modified = True
+        CallbackDict.__init__(self, initial, on_update)
+        self.sid = sid
+        self.modified = False
+
+
+class _RamSessionInterface(SessionInterface):
+    def open_session(self, app, request):
+        sid = request.cookies.get(_SID_COOKIE)
+        with _ram_sessions_lock:
+            data = _ram_sessions.get(sid) if sid else None
+        return _RamSession(dict(data) if data else None, sid if data else None)
+
+    def save_session(self, app, sess, response):
+        if not sess.modified:
+            return
+        if not sess:   # đăng xuất: bỏ phiên + xoá cookie
+            if sess.sid:
+                with _ram_sessions_lock:
+                    _ram_sessions.pop(sess.sid, None)
+            response.delete_cookie(_SID_COOKIE, path="/")
+            return
+        sid = sess.sid or secrets.token_urlsafe(32)
+        with _ram_sessions_lock:
+            _ram_sessions[sid] = dict(sess)
+        if sid != sess.sid:
+            response.set_cookie(_SID_COOKIE, sid, httponly=True, samesite="Strict", path="/")
+
+
+app.session_interface = _RamSessionInterface()
+
+
+@app.before_request
+def _only_localhost():
+    """Chặn DNS rebinding: trang web lạ trỏ tên miền của nó về 127.0.0.1 thì trình duyệt coi là CÙNG nguồn → CORS không chặn,
+    đọc được API và đăng nhập bằng mật khẩu đã lưu (v1.10.8). App luôn mở bằng http://localhost:5050 → chỉ nhận Host
+    localhost / 127.0.0.1."""
+    host = (request.host or '').rsplit(':', 1)[0].lower()
+    if host not in ('localhost', '127.0.0.1'):
+        return jsonify({"status": "error", "message": "Chỉ mở được từ chính ứng dụng trên máy này."}), 403
+
+
 def _is_local_request():
     """True nếu request đến từ chính trang app (localhost), hoặc không có Origin/Referer (gọi trực tiếp,
     không phải từ trang web khác). Dùng chặn web lạ ép các hành động nhạy cảm (cập nhật, cài driver)
@@ -626,10 +685,181 @@ def _login_error_message(e, server_name):
                 f'{_VI_DETAIL} ' + (_err_brief(text) if text else f'quá {_LOGIN_WAIT} giây chưa kết nối được'))
     return _vi_error_text(e)
 
+
+# ===== KẾT NỐI ĐÃ LƯU (v1.10.8, Trum 30/09): màn đăng nhập "Kết nối gần đây" =====
+# Tối đa _SAVED_MAX kết nối dùng gần nhất (máy chủ, CSDL, tài khoản, driver, lần dùng cuối) ở
+# %LocalAppData%\iPOS_Ledger_Studio\saved_logins.json — cạnh AppProfile của cửa sổ app, không nằm trong Downloads.
+# Mật khẩu (khi để "Ghi nhớ mật khẩu") mã hoá bằng DPAPI của Windows theo tài khoản Windows đang đăng nhập: user khác / máy khác
+# chép file đi cũng không giải được. Mật khẩu KHÔNG bao giờ gửi ngược về trang: đăng nhập bằng thẻ đã lưu chỉ gửi saved_id,
+# máy chủ tự giải mã. Lưu hỏng / không mã hoá được thì bỏ qua — không bao giờ làm hỏng lần đăng nhập.
+import base64
+
+_SAVED_MAX = 5
+_saved_lock = threading.Lock()
+_DPAPI_ENTROPY = b"DataStudio.saved_logins.v1"
+
+
+def _saved_logins_path():
+    if platform.system() == "Windows":
+        base = os.path.join(os.environ.get("LocalAppData", os.path.expanduser(r"~\AppData\Local")), "iPOS_Ledger_Studio")
+    else:
+        base = os.path.expanduser("~/.ipos_ledger_studio")
+    return os.path.join(base, "saved_logins.json")
+
+
+def _dpapi(data, protect):
+    """CryptProtectData / CryptUnprotectData (crypt32) qua ctypes — không cần pywin32. Lỗi → OSError."""
+    import ctypes
+    from ctypes import wintypes
+
+    class Blob(ctypes.Structure):
+        _fields_ = [("cbData", wintypes.DWORD), ("pbData", ctypes.c_void_p)]
+
+    crypt32 = ctypes.WinDLL("crypt32", use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    fn = crypt32.CryptProtectData if protect else crypt32.CryptUnprotectData
+    fn.argtypes = [ctypes.POINTER(Blob), ctypes.c_void_p, ctypes.POINTER(Blob), ctypes.c_void_p, ctypes.c_void_p,
+                   wintypes.DWORD, ctypes.POINTER(Blob)]
+    fn.restype = wintypes.BOOL
+    kernel32.LocalFree.argtypes = [ctypes.c_void_p]
+    kernel32.LocalFree.restype = ctypes.c_void_p
+    src = ctypes.create_string_buffer(data, len(data))
+    ent = ctypes.create_string_buffer(_DPAPI_ENTROPY, len(_DPAPI_ENTROPY))
+    b_in = Blob(len(data), ctypes.cast(src, ctypes.c_void_p))
+    b_ent = Blob(len(_DPAPI_ENTROPY), ctypes.cast(ent, ctypes.c_void_p))
+    b_out = Blob()
+    if not fn(ctypes.byref(b_in), None, ctypes.byref(b_ent), None, None, 0x1, ctypes.byref(b_out)):   # 0x1 = UI_FORBIDDEN
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        return ctypes.string_at(b_out.pbData, b_out.cbData)
+    finally:
+        kernel32.LocalFree(b_out.pbData)
+
+
+def _pw_protect(pw):
+    """Mật khẩu → chuỗi base64 đã mã hoá DPAPI. None: mật khẩu rỗng / không phải Windows / mã hoá lỗi (lưu kết nối không mật khẩu)."""
+    if not pw or platform.system() != "Windows":
+        return None
+    try:
+        return base64.b64encode(_dpapi(pw.encode("utf-8"), True)).decode("ascii")
+    except Exception:
+        logger.exception("Khong ma hoa duoc mat khau luu")
+        return None
+
+
+def _pw_unprotect(blob):
+    """None nếu không có / không giải được (file chép từ user Windows khác, hỏng) → trang hỏi lại mật khẩu."""
+    if not blob or platform.system() != "Windows":
+        return None
+    try:
+        return _dpapi(base64.b64decode(blob), False).decode("utf-8")
+    except Exception:
+        return None
+
+
+def _saved_key(server, database, user):
+    raw = "|".join(str(x or "").strip().lower() for x in (server, database, user))
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def _saved_read():
+    try:
+        with open(_saved_logins_path(), "r", encoding="utf-8") as f:
+            items = json.load(f).get("items") or []
+    except (OSError, ValueError, AttributeError):
+        return []
+    return [x for x in items if isinstance(x, dict) and x.get("server") and x.get("database") and x.get("user")]
+
+
+def _saved_public(items):
+    """Danh sách gửi trang — KHÔNG có mật khẩu, chỉ cờ has_pw."""
+    return [{"id": _saved_key(x["server"], x["database"], x["user"]), "server": x["server"], "database": x["database"],
+             "user": x["user"], "has_pw": bool(x.get("pw")), "last_used": x.get("last_used") or 0} for x in items]
+
+
+def _saved_write(items):
+    path = _saved_logins_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump({"v": 1, "items": items}, f, ensure_ascii=False, indent=1)
+    os.replace(tmp, path)
+
+
+def _saved_put(cfg, remember):
+    """Đưa kết nối vừa đăng nhập được lên đầu danh sách. remember True → lưu (thay) mật khẩu; False → bỏ mật khẩu đã lưu của kết
+    nối này; None → giữ nguyên (đăng nhập bằng thẻ đã lưu, không gõ lại mật khẩu)."""
+    try:
+        with _saved_lock:
+            key = _saved_key(cfg["server"], cfg["database"], cfg["user"])
+            items = _saved_read()
+            old = next((x for x in items if _saved_key(x["server"], x["database"], x["user"]) == key), None)
+            pw = old.get("pw") if old else None
+            if remember is True:
+                pw = _pw_protect(cfg["password"])
+            elif remember is False:
+                pw = None
+            entry = {"server": cfg["server"], "database": cfg["database"], "user": cfg["user"],
+                     "driver": cfg.get("driver") or "SQL Server", "pw": pw, "last_used": int(time.time())}
+            rest = [x for x in items if _saved_key(x["server"], x["database"], x["user"]) != key]
+            _saved_write([entry] + rest[:_SAVED_MAX - 1])
+    except Exception:
+        logger.exception("Khong luu duoc ket noi gan day")
+
+
+@app.route("/api/saved_logins")
+def saved_logins():
+    """Public (màn đăng nhập gọi trước khi có phiên). Chỉ tên máy chủ / CSDL / tài khoản — mật khẩu không bao giờ ra khỏi máy chủ."""
+    return jsonify({"status": "ok", "items": _saved_public(_saved_read()), "can_save_pw": platform.system() == "Windows"})
+
+
+@app.route("/api/saved_logins/delete", methods=["POST"])
+def saved_logins_delete():
+    sid = str((request.get_json(silent=True) or {}).get("id") or "")
+    with _saved_lock:
+        items = _saved_read()
+        keep = [x for x in items if _saved_key(x["server"], x["database"], x["user"]) != sid]
+        if len(keep) != len(items):
+            try:
+                _saved_write(keep)
+            except OSError as e:
+                return jsonify({"status": "error", "message": str(e), "items": _saved_public(items)}), 500
+    return jsonify({"status": "ok", "items": _saved_public(keep)})
+
+
+def _is_login_rejected(e):
+    """Sai tài khoản / mật khẩu (28000, 18456) — thẻ đã lưu thì trang mở ô nhập lại mật khẩu."""
+    text = str(e)
+    return (isinstance(e, pyodbc.Error) and e.args and e.args[0] == '28000') or '18456' in text or 'login failed' in text.lower()
+
+
 @app.route("/api/login", methods=["POST"])
 def login():
+    data, saved = {}, None
     try:
-        data = request.json
+        body = request.json
+        remember = body.get('remember') is not False
+        if body.get('saved_id'):
+            # Thẻ "Kết nối gần đây": máy chủ tự lấy mật khẩu đã lưu; trang chỉ gửi mật khẩu khi người dùng gõ lại
+            saved = next((x for x in _saved_read()
+                          if _saved_key(x["server"], x["database"], x["user"]) == str(body['saved_id'])), None)
+            if not saved:
+                return jsonify({"status": "error", "items": _saved_public(_saved_read()),
+                                "message": "Kết nối này không còn trong danh sách đã lưu. Chọn kết nối khác hoặc nhập lại thông tin."}), 404
+            typed = str(body.get('password') or '')
+            pw = typed or _pw_unprotect(saved.get('pw'))
+            if not pw:
+                return jsonify({"status": "error", "need_password": True,
+                                "message": "Không đọc được mật khẩu đã lưu trên máy này. Nhập lại mật khẩu." if saved.get('pw')
+                                else "Nhập mật khẩu để kết nối."}), 401
+            data = {'server': saved['server'], 'database': saved['database'], 'user': saved['user'],
+                    'driver': saved.get('driver') or 'SQL Server', 'password': pw}
+            if not typed:
+                remember = None
+        else:
+            data = {k: str(body.get(k) or '').strip() for k in ('server', 'database', 'user')}
+            data['password'] = str(body.get('password') or '')
+            data['driver'] = str(body.get('driver') or 'SQL Server')
         # Nếu đã login trước đó với config khác → đóng connection cũ
         old = session.get('db_config')
         if old:
@@ -644,9 +874,14 @@ def login():
 
         session['db_config'] = data
         _meta_cache.pop(data.get('database'), None)
-        return jsonify({"status": "ok", "message": "Kết nối SQL Server thành công!"})
+        _saved_put(data, remember)
+        return jsonify({"status": "ok", "message": "Kết nối SQL Server thành công!",
+                        "server": data['server'], "database": data['database']})
     except Exception as e:
-        return jsonify({"status": "error", "message": _login_error_message(e, (request.get_json(silent=True) or {}).get('server', ''))}), 401
+        res = {"status": "error", "message": _login_error_message(e, data.get('server', ''))}
+        if saved is not None and _is_login_rejected(e):
+            res["need_password"] = True
+        return jsonify(res), 401
 
 @app.route("/api/logout", methods=["POST"])
 def logout():
@@ -1938,6 +2173,7 @@ class _ExportSpool:
         fd, self.path = tempfile.mkstemp(prefix="ds_spool_", suffix=".tmp", dir=folder)
         self.fh = os.fdopen(fd, "w+b")
         self.count = 0
+        _live_spools.add(self)
 
     def mark(self):
         return self.fh.tell(), self.count
@@ -1968,6 +2204,7 @@ class _ExportSpool:
                 yield r
 
     def close(self):
+        _live_spools.discard(self)
         try:
             self.fh.close()
         except Exception:
@@ -1975,6 +2212,31 @@ class _ExportSpool:
         try:
             os.remove(self.path)
         except Exception:
+            pass
+
+
+# File tạm của các job đang chạy — tắt app giữa lúc xuất thì _shutdown_everything xoá luôn (mỗi file có thể vài chục MB)
+_live_spools = set()
+
+
+def _drop_live_spools():
+    for sp in list(_live_spools):
+        sp.close()
+
+
+def _cleanup_orphan_exports():
+    """Lúc mở app: xoá file tạm (%TEMP%\\ds_spool_*.tmp) và file Excel dở (*.part) của lần chạy trước bị tắt giữa lúc xuất.
+    Chỉ gọi lúc khởi động — tiến trình cũ đã bị kill_process_on_port tắt, chưa job nào chạy nên xoá hết, không cần chờ 6 giờ."""
+    for folder, test in ((tempfile.gettempdir(), lambda fn: fn.startswith("ds_spool_") and fn.endswith(".tmp")),
+                         (_export_dir(), lambda fn: fn.endswith(".part"))):
+        try:
+            for fn in os.listdir(folder):
+                if test(fn):
+                    try:
+                        os.remove(os.path.join(folder, fn))
+                    except OSError:
+                        pass
+        except OSError:
             pass
 
 
@@ -7930,9 +8192,55 @@ def _download_and_swap():
         _set_update_state(status="error", error_message=_vi_error_text(err, 'update'))
 
 
+# ===== CỬA SỔ APP CÒN MỞ KHÔNG (v1.10.8, Trum 30/09: "tắt app thì tự kill hết các tác vụ chạy ngầm") =====
+# launch_app_window chờ chính tiến trình Chrome --app nó mở: đóng cửa sổ → tắt server. Nhưng có đường KHÔNG theo dõi được: Chrome
+# "bàn giao" cửa sổ cho instance cũ đang sống (thoát < 5 s), máy không có Chrome/Edge (mở trình duyệt mặc định) — trước đây server
+# chạy ngầm mãi. Nay mỗi trang app giữ 1 kết nối /api/presence (EventSource); ở các đường đó _watch_presence tắt server khi không
+# còn trang nào giữ kết nối. Dùng kết nối giữ mở thay vì ping định kỳ: Chrome hãm hẹn giờ của cửa sổ thu nhỏ (ẩn > 5 phút còn
+# 1 lần/phút) → ping trễ là tắt nhầm lúc người dùng chỉ thu nhỏ app.
+_presence = {"n": 0, "since": time.time(), "seen": False}
+_presence_lock = threading.Lock()
+_PRESENCE_BEAT = 5   # giây — ghi 1 dòng giữ kết nối; trang đóng thì lần ghi sau hụt → Werkzeug đóng generator → finally
+
+
+def _app_log(msg, *args):
+    """1 dòng vào Downloads\\iPOS_Ledger_Studio\\logs\\datastudio.log (chung nhật ký xuất file) — mở/đóng trang, lý do tắt app."""
+    try:
+        if _export_log_path():
+            _xlog.info("[app] " + msg, *args)
+    except Exception:
+        pass
+
+
+@app.route("/api/presence")
+def presence():
+    def stream():
+        with _presence_lock:
+            _presence["n"] += 1
+            _presence["seen"] = True
+            n = _presence["n"]
+        _app_log("trang mo (presence %d)", n)
+        try:
+            yield "retry: 2000\n\n"
+            while True:
+                time.sleep(_PRESENCE_BEAT)
+                yield ": ping\n\n"
+        finally:
+            with _presence_lock:
+                _presence["n"] -= 1
+                _presence["since"] = time.time()
+                n = _presence["n"]
+            _app_log("trang dong (presence %d)", n)
+
+    resp = app.response_class(stream(), mimetype="text/event-stream")
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
 if __name__ == "__main__":
     # Dọn nền có retry: <exe>.old là image của bản cũ vừa khởi chạy mình, phải đợi nó thoát hẳn.
     threading.Thread(target=_cleanup_old_executables, kwargs={"retry_seconds": 60}, daemon=True).start()
+    threading.Thread(target=_cleanup_orphan_exports, daemon=True).start()
     import threading
 
     import webbrowser
@@ -7985,6 +8293,7 @@ if __name__ == "__main__":
             print(f"[shutdown] {reason}")
         except Exception:
             pass
+        _app_log("tat app: %s", reason)
         # Đóng connection pool SQL
         try:
             with _pool_lock:
@@ -7994,6 +8303,7 @@ if __name__ == "__main__":
                 _conn_pool.clear()
         except Exception:
             pass
+        _drop_live_spools()   # file tạm của job xuất đang chạy (job chết theo tiến trình)
         # Kill toàn bộ process tree của EXE → Flask + bất kỳ child nào
         try:
             if platform.system() == "Windows":
@@ -8006,17 +8316,44 @@ if __name__ == "__main__":
         except Exception:
             os._exit(0)
 
+    _PRESENCE_GRACE = 20   # giây không còn trang nào giữ /api/presence → tắt (F5 nối lại trong ~1 s)
+    _PRESENCE_FIRST = 90   # giây chờ trang ĐẦU TIÊN (trình duyệt mặc định mở nguội có thể chậm)
+
+    def _watch_presence(reason):
+        """Đường không theo dõi được tiến trình cửa sổ: chặn luồng này, tắt server khi không còn trang app nào mở."""
+        print(f"[launcher] {reason} -> tat server khi khong con trang app nao mo")
+        _app_log("%s -> canh trang app qua /api/presence", reason)
+        with _presence_lock:
+            _presence["since"] = time.time()
+        last = time.time()
+        while True:
+            time.sleep(2)
+            now = time.time()
+            if now - last > 15:   # máy vừa ngủ dậy / tiến trình bị treo: cho trang thời gian nối lại, đừng tắt ngay
+                with _presence_lock:
+                    _presence["since"] = now
+            last = now
+            if _update_in_progress:
+                continue
+            with _presence_lock:
+                idle = _presence["n"] <= 0 and now - _presence["since"] > (_PRESENCE_GRACE if _presence["seen"] else _PRESENCE_FIRST)
+            if idle:
+                _shutdown_everything("Khong con trang app nao mo")
+                return
+
     def launch_app_window():
         """Mở app dưới dạng cửa sổ standalone. Khi user đóng cửa sổ → tắt server."""
         global _app_window_proc
         if not _wait_port_ready("127.0.0.1", APP_PORT):
             webbrowser.open(APP_URL)
-            return  # Không track được → server chạy ngầm như cũ
+            _watch_presence("Khong cho duoc cong")   # không track được cửa sổ → canh các trang app đang mở
+            return
 
         chromium = _find_chromium_browser()
         if not chromium:
             # Không có Chrome/Edge → fallback browser mặc định (không track được khi đóng)
             webbrowser.open(APP_URL)
+            _watch_presence("Khong co Chrome/Edge")
             return
 
         # Profile dir riêng cho app
@@ -8049,6 +8386,7 @@ if __name__ == "__main__":
             _app_window_proc = proc   # updater cần handle này để đóng cửa sổ khi thay EXE
         except Exception:
             webbrowser.open(APP_URL)
+            _watch_presence("Khong mo duoc Chrome/Edge")
             return
 
         # Block thread này cho tới khi user đóng cửa sổ Chrome --app
@@ -8070,10 +8408,10 @@ if __name__ == "__main__":
         # "user đã đóng cửa sổ" → server taskkill chính nó → EXE thoát mã 1, mọi request sau đó
         # báo "Failed to fetch" dù code hoàn toàn đúng. Triệu chứng điển hình: vừa build xong,
         # chạy EXE là chết ngay, phải đóng hết Chrome mới chạy được.
-        # => Thoát quá nhanh = bàn giao, KHÔNG phải user đóng cửa sổ. Giữ server chạy ngầm,
-        #    đúng như nhánh dự phòng "không track được" ở trên.
+        # => Thoát quá nhanh = bàn giao, KHÔNG phải user đóng cửa sổ. Giữ server chạy, nhưng từ v1.10.8 không chạy ngầm
+        #    mãi: cửa sổ nằm ở instance cũ nên không chờ được tiến trình → canh các trang app qua /api/presence.
         if time.time() - _t_spawn < 5:
-            print("[launcher] Chrome ban giao cho instance cu (thoat <5s) -> giu server chay ngam")
+            _watch_presence("Chrome ban giao cho instance cu (thoat <5s)")
             return
 
         # User đã đóng cửa sổ → shutdown toàn bộ
