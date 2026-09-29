@@ -1193,3 +1193,139 @@ vừa build, release `v1.10.6` "Chống đứt mạng + DT theo tháng" (30 ký 
 build; `_release_summary` rút đúng 6 gạch đầu dòng (bỏ mục Cập nhật). **Test cập nhật thật:** tải EXE release v1.10.5 vào thư mục tạm,
 chạy → `/api/check_update` has_update=True, `changes` = [v1.10.6, 6 dòng] → `POST /api/apply_update` → 4 s sau `/api/version` = 1.10.6,
 thư mục còn đúng 1 EXE, SHA-256 = bản build, `check_update` hết báo bản mới.
+
+## 33. v1.10.7 (chưa phát hành): tab "DT chờ phân bổ theo tháng" — chọn tháng 2 chip, panel lọc thả xuống, dải phân bổ in đậm, bỏ thẻ hết trước kỳ *(29/09/2026)*
+
+**Yêu cầu Trum** (sau khi v1.10.6 lên, kèm 2 ảnh): 1. "bộ lọc chọn tháng đang bị khó hiểu, chỉ đơn giản là chọn từ tháng mấy đến tháng
+mấy thì liệt kê các cột tháng ra là được" · 2. "bộ lọc khác bị chèn bố cục và giao diện lẫn lộn" (ô Giá trị phân bổ + Trạng thái thẻ dạng nút
+chuyển tràn đè nhau) · 3. "các cột lũy kế năm trước, các cột tháng, lũy kế năm nay, giá trị còn lại cho nổi bật lên, in đậm chẳng hạn" ·
+4. "thẻ nào hết giá trị đầu kỳ thì bỏ qua". Làm qua 2 phiên: phiên đầu (d2c807e5) sửa code 4 ý rồi hết token, bàn giao 5 việc; phiên sau
+(f94165b4) sửa thanh lọc rớt 2 hàng, test SQL ý 4, tài liệu.
+
+**Đã sửa:** xem CLAUDE.md mục 3.2 ý 7, Bẫy 26. `index.html`: `MonthChip` + `MonthRangePicker` mới (gỡ lịch 2 bên, 4 nút nhanh, CSS
+`.ds-cell.is-in/.is-edge`, `.ds-mr-cal`); `ChoiceDropdown` (ô chọn 1 giá trị trong panel lọc); `IM_ALLOC_STATUS`; `imAmtTd`, `IM_TH`, CSS
+`ds-im-*` (dải phân bổ); ô Số chứng từ tab này `w-36` → `w-[120px]`; `incomeMonthMeta.allocStatus` cho dòng ghi chú. `server.py`:
+`_income_month_where` (luật `alloc_status`).
+
+**Cân nhắc đã chọn:**
+- Chip ghi gọn "Từ" / "Đến", bỏ icon lịch. Đề xuất lúc bàn giao (chỉ bỏ icon + ô Số CT 112px = −72px) đo ra chỉ dư 4px lúc chưa truy vấn,
+  truy vấn xong "17 dòng" là rớt hàng lại. Tiêu đề popup + tooltip chip vẫn ghi đủ "Từ tháng" / "Đến tháng". Không chọn: đưa ô Số chứng
+  từ vào panel (lệch với tab DT chờ phân bổ cũ, ô đó đứng ngoài).
+- Mặc định bỏ thẻ hết trước kỳ; giữ lựa chọn "Tất cả" (= v1.10.6) để đối chiếu với danh sách DT chờ phân bổ cũ.
+- In đậm chỉ trên màn hình; file Excel giữ như mẫu — chờ Trum trả lời có muốn in đậm trong file không.
+
+**Verify** (bộ kiểm ngoài repo: `%TEMP%\claude\D--IACC-HCM-iPOS-ACC-ACC-PMKT-LedgerStudio\f94165b4-a9a5-40b3-a2a8-a68476906fa1\scratchpad\`
+— bản sao `common.py`, `mk_dtcth_db.py`, `test_dtcth.py` (đã sửa kỳ vọng) + `dump_mock.py`, `dtcth_ui3.js` (sinh bằng `mk_ui3.py` từ
+`dtcth_ui2.js` phiên d2c807e5), `measure_bar2.js`, `measure_tabs.js`, `shot_bar.js`; harness `f2866e8d-…\scratchpad\pt\harness.js`):
+
+| Mức | Bài | Kết quả |
+|---|---|---|
+| M1 | `ast.parse`, `import server` (qua `common.load`, chặn `kill_process_on_port`), `webbuild/build.js` | qua |
+| M3 SQL thật | `mk_dtcth_db.py` dựng lại `DS_TEST_DTCTH` (lịch lệch mẫu 0; đã xoá sau kiểm) → `test_dtcth.py`: mặc định 16 dòng (bỏ thẻ xong từ 2024), `all` 17 = v1.10.6, 16 = đúng 17 trừ thẻ DT − LK trước = 0; 14 dòng mẫu × 26 cột; tổng server cả 2 chế độ, tổng Còn lại không đổi; Còn lại 17/17 = bảng cũ; 5 lựa chọn Phân bổ + Trạng thái thẻ; ca biên FABIBOX hết T4/2026: kỳ 04→08 vẫn hiện (hết TRONG kỳ, `done` có), kỳ 05→08 mặc định / remaining / done / in_period không có, `all` có; /count = danh sách; `alloc_status` lạ; 4 trang × 5 = 16; sắp theo Còn lại; xlsx mặc định 16 dòng + dòng tổng ở dòng 18; xlsx `all` 17 dòng; csv | **55/55** |
+| M3 giao diện | `dtcth_ui3.js` (API giả = JSON thật server mới, 16 / 17 dòng): chip "Từ T1/2026" · "Đến T9/2026" không icon, tooltip đủ chữ, tiêu đề popup, chọn tháng + đầu kia tự kéo + chặn 36; dải in đậm (600 / 700, nền, ô 0 chữ nhạt); ghi chú "Không hiện thẻ…"; không có BH00077; thanh lọc 1 hàng ở 1366px; panel không tràn, 5 lựa chọn; "Tất cả" chưa Lọc → ghi chú giữ, Lọc → gửi `alloc_status=all`, 17 dòng, ghi chú bỏ câu; xuất "Như đang xem" | **62/62** |
+| M3 bề rộng | `measure_bar2.js`: 1366 / 1440 × thanh bên mở / thu × chưa truy vấn / "1,234,567 dòng" / vừa đổi bộ lọc | 1366 mở: dư 65 / 10 / −29px (trước sửa −68 / −123 / −163); 1440 mở: 139 / 84 / 45px (trước 6 / −50 / −89); thu gọn: ≥ 129px |
+| M3 bề rộng | `measure_tabs.js`: 8 tab, 1366 mở, chưa truy vấn | sổ cái / nhập / kho dư 21px; bán hàng / tiền −31, DT chờ phân bổ −24 (đã rớt 2 hàng từ trước, không đụng) |
+| Hồi quy | `behave` · `foot` · `num` · `heights` · `expflicker` (bộ `pt\` phiên f2866e8d) | 42 · 41 · 48 · 7 tab đều · 26 — output trùng từng dòng bản v1.10.6 |
+
+- Nút "Áp dụng bộ lọc" rộng hơn "Truy vấn" 40px → ở 1366px thanh bên mở, lúc vừa đổi bộ lọc tab này (và sổ cái) có thể rớt 2 hàng tạm thời.
+- Chưa: build EXE, commit, phát hành; chạy trên DB thật của iPOS (CLAUDE.md mục 6 việc 5). (2 chip "Từ" / "Đến" ở mục này đã thay tiếp bằng ô Thời gian — mục 34.)
+
+## 34. v1.10.7 (phần 2, chưa phát hành): bộ lọc Thời gian 3 chế độ ngày / tuần / tháng cho mọi tab + báo cáo *(29/09/2026)*
+
+**Yêu cầu Trum:** gửi ảnh bộ chọn thời gian iPOS (ô "Thời gian 30/08/2026 - 29/10/2026", trái 6 nút nhanh Hôm nay … Tháng trước + Chọn
+ngày / Chọn tuần / Chọn tháng, phải 2 lịch tháng T8 | T10 tô dải chọn): "bộ lọc thời gian làm như hình, chỉ cần 3 option Chọn ngày, tuần,
+tháng là được, rồi cho người dùng tự chọn thôi. Sửa lại đi rồi build exe tui coi trước". Hỏi lại 2 ý, Trum chốt: áp cho **toàn bộ tab dữ liệu
+và báo cáo**; tab DT theo tháng **chỉ cho chọn tháng, khoá chọn ngày và tuần**.
+
+**Đã sửa:** xem CLAUDE.md mục 3.0 (Bộ lọc Thời gian), 3.2 ý 7, Bẫy 27, Bẫy 9 (icon). `index.html`: khối "BỘ LỌC THỜI GIAN" (`parseDMY`,
+`fmtDMY`, `dayKey`, `monKey`, `weekStart/End`, `rangePeriod`, `trpViews`, `TimeRangePop`, `TimeRangePicker`) thay `IOSDatePicker`,
+`PeriodDropdown`, `MonthChip`, `MonthRangePicker` (gỡ hẳn); CSS `.ds-trp-*` thay `.ds-mr-yr`; icon `chevrons-left/right`; App: state
+`period` → `timeMode` + `period` suy từ khoảng ngày (`useMemo`), bỏ effect kỳ → ngày, element `timeFilter` dùng ở 7 tab; `ReportTab` nhận
+`timeMode/setTimeMode`; tab theo tháng `only="month"` + `maxMonths`. Ghép bằng script kiểm từng chỗ khớp (`apply_trp.py`).
+`server.py` không đổi (server vẫn nhận from_date / to_date, from_month / to_month như cũ).
+
+**Cân nhắc đã chọn:**
+- Giữ kiểu chip của app ("Thời gian" nằm trong ô, icon lịch bên phải) thay kiểu viền có nhãn nổi của ảnh — cho đồng bộ các ô lọc khác.
+- Kỳ báo cáo suy từ khoảng ngày thay vì bắt người dùng chọn "loại kỳ": chọn trọn tháng / quý / năm thì tiêu đề y như "Kỳ" cũ.
+- Popup đóng ngay khi bấm đầu mút thứ 2 (ảnh không có nút Áp dụng); chọn dở mà bấm ra ngoài / Esc thì bỏ.
+- Chế độ ngày không cho bấm ô ngày tháng khác (xám) để khỏi tô 2 chỗ; chế độ tuần cho bấm (1 hàng = 1 tuần).
+
+**Verify** (bộ kiểm ngoài repo, scratchpad phiên f94165b4 như mục 33):
+
+| Mức | Bài | Kết quả |
+|---|---|---|
+| M1 | `ast.parse`, `import server` + `/api/version`, `webbuild/build.js` (app.js 517 → 509 KB: gỡ 4 component cũ) | qua |
+| M3 giao diện | `trp_ui.js`: 6 tab dữ liệu có ô Thời gian, hết Kỳ / Từ ngày / Đến ngày; popup đúng 3 chế độ không nút nhanh; chọn tháng (xem trước dải khi rê chuột, bấm 2 lần → đóng, thanh trạng thái + tham số truy vấn đúng, bấm ngược tự đảo, dấu "Áp dụng bộ lọc"); nhớ chế độ; chọn ngày 30/08 → 29/10 (2 lịch T8 \| T10 như ảnh, ô xám không tô), điều hướng « ‹ › » riêng từng lịch, Esc / bấm ngoài bỏ chọn dở, 1 ngày; chọn tuần (rê chuột tô cả hàng T2 → CN, 10/08 → 30/08, bấm ô xám chọn cả tuần); `rangePeriod` 9 ca (tháng / quý / năm / 29-02 nhuận / lệch → Tùy ý); báo cáo BC006: tiêu đề "Tháng 8 Năm 2026", "Quý 3 Năm 2026", "Năm 2026", "Từ ngày … Đến ngày …"; tab theo tháng: ngày / tuần khoá + ổ khoá + tooltip, 18 cột tháng tự xoay, tối đa 36 (cả năm cách ≥ 36 tháng bị khoá), tham số from_month / to_month | **52/52** |
+| M3 giao diện | `dtcth_ui4.js` (từ `dtcth_ui3.js`, chọn tháng qua ô Thời gian) | **55/55** |
+| M3 bề rộng | `measure_tabs.js` + `measure_bar2.js` | 1366 mở: sổ cái / nhập / kho 21 → 45px, bán hàng / tiền −31 → −7, DT chờ phân bổ −24 → 0, DT theo tháng 65 → 90 (truy vấn 1.234.567 dòng: 35); 1440: mọi tab 1 hàng |
+| Hồi quy | `behave` · `foot` · `num` · `heights` · `expflicker` · `xuat_ui` | 42 · 41 · 48 · 7 tab đều · 26 · 30 — output 5 bộ đầu trùng từng dòng v1.10.6 |
+| M3 EXE | `python build_exe.py` → `dist/iPOS_Ledger_Studio.exe` v1.10.7, 16.658.033 byte, 15:41 29/09; đọc gói trong EXE (`CArchiveReader`): `version.txt` = 1.10.7, `app.js` trùng từng byte bản đã kiểm | qua — CHƯA mở thử EXE (tránh bật cửa sổ trên máy Trum) |
+
+- `version.txt` đã lên 1.10.7 do build. Build lại trước khi phát hành → trả về 1.10.6 trước, không thì thành 1.10.8.
+- Chưa: Trum xem EXE, `pre-push-qa`, commit, phát hành; chạy tab theo tháng trên DB thật của iPOS.
+
+## 35. v1.10.7 (phần 3, chưa phát hành): tốc độ tab "DT chờ phân bổ theo tháng" + in đậm file Excel *(29/09/2026)*
+
+**Yêu cầu Trum:** "truy xuất bảng doanh thu phân bổ theo tháng lọc 3 tháng mà cũng chậm, có cách nào cải thiện truy xuất nhanh không".
+Tui đo trên DB giả rồi trình 5 việc (a–e, CLAUDE.md mục 6 ý 6 cũ); Trum trả lời: "chọn 3 tháng thì gần 3 phút mới được" · "ok" (duyệt cả 5)
+· file Excel "in đậm" (dải Lũy kế / tháng / Còn lại).
+
+**Nguyên nhân (đo trên DB giả `DS_TEST_PERF` dựng bằng `mk_perf_db.py`: 125k thẻ, 1,33 triệu dòng lịch, SALE 400k, index như TRUNGDEMO):**
+- Mỗi lần Truy vấn chạy 2 câu (đếm + trang), MỖI câu gom lại toàn bộ lịch phân bổ (không có index FR_KEY) dù chọn mấy tháng.
+- Câu trang sắp xếp nguyên dòng rồi nối CTE S (gom cả bảng SALE + EXISTS INCOME_ALLOCATION). Sắp mặc định: 2,7 s. Sắp theo Số CT /
+  Tên đối tượng: **70–180 s** — plan (lấy từ bộ nhớ plan lúc đang chạy, `plan_live.py`): SQL đoán trang còn **9 dòng** sau lọc RowNum
+  → lặp lồng: với TỪNG dòng trang dò SALE theo ngày rồi quét lại cả INCOME_ALLOCATION qua Lazy Spool (125k dòng / lần dò). Trang thật
+  1.000 dòng → hàng tỷ phép so. Nhiều khả năng đây là "gần 3 phút" của Trum (DB thật chỉ cần thống kê hơi khác là sắp mặc định cũng dính);
+  chưa xác nhận — chờ đồng hồ đo trên máy Trum.
+
+**Đã sửa:** xem CLAUDE.md Bẫy 26 (mục Tốc độ). `server.py`: `_income_month_page_sql` (K hẹp + tổng OVER ()), `_income_month_order`
+(khoá phụ A.PR_KEY, dùng cả ở bản xuất), `_income_month_count` (chỉ khi xin trang vượt cuối), `_income_month_sale_lookup` + `_pad_to`,
+`_sql_dt`, hằng `_IM_SALE_NOS` / `_IM_SALE_DATES`; `get_income_alloc_month` viết lại (Server-Timing, 1 dòng `datastudio.log`);
+`_income_month_cte(months, sale=True)`; `/count` bỏ CTE S thừa; xlsx `bold_cols` (`_write_xlsx_to_disk` + `_income_month_xlsx_spec`).
+`index.html`: `loadIncomeMonthData(page, size, opts)` + `incomeMonthCountKeyRef` (gửi lại tổng khi chỉ đổi trang / sắp xếp; Truy vấn /
+Lọc / Enter ô Số CT → `{ fresh: true }`), `incomeMonthTiming` → `AppStatusBar`; `QueryTiming` hiểu mode `totals` + dòng tra Số HĐ.
+
+**Cân nhắc đã chọn / đã thử, không lợi:**
+- Tra SALE: (1) VALUES khoá 4 cột nối SALE — plan dò lặp cả ngày cho TỪNG khoá: 0,13–0,16 s / 500 khoá; (2) `IN (?, …)` 1.000 số CT —
+  chạy 0,02 s nhưng **biên dịch 0,5–2 s mỗi trang** (mỗi trang 1 câu khác nhau); (3) chọn: ngày `IN` đệm cỡ (≤ 128 ngày) hoặc khoảng ngày
+  + số CT qua `VALUES` đệm cỡ → biên dịch 33–68 ms một lần rồi dùng lại, chạy 0,03 s (sắp theo ngày) / 0,1 s (ngày rải rác).
+- Khớp khoá ở Python (bỏ khoảng trắng cuối + chữ hoa) thay vì trong SQL: nối trong SQL là quay lại bài toán plan; collation các DB iPOS
+  đều CI. Đã kiểm khoá chữ thường / khoảng trắng cuối / 2 phiếu SALE cùng khoá (DB thử thêm thẻ 2005–2006 + SALE 9002–9003).
+- Tổng OVER () trong câu trang thay vì kết nối phụ song song như sổ cái: song song đo 1,68 s (2 câu tranh CPU) — mục 6 ý 6 cũ.
+- In đậm file: chỉ in đậm (không tô nền) theo đúng câu Trum; "Tách sheet theo đơn vị" dựng bằng SheetJS bản thường — không ghi được kiểu chữ.
+- Bản xuất (`/stream_csv`) CHƯA đổi (vẫn nối S) — ngoài 5 việc đã duyệt; chờ số đo thật.
+
+**Verify** (bộ kiểm ngoài repo, scratchpad phiên f94165b4; `server_old.py` = server.py trước khi sửa, `index_truoc_toc_do.html`):
+
+| Mức | Bài | Kết quả |
+|---|---|---|
+| M1 | `ast.parse`, `import server` (bản mới + cũ qua `common.load`), `webbuild/build.js` | qua |
+| M3 SQL thật | `perf_new2.py`: tổng OVER () = câu đếm cũ từng số; 1.000 dòng trang 1 = câu cũ (thêm khoá phụ PR_KEY) từng ô; 10.000 khoá Số HĐ / Số hợp đồng = CTE S cũ | 0 lệch |
+| M3 SQL thật | `cmp_im.py DS_TEST_DTCTH` (bản cũ vs mới qua `test_client`, cùng tham số: tổng, dòng tổng, từng dòng từng cột): 5 lựa chọn Phân bổ, 13 kiểu sắp × 2 trang, 7 bộ lọc, 4 khoảng tháng, 37 dòng/trang, 10.000 dòng/trang, gửi lại tổng, trang vượt cuối, `export_all` | **50/50**; mức tương thích 100 (SQL 2008): 21/21 |
+| M3 SQL thật | `cmp_im.py DS_TEST_PERF` (80.333 dòng mặc định; câu cũ ép `OPTION (HASH JOIN)` khi đối chiếu — kết quả y hệt, tránh plan 150 s; ép không lập được plan (lỗi 8618, lọc TK đích) → chạy câu cũ nguyên bản): cùng bộ ca như DB nhỏ + trang cuối (333 dòng), 13 kiểu sắp × 2 trang, 10.000 dòng/trang (7 lượt tra SALE), `export_all` | lượt 1: 34/34 (dừng ở ca lọc TK đích do lỗi 8618 của câu cũ bị ép); lượt 2 `tu_loc`: 21/21 → **50 ca khác nhau, 0 ô lệch** |
+| M3 SQL thật | `test_dtcth.py` + mục 7 mới (khoá khác hoa thường, Server-Timing, gửi lại tổng ở trang 1, trang vượt cuối, dòng `datastudio.log`, in đậm N…X kể cả ô công thức, cột khác không đậm, định dạng số) | **63/63**; mức tương thích 100: 63/63 |
+| M3 giao diện | `speed_ui.js` (mới): đồng hồ sổ cái chữ cũ; tab theo tháng: Truy vấn không gửi tổng, đồng hồ riêng tab + tooltip từng khâu; sắp xếp / sang trang gửi lại tổng; đổi Thời gian → không gửi tổng cũ, lần sau lại gửi; Truy vấn / Enter / Lọc luôn cộng lại; chuyển tab đồng hồ theo tab | **17/17** |
+| Hồi quy | `behave` · `foot` · `num` · `heights` · `expflicker` · `dtcth_ui4` · `trp_ui` | output 5 bộ đầu trùng từng dòng mục 34; 55/55; 52/52 |
+
+**Tốc độ endpoint** (`cmp_im.py` phần cuối, DS_TEST_PERF, dữ liệu trong RAM, SQL Express máy dev; câu cũ NGUYÊN BẢN, không ép):
+
+| Ca | Cũ | Mới | Server-Timing mới (ms) |
+|---|---|---|---|
+| 3 tháng, trang 1, sắp mặc định | 3,04 s | 1,20 s | page 1.152 · sale 44 · build 16 · json 8 |
+| trang 2 (App gửi lại tổng) | 5,11 s | 0,78 s | page 727 · sale 33 (`count-reuse`) |
+| 12 tháng | 5,97 s | 1,91 s | page 1.675 · sale 33 |
+| 36 tháng | 7,14 s | 3,35 s | page 3.321 · sale 32 |
+| sắp Còn lại giảm dần, trang 1 | **> 187 s** (dừng tay, chưa xong — plan lặp lồng) | 1,08 s (ca đối chiếu) | — |
+| sắp Số CT giảm dần, trang 2 (lượt đo đầu, bị dừng) | > 180 s | 1,26 s | — |
+
+- Sửa bộ kiểm dùng chung `pt\harness.js` (phiên f2866e8d): thêm `page.__hdr[path]` = header giả (Server-Timing) — bài cũ không đổi.
+
+**pre-push-qa (29/09, Trum: "build exe, xong push git, và phát hành luôn"): 🟡 VÀNG** — sửa thêm 2 chỗ khi soi diff: khoá phụ dò
+`\bA\.PR_KEY\b` (dò chuỗi "A.PR_KEY" khớp nhầm A.PR_KEY_CTU → mất khoá phụ); `_as_dt` — driver "SQL Server" trả CHUỖI cho cột
+`date` / `datetime2` → hàm tra Số HĐ bỏ qua dòng im lặng. Chạy lại: `unit_qa.py` 9/9, `test_dtcth.py` 63/63, `cmp_im.py DS_TEST_DTCTH`
+50/50 (mức tương thích 100). Quét dòng thêm mới: 0 IP / mật khẩu / chuỗi kết nối / token. Rủi ro chấp nhận (ghi cả commit): chưa chạy
+trên DB thật (M4); bản xuất vẫn nối CTE S; EXE chưa mở thử bằng tay (EXE luôn bật cửa sổ Chrome + chiếm cổng 5050 trên máy Trum).
+
+- **M3 EXE:** `python build_exe.py` (trả `version.txt` về 1.10.6 trước) → `dist/iPOS_Ledger_Studio.exe` v1.10.7, 16.665.611 byte,
+  17:52 29/09; `verify_exe.py` đọc gói (`CArchiveReader`): `version.txt` = 1.10.7, `app.js` trùng từng byte bản đã chạy các bộ giao
+  diện, script `server` có đủ 7 hàm mới; SHA-256 `0cc23b46…f523`.

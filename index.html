@@ -322,13 +322,38 @@ window.showConnectionLost = function() {
         .ds-cell { height: 30px; border-radius: 7px; font-size: 12.5px; color: var(--ds-ink-2); transition: background-color .12s, color .12s; }
         .ds-cell:hover { background: var(--ds-tint); color: var(--ds-ink); }
         .ds-cell.is-on { background: var(--ds-brand-soft); color: var(--ds-brand); font-weight: 500; }
-        /* Chọn khoảng tháng (DT chờ phân bổ theo tháng, v1.10.6): tháng giữa khoảng tô nhạt, 2 đầu mút tô xanh */
-        .ds-cell.is-in { background: var(--ds-brand-soft); color: var(--ds-brand); }
-        .ds-cell.is-edge { background: var(--ds-brand); color: #fff; font-weight: 500; }
-        .ds-mr-cal { border: 1px solid var(--ds-line-soft); border-radius: 10px; padding: 8px; }
-        .ds-mr-yr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-size: 13px; font-weight: 600; color: var(--ds-ink); }
-        .ds-mr-yr button { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 6px; color: var(--ds-ink-3); }
-        .ds-mr-yr button:hover { background: var(--ds-tint); color: var(--ds-ink); }
+        /* Bộ lọc thời gian (v1.10.7, TimeRangePicker): trái 3 chế độ, phải 2 lịch; dải chọn nền xanh nhạt liền mạch, 2 đầu mút tròn xanh đậm */
+        .ds-pop.ds-trp { display: flex; padding: 0; overflow: hidden; }
+        .ds-trp-rail { width: 132px; flex: none; display: flex; flex-direction: column; gap: 2px; padding: 8px; border-right: 1px solid var(--ds-line-soft); }
+        .ds-trp-mode { display: flex; align-items: center; justify-content: space-between; gap: 6px; height: 34px; padding: 0 10px; border-radius: 8px; font-size: 13px; color: var(--ds-ink-2); text-align: left; }
+        .ds-trp-mode:hover { background: var(--ds-tint); color: var(--ds-ink); }
+        .ds-trp-mode.is-on { background: var(--ds-brand-soft); color: var(--ds-brand); font-weight: 600; }
+        .ds-trp-mode.is-lock { background: none; color: var(--ds-ink-4); cursor: not-allowed; }
+        .ds-trp-hint { margin-top: auto; padding: 10px 4px 2px; font-size: 11.5px; line-height: 1.4; color: var(--ds-ink-3); }
+        .ds-trp-cal { width: 292px; padding: 10px 12px 12px; }
+        .ds-trp-cal + .ds-trp-cal { border-left: 1px solid var(--ds-line-soft); }
+        .ds-trp-head { display: flex; align-items: center; justify-content: space-between; height: 30px; margin-bottom: 6px; font-size: 13.5px; font-weight: 600; color: var(--ds-ink); }
+        .ds-trp-head button { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 6px; color: var(--ds-ink-3); }
+        .ds-trp-head button:hover { background: var(--ds-tint); color: var(--ds-ink); }
+        .ds-trp-wd { display: grid; grid-template-columns: repeat(7, 1fr); padding-bottom: 6px; margin-bottom: 4px; border-bottom: 1px solid var(--ds-line-soft); font-size: 11.5px; font-weight: 500; color: var(--ds-ink-3); text-align: center; }
+        .ds-trp-grid { display: grid; }   /* không khe giữa các hàng → dải chọn liền mạch như mẫu */
+        .ds-trp-days { grid-template-columns: repeat(7, 1fr); }
+        .ds-trp-mons { grid-template-columns: repeat(4, 1fr); padding-top: 6px; }
+        .ds-trp-c { display: grid; place-items: center; height: 36px; font-size: 12.5px; color: var(--ds-ink); cursor: pointer; }
+        .ds-trp-mons .ds-trp-c { height: 50px; }
+        .ds-trp-c > span { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 999px; font-variant-numeric: tabular-nums; transition: background-color .1s; }
+        .ds-trp-mons .ds-trp-c > span { width: 52px; height: 34px; border-radius: 8px; }
+        .ds-trp-c:hover > span { background: var(--ds-tint); }
+        .ds-trp-c.is-out { color: var(--ds-ink-4); }
+        .ds-trp-c[aria-disabled] { cursor: default; }
+        .ds-trp-c[aria-disabled]:hover > span { background: none; }
+        .ds-trp-c.is-off { color: var(--ds-line-strong); cursor: not-allowed; }
+        .ds-trp-c.is-today > span { color: var(--ds-brand); font-weight: 600; }
+        .ds-trp-c.is-wk { background: var(--ds-tint); }
+        .ds-trp-c.is-in { background: var(--ds-brand-soft); }
+        .ds-trp-c.is-s { background: linear-gradient(90deg, transparent 50%, var(--ds-brand-soft) 50%); }
+        .ds-trp-c.is-e { background: linear-gradient(90deg, var(--ds-brand-soft) 50%, transparent 50%); }
+        .ds-trp-c.is-s > span, .ds-trp-c.is-e > span, .ds-trp-c.is-se > span { background: var(--ds-brand); color: #fff; font-weight: 600; }
         /* Tooltip tên bảng / báo cáo ở thanh bên (v1.10.6, Trum 29/09): chỉ hiện khi tên bị cắt "…", thanh bên thu gọn, hoặc báo cáo
            đang hiện tên viết tắt. Gắn vào body (portal) + position: fixed → thanh bên (overflow hidden) không cắt mất. */
         .ds-navtip { position: fixed; z-index: 10000; max-width: 320px; padding: 7px 11px; border-radius: 8px; background: #0E1A2B; color: #fff;
@@ -365,6 +390,15 @@ window.showConnectionLost = function() {
         .ds-grid tbody td[class*="text-emerald"], .ds-grid tbody td[class*="text-red"], .ds-grid tbody td[class*="text-teal"], .ds-grid tbody td[class*="text-indigo"],
         .ds-grid tbody td[class*="text-blue"], .ds-grid tbody td[class*="text-violet"], .ds-grid tbody td[class*="text-amber"], .ds-grid tbody td[class*="text-orange"] { color: var(--ds-ink); }
         .ds-grid .font-mono { font-family: inherit; font-variant-numeric: tabular-nums; }
+        /* DT chờ phân bổ theo tháng (Trum 29/09): dải Lũy kế trước · các tháng · Lũy kế trong kỳ · Giá trị còn lại in đậm, nền xanh
+           nhạt để mắt dò theo cột; ô bằng 0 chữ nhạt để số khác 0 nổi lên. Rê chuột dòng vẫn đổi nền cả dòng (luật hover mạnh hơn). */
+        .ds-grid thead th.ds-im-h { background: #E4EEF7; color: var(--ds-ink); font-weight: 600; }
+        .ds-grid tbody td.ds-im-m { font-weight: 600; color: var(--ds-ink); background: #F5F9FD; }
+        .ds-grid tbody td.ds-im-lk { font-weight: 600; color: var(--ds-ink); background: #EBF3FA; }
+        .ds-grid tbody td.ds-im-cl { font-weight: 700; color: var(--ds-brand); background: #EBF3FA; }
+        .ds-grid tbody td.ds-im-0 { font-weight: 400; color: var(--ds-ink-4); }
+        .ds-grid tfoot td.ds-im-f { background: #E4EEF7; }
+        .ds-grid tfoot td.ds-im-fcl { background: #E4EEF7; color: var(--ds-brand); font-weight: 700; }
         .ds-grid tr.ds-grp > td { color: var(--ds-ink); font-weight: 500; border-color: var(--ds-line-soft); }
         .ds-grid tr.ds-grp td * { color: inherit; }
         .ds-grid tr.ds-grp-0 > td { background: #E8EEF5; font-weight: 600; }
@@ -1418,13 +1452,20 @@ window.showConnectionLost = function() {
         // vẽ incomeMonthGrid mới bung ra từng tháng. Nhãn 2 cột lũy kế theo server (khoảng T1 → Tn cùng năm: "năm trước / năm nay").
         const IM_NUM = 'border-r text-right font-mono px-2';
         const IM_FOOT = 'border-r text-right font-mono px-2 bg-slate-100/40';
+        // Dải phân bổ (Lũy kế trước · tháng · Lũy kế trong kỳ · Còn lại) in đậm nền xanh nhạt — CSS ds-im-* (Trum 29/09).
+        // kind: 'm' tháng, 'lk' lũy kế, 'cl' còn lại; ô = 0 chữ nhạt. Ô lọc cột vẫn so theo v (chuỗi số), không theo td.
+        const IM_TH = 'border-r w-28 px-2 ds-im-h';
+        const imAmtTd = (key, kind) => (r, k) => {
+            const x = r[key];
+            return <td key={k} className={`${IM_NUM} ds-im-${kind}${Number(x) ? '' : ' ds-im-0'}`}>{fmtInt(x) || ' '}</td>;
+        };
         const INCOME_MONTH_GRID = {
             numTh: 'border-r w-12', numTd: 'border-r text-center', tr: 'hover:bg-indigo-50 border-b border-slate-50',
             foot: {
                 INCOME_AMOUNT: { k: 'income_amount', dec: 0, cls: IM_FOOT },
-                CUM_BEFORE:    { k: 'cum_before',    dec: 0, cls: IM_FOOT },
-                CUM_IN:        { k: 'cum_in',        dec: 0, cls: 'border-r text-right font-mono px-2 text-violet-700 bg-violet-100/40' },
-                CON_LAI:       { k: 'con_lai',       dec: 0, cls: 'border-r text-right font-mono px-2 text-rose-700 bg-rose-100/40' },
+                CUM_BEFORE:    { k: 'cum_before',    dec: 0, cls: IM_FOOT + ' ds-im-f' },
+                CUM_IN:        { k: 'cum_in',        dec: 0, cls: IM_FOOT + ' ds-im-f' },
+                CON_LAI:       { k: 'con_lai',       dec: 0, cls: IM_FOOT + ' ds-im-fcl' },
             },
             cols: [
                 { id: 'ORGANIZATION_ID',  label: 'Đơn vị',        sort: 'ORGANIZATION_ID', th: 'border-r w-16',          search: 1, td: 'border-r text-center italic', q: 'pre' },
@@ -1440,10 +1481,10 @@ window.showConnectionLost = function() {
                 { id: 'PR_DETAIL_ID',     label: 'Mã đối tượng',  sort: 'PR_DETAIL_ID',    th: 'border-r w-32',          search: 1, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'CONTRACT_NO',      label: 'Số hợp đồng',                            th: 'border-r w-56 px-3', align: 'left', search: 1, td: 'border-r truncate max-w-[280px] px-3', v: r => <span title={r.CONTRACT_NO || ''}>{r.CONTRACT_NO}</span> },
                 { id: 'VAT_TRAN_NO',      label: 'Số Hóa đơn',                             th: 'border-r w-24',          search: 1, td: 'border-r text-center', q: 'pre' },
-                { id: 'CUM_BEFORE',       label: 'Lũy kế trước kỳ', sort: 'CUM_BEFORE',    th: 'border-r w-28 px-2', align: 'right', search: 1, td: IM_NUM, v: r => fmtInt(r.CUM_BEFORE), q: 'num' },
+                { id: 'CUM_BEFORE',       label: 'Lũy kế trước kỳ', sort: 'CUM_BEFORE',    th: IM_TH, align: 'right', search: 1, td: imAmtTd('CUM_BEFORE', 'lk'), v: r => fmtInt(r.CUM_BEFORE), q: 'num' },
                 { id: 'MONTHS',           label: 'Các cột tháng (theo kỳ chọn)' },
-                { id: 'CUM_IN',           label: 'Lũy kế trong kỳ', sort: 'CUM_IN',        th: 'border-r w-28 px-2', align: 'right', search: 1, td: IM_NUM + ' text-violet-600', v: r => fmtInt(r.CUM_IN), q: 'num' },
-                { id: 'CON_LAI',          label: 'Giá trị còn lại', sort: 'CON_LAI',       th: 'border-r w-28 px-2', align: 'right', search: 1, td: IM_NUM + ' font-black text-rose-600', v: r => fmtInt(r.CON_LAI), q: 'num' },
+                { id: 'CUM_IN',           label: 'Lũy kế trong kỳ', sort: 'CUM_IN',        th: IM_TH, align: 'right', search: 1, td: imAmtTd('CUM_IN', 'lk'), v: r => fmtInt(r.CUM_IN), q: 'num' },
+                { id: 'CON_LAI',          label: 'Giá trị còn lại', sort: 'CON_LAI',       th: IM_TH, align: 'right', search: 1, td: imAmtTd('CON_LAI', 'cl'), v: r => fmtInt(r.CON_LAI), q: 'num' },
                 { id: 'PR_DETAIL_NAME',   label: 'Tên đối tượng', sort: 'PR_DETAIL_NAME',  th: 'border-r w-56 px-3', align: 'left', search: 1, td: 'border-r truncate max-w-[280px] px-3 font-bold', v: r => <span title={r.PR_DETAIL_NAME || ''}>{r.PR_DETAIL_NAME}</span> },
                 { id: 'ACCOUNT_NAME_DES', label: 'Tên tài khoản DT (Loại doanh thu)', sort: 'ACCOUNT_NAME_DES', th: 'border-r w-56 px-3', align: 'left', search: 1, td: 'border-r whitespace-nowrap px-3' },
             ],
@@ -1451,6 +1492,15 @@ window.showConnectionLost = function() {
         // Khoảng tháng → { months: [{ key: 'M202601', year, month }], labels } — CÙNG luật với server _income_month_range (tối đa 36
         // tháng, giữ các tháng cuối). Dùng để vẽ cột trước lần truy vấn đầu; truy vấn xong thì vẽ theo months/labels server trả.
         const MONTH_RANGE_MAX = 36;
+        // Lọc "Phân bổ" (server _income_month_where). Trum 29/09: thẻ đã hết giá trị TRƯỚC kỳ (Doanh thu − Lũy kế trước kỳ = 0) thì
+        // bỏ qua → mọi lựa chọn trừ 'all' đều bỏ các thẻ này; 'all' hiện cả (đối chiếu với danh sách DT chờ phân bổ).
+        const IM_ALLOC_STATUS = [
+            ['', 'Còn giá trị đầu kỳ', 'Bỏ thẻ đã phân bổ hết trước kỳ (mặc định)'],
+            ['remaining', 'Còn giá trị cuối kỳ', 'Giá trị còn lại > 0'],
+            ['done', 'Hết trong kỳ', 'Đầu kỳ còn giá trị, cuối kỳ đã hết'],
+            ['in_period', 'Có phân bổ trong kỳ', 'Có số ở ít nhất 1 cột tháng'],
+            ['all', 'Tất cả', 'Hiện cả thẻ đã hết giá trị trước kỳ'],
+        ];
         const ymIdx = p => p.y * 12 + p.m - 1;
         const ymOf = i => ({ y: Math.floor(i / 12), m: (i % 12) + 1 });
         const ymStr = p => `${String(p.m).padStart(2, '0')}/${p.y}`;
@@ -1467,13 +1517,13 @@ window.showConnectionLost = function() {
         // meta → { grid: bảng đủ cột (tháng đã bung, dùng cho lọc/tổng/vẽ), expand(cols của useColLayout) → cột để vẽ, months }
         const incomeMonthGrid = (meta) => {
             const monthCols = meta.months.map(m => ({
-                id: m.key, label: `T${m.month}/${m.year}`, sort: m.key, th: 'border-r w-28 px-2', align: 'right', search: 1,
-                td: IM_NUM, v: r => fmtInt(r[m.key]), q: 'num', month: true,
+                id: m.key, label: `T${m.month}/${m.year}`, sort: m.key, th: IM_TH, align: 'right', search: 1,
+                td: imAmtTd(m.key, 'm'), v: r => fmtInt(r[m.key]), q: 'num', month: true,
             }));
             const relabel = c => (meta.labels && meta.labels[c.id] ? { ...c, label: meta.labels[c.id] } : c);
             const expand = cols => cols.flatMap(c => (c.id === 'MONTHS' ? monthCols : [relabel(c)]));
             const foot = { ...INCOME_MONTH_GRID.foot };
-            meta.months.forEach(m => { foot[m.key] = { k: m.key.toLowerCase(), dec: 0, cls: IM_FOOT }; });
+            meta.months.forEach(m => { foot[m.key] = { k: m.key.toLowerCase(), dec: 0, cls: IM_FOOT + ' ds-im-f' }; });
             const cols = expand(INCOME_MONTH_GRID.cols), byId = {};
             cols.forEach(c => { byId[c.id] = c; });   // gridMatch (ô tìm theo cột) tra cột qua byId
             return { grid: { ...INCOME_MONTH_GRID, foot, cols, byId }, expand, months: meta.months };
@@ -1769,211 +1819,196 @@ window.showConnectionLost = function() {
                 "grip": '<line x1="5" x2="19" y1="7" y2="7"/><line x1="5" x2="19" y1="12" y2="12"/><line x1="5" x2="19" y1="17" y2="17"/>',
                 // Nút "Cột" — bố cục cột bảng dữ liệu (v1.10.0)
                 "columns": '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/>',
+                // Bộ lọc Thời gian — lùi / tới 1 năm (v1.10.7)
+                "chevrons-left": '<path d="m11 17-5-5 5-5"/><path d="m18 17-5-5 5-5"/>',
+                "chevrons-right": '<path d="m6 17 5-5-5-5"/><path d="m13 17 5-5-5-5"/>',
             };
             return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" className={className} dangerouslySetInnerHTML={{ __html: icons[name] || '' }} />;
         };
 
-        const IOSDatePicker = ({ label, value, onChange, disabled }) => {
-            const [isOpen, setIsOpen] = useState(false);
-            const [displayDate, setDisplayDate] = useState(new Date());
-            const [pos, setPos] = useState({ top: 0, left: 0 });
-            const buttonRef = useRef(null);
-            const calendarRef = useRef(null);
-
-            const parseDate = (str) => {
-                if (!str) return null;
-                const [d, m, y] = str.split('/').map(Number);
-                return new Date(y, m - 1, d);
-            };
-            const selectedDate = parseDate(value);
-            const today = new Date(); today.setHours(0,0,0,0);
-
-            useEffect(() => {
-                if (value) {
-                    const d = parseDate(value);
-                    if (d) setDisplayDate(new Date(d.getFullYear(), d.getMonth(), 1));
-                }
-            }, [isOpen]);
-
-            const updatePos = () => {
-                if (buttonRef.current) {
-                    const r = buttonRef.current.getBoundingClientRect();
-                    const calWidth = 300, calHeight = 400;
-                    let left = r.left;
-                    if (left + calWidth > window.innerWidth - 8) left = window.innerWidth - calWidth - 8;
-                    let top = (r.bottom + calHeight + 6 > window.innerHeight) ? r.top - calHeight - 6 : r.bottom + 6;
-                    setPos({ top: Math.max(8, top), left: Math.max(8, left) });
-                }
-            };
-
-            useEffect(() => {
-                if (!isOpen) return;
-                const onDown = (e) => { if (!calendarRef.current?.contains(e.target) && !buttonRef.current?.contains(e.target)) setIsOpen(false); };
-                document.addEventListener('mousedown', onDown);
-                window.addEventListener('scroll', updatePos, true);
-                window.addEventListener('resize', updatePos);
-                return () => { document.removeEventListener('mousedown', onDown); window.removeEventListener('scroll', updatePos, true); window.removeEventListener('resize', updatePos); };
-            }, [isOpen]);
-
-            const daysInMonth = new Date(displayDate.getFullYear(), displayDate.getMonth() + 1, 0).getDate();
-            const rawFirst = new Date(displayDate.getFullYear(), displayDate.getMonth(), 1).getDay();
-            const firstDay = rawFirst === 0 ? 6 : rawFirst - 1;
-
-            const handleDateSelect = (day) => {
-                const y = displayDate.getFullYear(), m = String(displayDate.getMonth() + 1).padStart(2, '0'), d = String(day).padStart(2, '0');
-                onChange(`${d}/${m}/${y}`);
-                setIsOpen(false);
-            };
-
-            const monthNames = ['Tháng 1','Tháng 2','Tháng 3','Tháng 4','Tháng 5','Tháng 6','Tháng 7','Tháng 8','Tháng 9','Tháng 10','Tháng 11','Tháng 12'];
-            const weekDays = ['T2','T3','T4','T5','T6','T7','CN'];
-
-            // Ngoài kỳ "Tùy ý" ô ngày bị khoá → ẩn hẳn, khoảng ngày đã hiện trong chip Kỳ (Đợt 2). Đặt SAU mọi hook.
-            if (disabled) return null;
-            return (
-                <div className="relative">
-                    <button
-                        ref={buttonRef}
-                        type="button"
-                        onClick={() => { if (!isOpen) updatePos(); setIsOpen(!isOpen); }}
-                        className={`ds-chip ${isOpen ? 'is-open' : ''}`}
-                    >
-                        <span className="ds-k">{label}</span>
-                        <span className="tabular-nums">{value || 'Chọn ngày'}</span>
-                        <Icon name="calendar" size={14} stroke={2} />
-                    </button>
-                    {isOpen && createPortal(
-                        <div ref={calendarRef} style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 999999, width: 300, background: '#fff', borderRadius: 16, boxShadow: '0 20px 60px rgba(0,0,0,0.18), 0 0 0 0.5px rgba(0,0,0,0.06)', overflow: 'hidden', fontFamily: 'Inter, sans-serif' }}>
-                            <div style={{ background: '#f2f2f7', borderBottom: '1px solid rgba(0,0,0,0.08)', padding: '12px 12px 10px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
-                                    <button onClick={() => setDisplayDate(new Date(displayDate.getFullYear(), displayDate.getMonth() - 1, 1))} style={{ padding: '4px 8px', borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', color: '#0068AC' }}><Icon name="chevron-left" size={16}/></button>
-                                    <div style={{ flex: 1, textAlign: 'center' }}><span style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e' }}>{monthNames[displayDate.getMonth()]} {displayDate.getFullYear()}</span></div>
-                                    <button onClick={() => setDisplayDate(new Date(displayDate.getFullYear(), displayDate.getMonth() + 1, 1))} style={{ padding: '4px 8px', borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', color: '#0068AC' }}><Icon name="chevron-right" size={16}/></button>
-                                </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>{weekDays.map((d, i) => (<div key={d} style={{ textAlign: 'center', fontSize: 10, fontWeight: 700, padding: '2px 0', color: i === 6 ? '#ff3b30' : 'rgba(0,0,0,0.4)' }}>{d}</div>))}</div>
-                            </div>
-                            <div style={{ padding: '8px 12px 6px' }}>
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px 0' }}>
-                                    {Array(firstDay).fill(null).map((_, i) => <div key={`e${i}`} style={{ height: 34 }} />)}
-                                    {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => {
-                                        const dObj = new Date(displayDate.getFullYear(), displayDate.getMonth(), day); dObj.setHours(0,0,0,0);
-                                        const isSel = selectedDate && selectedDate.getTime() === dObj.getTime();
-                                        const isTod = today.getTime() === dObj.getTime();
-                                        return (
-                                            <div key={day} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 34 }}>
-                                                <button onClick={() => handleDateSelect(day)} style={{ width: 30, height: 30, borderRadius: '50%', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: isSel || isTod ? 700 : 400, color: isSel ? '#fff' : isTod ? '#0068AC' : dObj.getDay()===0 ? '#ff3b30' : '#1c1c1e', background: isSel ? '#0068AC' : 'transparent', position: 'relative' }}>
-                                                    {day}{isTod && !isSel && <span style={{ position: 'absolute', bottom: 3, left: '50%', transform: 'translateX(-50%)', width: 3, height: 3, borderRadius: '50%', background: '#0068AC' }} />}
-                                                </button>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                            <div style={{ borderTop: '1px solid rgba(0,0,0,0.08)', background: '#f2f2f7', display: 'flex', padding: '8px 12px', gap: 8 }}>
-                                <button onClick={() => { const t = new Date(); onChange(`${String(t.getDate()).padStart(2,'0')}/${String(t.getMonth()+1).padStart(2,'0')}/${t.getFullYear()}`); setIsOpen(false); }} style={{ flex: 1, padding: '7px 0', borderRadius: 10, border: 'none', background: 'rgba(0,104,172,0.08)', color: '#0068AC', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Hôm nay</button>
-                                <button onClick={() => setIsOpen(false)} style={{ flex: 1, padding: '7px 0', borderRadius: 10, border: 'none', background: '#0068AC', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Xong</button>
-                            </div>
-                        </div>, document.body
-                    )}
-                </div>
-            );
+        // ===== BỘ LỌC THỜI GIAN (v1.10.7, Trum 29/09 — theo mẫu bộ chọn thời gian của iPOS) =====
+        // 1 ô "Thời gian dd/mm/yyyy – dd/mm/yyyy" thay "Kỳ" (PeriodDropdown) + "Từ ngày" / "Đến ngày" (IOSDatePicker) ở mọi tab dữ liệu và
+        // báo cáo, thay 2 chip Từ / Đến ở tab DT chờ phân bổ theo tháng. Popup: trái 3 chế độ Chọn ngày / Chọn tuần / Chọn tháng (KHÔNG có
+        // nút nhanh Hôm nay, Tháng này… — Trum: "chỉ cần 3 option, cho người dùng tự chọn"), phải 2 lịch cạnh nhau, mỗi lịch điều hướng riêng.
+        // Bấm lần 1 = đầu khoảng, lần 2 = cuối khoảng (bấm ngược cũng được) → áp dụng + đóng; bấm ra ngoài / Esc = bỏ lựa chọn dở.
+        // Tuần = T2 → CN. only="month": khoá Chọn ngày / Chọn tuần; maxMonths: sau lần bấm 1, tháng cách quá maxMonths bị khoá.
+        // Kỳ báo cáo (tiêu đề "Tháng 8 Năm 2026" / "Quý 3 …" / "Năm …" / "Từ ngày … Đến ngày …") suy từ khoảng ngày: rangePeriod.
+        const parseDMY = (s) => { const x = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s || ''); return x ? new Date(+x[3], +x[2] - 1, +x[1]) : null; };
+        const fmtDMY = (d) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+        const dayKey = (d) => d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+        const monKey = (d) => d.getFullYear() * 12 + d.getMonth();
+        const weekStart = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate() - (d.getDay() + 6) % 7);
+        const weekEnd = (d) => { const s = weekStart(d); return new Date(s.getFullYear(), s.getMonth(), s.getDate() + 6); };
+        // Khoảng ngày → kỳ báo cáo. Trọn 1 tháng / 1 quý / 1 năm → giống hệt "Kỳ" cũ (tiêu đề báo cáo + file không đổi chữ); còn lại = Tùy ý.
+        const rangePeriod = (fs, ts) => {
+            const f = parseDMY(fs), t = parseDMY(ts);
+            if (!f || !t) return { type: 'custom', value: 1, year: new Date().getFullYear() };
+            const y = f.getFullYear(), m = f.getMonth() + 1, n = monKey(t) - monKey(f) + 1;
+            const whole = f.getDate() === 1 && t.getFullYear() === y && t.getDate() === new Date(y, t.getMonth() + 1, 0).getDate();
+            if (whole && n === 1) return { type: 'month', value: m, year: y };
+            if (whole && n === 3 && m % 3 === 1) return { type: 'quarter', value: (m + 2) / 3, year: y };
+            if (whole && n === 12) return { type: 'year', value: 1, year: y };
+            return { type: 'custom', value: 1, year: y };
         };
-
-        const PeriodDropdown = ({ period, setPeriod, isActive, onToggle, from, to }) => {
-            const dropdownRef = useRef(null);
-            useEffect(() => {
-                const handleClickOutside = (e) => { if (dropdownRef.current && !dropdownRef.current.contains(e.target)) onToggle(null); };
-                if (isActive) document.addEventListener("mousedown", handleClickOutside);
-                return () => document.removeEventListener("mousedown", handleClickOutside);
-            }, [isActive]);
-            const label = period.type === 'custom' ? 'Tùy ý' : period.type === 'year' ? `Năm ${period.year}` : period.type === 'quarter' ? `Quý ${period.value}/${period.year}` : `Tháng ${period.value}/${period.year}`;
-            const dm = (s) => (s || '').slice(0, 5);   // "dd/mm/yyyy" → "dd/mm"
-            return (
-                <div className="relative" ref={dropdownRef}>
-                    <button type="button" onClick={() => onToggle(isActive ? null : 'period')} className={`ds-chip ${isActive ? 'is-open' : ''}`}>
-                        <Icon name="calendar" size={14} stroke={2} />
-                        <span className="ds-k">Kỳ</span>
-                        <span>{label}</span>
-                        {period.type !== 'custom' && from && to && <span className="ds-k tabular-nums">· {dm(from)} – {dm(to)}</span>}
-                        <Icon name="chevron-down" size={12} stroke={2} className={`transition-transform ${isActive ? 'rotate-180' : ''}`} />
-                    </button>
-                    {isActive && (
-                        <div className="ds-pop ds-pop-in absolute top-full left-0 mt-1.5 w-[296px] z-[500] p-3 space-y-3">
-                            <div className="ds-seg w-full">{[2024, 2025, 2026].map(y => (<button key={y} type="button" onClick={() => setPeriod({...period, year: y})} className={`flex-1 ${period.year === y ? 'is-on' : ''}`}>{y}</button>))}</div>
-                            <div><div className="ds-poplabel">Tháng</div><div className="grid grid-cols-6 gap-1">{[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (<button key={m} type="button" onClick={() => {setPeriod({...period, type: 'month', value: m}); onToggle(null);}} className={`ds-cell ${period.type==='month' && period.value===m ? 'is-on' : ''}`}>{m}</button>))}</div></div>
-                            <div><div className="ds-poplabel">Quý</div><div className="grid grid-cols-4 gap-1">{[1,2,3,4].map(q => (<button key={q} type="button" onClick={() => {setPeriod({...period, type: 'quarter', value: q}); onToggle(null);}} className={`ds-cell ${period.type==='quarter' && period.value===q ? 'is-on' : ''}`}>Q{q}</button>))}</div></div>
-                            <div className="grid grid-cols-2 gap-1 pt-2 border-t border-line-soft">
-                                <button type="button" onClick={() => {setPeriod({...period, type: 'year', value: 1}); onToggle(null);}} className={`ds-cell ${period.type==='year' ? 'is-on' : ''}`}>Cả năm</button>
-                                <button type="button" onClick={() => {setPeriod({...period, type: 'custom', value: 1}); onToggle(null);}} className={`ds-cell ${period.type==='custom' ? 'is-on' : ''}`}>Tùy ý</button>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            );
+        const TRP_MODES = [['day', 'Chọn ngày', 'ngày'], ['week', 'Chọn tuần', 'tuần'], ['month', 'Chọn tháng', 'tháng']];
+        const TRP_WD = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+        // Tháng (chế độ ngày/tuần) hoặc năm (chế độ tháng) mở ra ở 2 lịch: trái = đầu khoảng, phải = cuối khoảng (trùng thì lịch kế tiếp).
+        const trpViews = (mode, f, t) => {
+            const a = f || new Date(), b = t || a;
+            if (mode === 'month') return [new Date(a.getFullYear(), 0, 1), new Date(Math.max(b.getFullYear(), a.getFullYear() + 1), 0, 1)];
+            const l = new Date(a.getFullYear(), a.getMonth(), 1);
+            return [l, monKey(b) > monKey(a) ? new Date(b.getFullYear(), b.getMonth(), 1) : new Date(a.getFullYear(), a.getMonth() + 1, 1)];
         };
-
-        // Chọn khoảng tháng (DT chờ phân bổ theo tháng, v1.10.6 — Trum: "chọn từ tháng – đến tháng thì các cột tháng tự xoay theo;
-        // chọn năm nay thì từ tháng 1 tới tháng hiện tại"). value = { from: {y, m}, to: {y, m} }. Bấm tháng ở lịch trái = Từ tháng,
-        // lịch phải = Đến tháng; chọn vượt đầu kia hoặc quá MONTH_RANGE_MAX tháng thì đầu kia tự kéo theo (server cũng chặn 36).
-        const MonthRangePicker = ({ value, onChange, isActive, onToggle }) => {
-            const ref = useRef(null);
-            const [yr, setYr] = useState({ from: value.from.y, to: value.to.y });
-            useEffect(() => {
-                const onDown = (e) => { if (ref.current && !ref.current.contains(e.target)) onToggle(null); };
-                if (isActive) { document.addEventListener('mousedown', onDown); setYr({ from: value.from.y, to: value.to.y }); }
-                return () => document.removeEventListener('mousedown', onDown);
-            }, [isActive]);
-            const a = ymIdx(value.from), b = ymIdx(value.to), n = b - a + 1;
-            const setFrom = p => { const i = ymIdx(p); let t = Math.max(i, b); if (t - i + 1 > MONTH_RANGE_MAX) t = i + MONTH_RANGE_MAX - 1; onChange({ from: p, to: ymOf(t) }); };
-            const setTo = p => { const i = ymIdx(p); let f = Math.min(i, a); if (i - f + 1 > MONTH_RANGE_MAX) f = i - MONTH_RANGE_MAX + 1; onChange({ from: ymOf(f), to: p }); };
-            const now = new Date(), cy = now.getFullYear(), cm = now.getMonth() + 1, ci = cy * 12 + cm - 1;
-            const presets = [
-                ['Năm nay', { from: { y: cy, m: 1 }, to: { y: cy, m: cm } }, `T1 → T${cm}/${cy}`],
-                ['Cả năm nay', { from: { y: cy, m: 1 }, to: { y: cy, m: 12 } }, `T1 → T12/${cy}`],
-                ['Năm trước', { from: { y: cy - 1, m: 1 }, to: { y: cy - 1, m: 12 } }, `T1 → T12/${cy - 1}`],
-                ['12 tháng qua', { from: ymOf(ci - 11), to: { y: cy, m: cm } }, `${ymStr(ymOf(ci - 11))} → ${ymStr({ y: cy, m: cm })}`],
-            ];
-            const same = r => ymIdx(r.from) === a && ymIdx(r.to) === b;
-            const cal = (side) => {
-                const y = yr[side];
+        // Popup — chỉ gắn khi mở (state tự về đầu mỗi lần mở: chế độ, 2 lịch, lựa chọn dở).
+        const TimeRangePop = ({ from, to, onChange, mode, only, maxMonths, onToggle }) => {
+            const [m, setM] = useState(only || mode || 'month');
+            const [views, setViews] = useState(() => trpViews(only || mode || 'month', from, to));
+            const [pend, setPend] = useState(null);   // đầu khoảng đã bấm, chờ bấm cuối
+            const [hov, setHov] = useState(null);     // ô đang rê chuột → xem trước khoảng
+            const unitS = d => (m === 'week' ? weekStart(d) : m === 'month' ? new Date(d.getFullYear(), d.getMonth(), 1) : d);
+            const unitE = d => (m === 'week' ? weekEnd(d) : m === 'month' ? new Date(d.getFullYear(), d.getMonth() + 1, 0) : d);
+            let ra = from, rb = to;
+            if (pend) { const h = hov ? unitS(hov) : pend; ra = pend <= h ? pend : h; rb = unitE(pend <= h ? h : pend); }
+            const sK = ra ? dayKey(ra) : 1, eK = rb ? dayKey(rb) : 0, sM = ra ? monKey(ra) : 1, eM = rb ? monKey(rb) : 0;
+            const band = (k, s, e) => (k < s || k > e ? '' : k === s && k === e ? ' is-se' : k === s ? ' is-s' : k === e ? ' is-e' : ' is-in');
+            const lockMon = d => !!(pend && maxMonths && Math.abs(monKey(d) - monKey(pend)) >= maxMonths);
+            const pick = (d) => {
+                const s = unitS(d);
+                if (!pend) { setPend(s); return; }
+                onChange(pend <= s ? pend : s, unitE(pend <= s ? s : pend), m);
+                onToggle(null);
+            };
+            const setMode = (k) => { if (only && k !== only) return; setM(k); setViews(trpViews(k, from, to)); setPend(null); setHov(null); };
+            const nav = (i, fn) => setViews(vs => vs.map((v, j) => (j === i ? fn(v) : v)));
+            const todayK = dayKey(new Date()), todayM = monKey(new Date());
+            const navBtn = (title, icon, fn) => <button type="button" title={title} onClick={fn}><Icon name={icon} size={14} stroke={2} /></button>;
+            const dayCal = (v, i) => {
+                const y = v.getFullYear(), mo = v.getMonth(), s0 = weekStart(v);
+                const wk = m === 'week' && !pend && hov ? dayKey(weekStart(hov)) : 0;   // chế độ tuần: rê chuột tô cả hàng tuần
                 return (
-                    <div className="ds-mr-cal">
-                        <div className="ds-poplabel">{side === 'from' ? 'Từ tháng' : 'Đến tháng'}</div>
-                        <div className="ds-mr-yr">
-                            <button type="button" onClick={() => setYr(p => ({ ...p, [side]: y - 1 }))} title="Năm trước"><Icon name="chevron-left" size={14} stroke={2} /></button>
-                            <span className="tabular-nums">{y}</span>
-                            <button type="button" onClick={() => setYr(p => ({ ...p, [side]: y + 1 }))} title="Năm sau"><Icon name="chevron-right" size={14} stroke={2} /></button>
+                    <div className="ds-trp-cal" key={'d' + i}>
+                        <div className="ds-trp-head">
+                            <span className="flex">
+                                {navBtn('Năm trước', 'chevrons-left', () => nav(i, x => new Date(x.getFullYear() - 1, x.getMonth(), 1)))}
+                                {navBtn('Tháng trước', 'chevron-left', () => nav(i, x => new Date(x.getFullYear(), x.getMonth() - 1, 1)))}
+                            </span>
+                            <span className="tabular-nums flex gap-3"><span>{y}</span><span>T{mo + 1}</span></span>
+                            <span className="flex">
+                                {navBtn('Tháng sau', 'chevron-right', () => nav(i, x => new Date(x.getFullYear(), x.getMonth() + 1, 1)))}
+                                {navBtn('Năm sau', 'chevrons-right', () => nav(i, x => new Date(x.getFullYear() + 1, x.getMonth(), 1)))}
+                            </span>
                         </div>
-                        <div className="grid grid-cols-4 gap-1">
-                            {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => {
-                                const i = y * 12 + m - 1, edge = i === a || i === b, inside = i > a && i < b;
-                                return <button key={m} type="button" onClick={() => (side === 'from' ? setFrom : setTo)({ y, m })}
-                                    className={`ds-cell ${edge ? 'is-edge' : inside ? 'is-in' : ''}`}>T{m}</button>;
+                        <div className="ds-trp-wd">{TRP_WD.map(w => <span key={w}>{w}</span>)}</div>
+                        <div className="ds-trp-grid ds-trp-days" onMouseLeave={() => setHov(null)}>
+                            {Array.from({ length: 42 }, (_, n) => {
+                                const d = new Date(s0.getFullYear(), s0.getMonth(), s0.getDate() + n), k = dayKey(d);
+                                const out = d.getMonth() !== mo, off = out && m === 'day';   // ngày tháng khác: chế độ ngày không bấm (đã có ở lịch bên kia)
+                                const cls = 'ds-trp-c' + (out ? ' is-out' : '') + (off ? '' : band(k, sK, eK))
+                                    + (wk && dayKey(weekStart(d)) === wk ? ' is-wk' : '') + (k === todayK && !out ? ' is-today' : '');
+                                return <button key={k} type="button" className={cls} aria-disabled={off || undefined}
+                                    onClick={off ? undefined : () => pick(d)} onMouseEnter={off ? undefined : () => setHov(d)}><span>{d.getDate()}</span></button>;
                             })}
                         </div>
                     </div>
                 );
             };
+            const monCal = (v, i) => {
+                const y = v.getFullYear();
+                return (
+                    <div className="ds-trp-cal" key={'m' + i}>
+                        <div className="ds-trp-head">
+                            {navBtn('Năm trước', 'chevron-left', () => nav(i, x => new Date(x.getFullYear() - 1, 0, 1)))}
+                            <span className="tabular-nums">{y}</span>
+                            {navBtn('Năm sau', 'chevron-right', () => nav(i, x => new Date(x.getFullYear() + 1, 0, 1)))}
+                        </div>
+                        <div className="ds-trp-grid ds-trp-mons" onMouseLeave={() => setHov(null)}>
+                            {Array.from({ length: 12 }, (_, mo) => {
+                                const d = new Date(y, mo, 1), k = monKey(d), off = lockMon(d);
+                                const cls = 'ds-trp-c' + (off ? ' is-off' : band(k, sM, eM)) + (k === todayM ? ' is-today' : '');
+                                return <button key={mo} type="button" className={cls} aria-disabled={off || undefined} title={off ? `Tối đa ${maxMonths} tháng` : undefined}
+                                    onClick={off ? undefined : () => pick(d)} onMouseEnter={off ? undefined : () => setHov(d)}><span>T{mo + 1}</span></button>;
+                            })}
+                        </div>
+                    </div>
+                );
+            };
+            const unit = (TRP_MODES.find(x => x[0] === m) || [])[2];
+            return (
+                <div className="ds-pop ds-pop-in ds-trp absolute top-full left-0 mt-1.5 z-[500]">
+                    <div className="ds-trp-rail">
+                        {TRP_MODES.map(([k, name]) => {
+                            const lock = !!only && k !== only;
+                            return (
+                                <button key={k} type="button" aria-disabled={lock || undefined} title={lock ? 'Danh sách này chỉ chọn theo tháng' : undefined}
+                                    onClick={() => setMode(k)} className={`ds-trp-mode${m === k ? ' is-on' : ''}${lock ? ' is-lock' : ''}`}>
+                                    <span>{name}</span>{lock && <Icon name="lock" size={12} stroke={2} />}
+                                </button>
+                            );
+                        })}
+                        <div className="ds-trp-hint">{pend ? `Bấm ${unit} kết thúc` : `Bấm ${unit} bắt đầu, rồi ${unit} kết thúc`}{maxMonths ? ` · tối đa ${maxMonths} tháng` : ''}</div>
+                    </div>
+                    {views.map((v, i) => (m === 'month' ? monCal(v, i) : dayCal(v, i)))}
+                </div>
+            );
+        };
+        // from / to: Date (hoặc null). onChange(from, to, chế độ) chỉ gọi khi đã chọn đủ 2 đầu. mode: chế độ mở ra lần sau (App nhớ).
+        const TimeRangePicker = ({ id = 'time', label = 'Thời gian', from, to, onChange, mode, only, maxMonths, isActive, onToggle }) => {
+            const ref = useRef(null);
+            useEffect(() => {
+                if (!isActive) return;
+                const onDown = (e) => { if (ref.current && !ref.current.contains(e.target)) onToggle(null); };
+                const onKey = (e) => { if (e.key === 'Escape') onToggle(null); };
+                document.addEventListener('mousedown', onDown);
+                document.addEventListener('keydown', onKey);
+                return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+            }, [isActive]);
+            const ym = d => `T${d.getMonth() + 1}/${d.getFullYear()}`;
+            const text = !from || !to ? 'Chọn thời gian' : only === 'month' ? `${ym(from)} – ${ym(to)}` : `${fmtDMY(from)} – ${fmtDMY(to)}`;
+            const n = from && to ? monKey(to) - monKey(from) + 1 : 0;
+            const title = only === 'month' && n
+                ? `Từ tháng ${from.getMonth() + 1}/${from.getFullYear()} đến tháng ${to.getMonth() + 1}/${to.getFullYear()}: ${n} cột tháng${maxMonths ? ` (tối đa ${maxMonths})` : ''}`
+                : 'Chọn theo ngày, tuần hoặc tháng';
             return (
                 <div className="relative" ref={ref}>
-                    <button type="button" onClick={() => onToggle(isActive ? null : 'month_range')} className={`ds-chip ${isActive ? 'is-open' : ''}`}>
+                    <button type="button" onClick={() => onToggle(isActive ? null : id)} className={`ds-chip ${isActive ? 'is-open' : ''}`} title={title}>
+                        <span className="ds-k">{label}</span>
+                        <span className="tabular-nums">{text}</span>
                         <Icon name="calendar" size={14} stroke={2} />
-                        <span className="ds-k">Kỳ</span>
-                        <span className="tabular-nums" title={`${n} tháng`}>T{value.from.m}/{value.from.y} → T{value.to.m}/{value.to.y}</span>
+                    </button>
+                    {isActive && <TimeRangePop from={from} to={to} onChange={onChange} mode={mode} only={only} maxMonths={maxMonths} onToggle={onToggle} />}
+                </div>
+            );
+        };
+
+        // Chọn 1 trong vài giá trị (thẻ ds-chip + danh sách). Dùng trong panel "Bộ lọc khác" thay nút chuyển ds-seg nhiều lựa chọn:
+        // 3–5 nút không vừa ô lưới 1/3 panel → tràn đè lên ô bên cạnh (Trum 29/09). options: [[value, tên, gợi ý?]], phần tử đầu = mặc định.
+        const ChoiceDropdown = ({ id, label, options, value, onChange, isActive, onToggle }) => {
+            const ref = useRef(null);
+            useEffect(() => {
+                const onDown = (e) => { if (ref.current && !ref.current.contains(e.target)) onToggle(null); };
+                if (isActive) document.addEventListener('mousedown', onDown);
+                return () => document.removeEventListener('mousedown', onDown);
+            }, [isActive]);
+            const cur = options.find(o => o[0] === value) || options[0];
+            return (
+                <div className="relative" ref={ref}>
+                    <button type="button" onClick={() => onToggle(isActive ? null : id)}
+                            className={`ds-chip ${cur[0] !== options[0][0] ? 'is-on' : ''} ${isActive ? 'is-open' : ''}`}>
+                        <span className="ds-k">{label}</span>
+                        <span className="truncate min-w-0">{cur[1]}</span>
                         <Icon name="chevron-down" size={12} stroke={2} className={`transition-transform ${isActive ? 'rotate-180' : ''}`} />
                     </button>
                     {isActive && (
-                        <div className="ds-pop ds-pop-in absolute top-full left-0 mt-1.5 w-[440px] z-[500] p-3 space-y-3">
-                            <div className="grid grid-cols-4 gap-1">
-                                {presets.map(([label, r, hint]) => (
-                                    <button key={label} type="button" title={hint} onClick={() => { onChange(r); onToggle(null); }} className={`ds-cell px-1 ${same(r) ? 'is-on' : ''}`}>{label}</button>
-                                ))}
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">{cal('from')}{cal('to')}</div>
-                            <div className="flex items-center justify-between text-[12px] text-ink-3">
-                                <span>{n} cột tháng · tối đa {MONTH_RANGE_MAX} tháng</span>
-                                <button type="button" onClick={() => onToggle(null)} className="ds-btn ds-btn-pri h-7 px-3">Xong</button>
-                            </div>
+                        <div className="ds-pop ds-pop-in absolute top-full left-0 mt-1.5 w-72 z-[600] p-1">
+                            {options.map(([v, name, hint]) => (
+                                <div key={v || '_'} onClick={() => { onChange(v); onToggle(null); }} className={`ds-opt ${cur[0] === v ? 'is-sel' : ''}`}>
+                                    <span className="flex-1 min-w-0">
+                                        <span className="block">{name}</span>
+                                        {hint && <span className="block text-[11.5px] text-ink-3 leading-snug">{hint}</span>}
+                                    </span>
+                                    {cur[0] === v && <Icon name="check" size={12} stroke={2.5} className="text-brand" />}
+                                </div>
+                            ))}
                         </div>
                     )}
                 </div>
@@ -2941,7 +2976,7 @@ window.showConnectionLost = function() {
             );
         };
 
-        const ReportTab = ({ filters, setFilters, period, setPeriod, meta, onToggleFilter, activeDropdown, setActiveDropdown, reportData: initialReportData, loadReportData, loading, monthList, monthlyData: initialMonthlyData, jobList, jobData: initialJobData, reportType, setReportType, setPendingReportType, setShowClearModal, trialBalanceData, trialBalanceTotal, cashBookData, vatSalesTotals, vatSalesMode, setVatSalesMode, journalViewMode, setJournalViewMode, showNotice, isDirty }) => {
+        const ReportTab = ({ filters, setFilters, period, timeMode, setTimeMode, meta, onToggleFilter, activeDropdown, setActiveDropdown, reportData: initialReportData, loadReportData, loading, monthList, monthlyData: initialMonthlyData, jobList, jobData: initialJobData, reportType, setReportType, setPendingReportType, setShowClearModal, trialBalanceData, trialBalanceTotal, cashBookData, vatSalesTotals, vatSalesMode, setVatSalesMode, journalViewMode, setJournalViewMode, showNotice, isDirty }) => {
             const paperScrollRef = React.useRef(null);
             const paperRef = React.useRef(null), sizerRef = React.useRef(null);   // ReportBar đặt zoom vào tờ này
             const isLandscape = ['BC001', 'BC002', 'BC003', 'BC004', 'BC006', 'BC007', 'BC011', 'BC012', 'BC013'].includes(reportType);
@@ -3289,13 +3324,9 @@ window.showConnectionLost = function() {
                 <div className="flex-1 overflow-hidden flex flex-col">
                     <div className="bg-white border-b border-slate-200 px-6 pt-2 pb-3 shrink-0 z-[900] space-y-2">
                         <div className="flex flex-wrap items-center gap-2">
-                            <div className="ds-slot"><PeriodDropdown period={period} setPeriod={setPeriod} from={filters.from_date} to={filters.to_date} isActive={activeDropdown === 'period'} onToggle={setActiveDropdown} /></div>
-                            <div className="ds-slot">
-                                <IOSDatePicker label="Từ ngày" value={filters.from_date} onChange={val => onToggleFilter('from_date', val)} disabled={period.type !== 'custom'} />
-                            </div>
-                            <div className="ds-slot">
-                                <IOSDatePicker label="Đến ngày" value={filters.to_date} onChange={val => onToggleFilter('to_date', val)} disabled={period.type !== 'custom'} />
-                            </div>
+                            <div className="ds-slot"><TimeRangePicker from={parseDMY(filters.from_date)} to={parseDMY(filters.to_date)} mode={timeMode}
+                                onChange={(f, t, md) => { setFilters(p => ({ ...p, from_date: fmtDMY(f), to_date: fmtDMY(t) })); setTimeMode(md); }}
+                                isActive={activeDropdown === 'time'} onToggle={setActiveDropdown} /></div>
                             <div className="ds-slot"><PremiumDropdown label="Đơn vị" items={meta.orgs} selectedItems={filters.org_ids} onSelect={id => onToggleFilter('org_ids', id)} isActive={activeDropdown === 'Đơn vị'} onToggle={setActiveDropdown} /></div>
                             {(reportType === 'BC008' || reportType === 'BC011' || reportType === 'BC012' || reportType === 'BC013') ? (
                                 <div className="ds-slot"><PremiumDropdown label="Tài khoản" items={meta.accounts} codePrefix selectedItems={filters.acc_ids} onSelect={id => onToggleFilter('acc_ids', id)} isActive={activeDropdown === 'Tài khoản'} onToggle={setActiveDropdown} /></div>
@@ -4371,14 +4402,17 @@ window.showConnectionLost = function() {
             return out;
         };
         const fmtSec = ms => (Math.max(0, ms || 0) / 1000).toLocaleString('vi-VN', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' s';
-        // Thời gian lần Truy vấn sổ cái gần nhất: tổng · SQL · tải + đọc · vẽ; rê chuột xem đủ từng khâu (đo tốc độ trên DB thật).
+        // Thời gian lần Truy vấn gần nhất (sổ cái; DT chờ phân bổ theo tháng từ v1.10.7): tổng · SQL · tải + đọc · vẽ; rê chuột xem đủ
+        // từng khâu (đo tốc độ trên DB thật). mode: 'totals' = tổng tính luôn trong câu lấy trang; t.sale = tra Số HĐ (tab theo tháng).
         const QueryTiming = ({ t }) => {
-            const mode = t.mode || '';
-            const parallel = mode.includes('parallel'), reuse = mode.includes('count-reuse');
-            const sql = reuse ? (t.page || 0) : parallel ? Math.max(t.count || 0, t.page || 0) : (t.count || 0) + (t.page || 0);
+            const mode = (t.mode || '').split('+');
+            const parallel = mode.includes('parallel'), reuse = mode.includes('count-reuse'), inPage = mode.includes('totals');
+            const sql = (reuse || inPage ? (t.page || 0) : parallel ? Math.max(t.count || 0, t.page || 0) : (t.count || 0) + (t.page || 0)) + (t.sale || 0);
             const detail = [
-                reuse ? 'SQL đếm + cộng tổng: dùng lại (bộ lọc không đổi)' : `SQL đếm + cộng tổng: ${fmtSec(t.count)}${parallel ? ' (chạy song song)' : ''}`,
+                reuse ? 'SQL đếm + cộng tổng: dùng lại (bộ lọc không đổi)' : inPage ? 'SQL đếm + cộng tổng: tính luôn trong câu lấy trang'
+                    : `SQL đếm + cộng tổng: ${fmtSec(t.count)}${parallel ? ' (chạy song song)' : ''}`,
                 `SQL lấy trang: ${fmtSec(t.page)} (${mode.includes('offset') ? 'OFFSET/FETCH' : 'ROW_NUMBER'})`,
+                ...(t.sale != null ? [`SQL tra Số HĐ / Số hợp đồng: ${fmtSec(t.sale)} (${t.lookups || 0} lượt)`] : []),
                 `Máy chủ dựng dòng: ${fmtSec(t.build)} · đóng JSON: ${fmtSec(t.json)}${t.gzip ? ` · nén: ${fmtSec(t.gzip)}` : ''}`,
                 `Chờ máy chủ (gồm các khâu trên): ${fmtSec(t.wait)}`,
                 `Tải + đọc dữ liệu: ${fmtSec(t.read)} · vẽ bảng: ${fmtSec(t.draw)}`,
@@ -4483,10 +4517,12 @@ window.showConnectionLost = function() {
             const [loginError, setLoginError] = useState("");
             const [showPw, setShowPw] = useState(false);   // nút con mắt ở ô Mật khẩu (chỉ đổi type input)
             const [activeDropdown, setActiveDropdown] = useState(null);
-            const [period, setPeriod] = useState({ year: 2026, type: 'month', value: 1 });
+            const [timeMode, setTimeMode] = useState('month');   // bộ lọc Thời gian: lần mở sau vào đúng chế độ vừa chọn (ngày / tuần / tháng)
             const [queryTiming, setQueryTiming] = useState(null);   // đo lần Truy vấn sổ cái gần nhất (thanh trạng thái)
             const ledgerCountKeyRef = useRef('');   // bộ lọc của lần ĐẾM tổng gần nhất — trùng thì dùng lại tổng
             const [filters, setFilters] = useState({ from_date: '01/01/2026',to_date: '31/01/2026', tran_ids: [], org_ids: [], acc_ids: [], contra_acc_ids: [], job_ids: [], pr_detail_ids: [], item_ids: [], product_ids: [], expense_ids: [], tran_no: '', page: 1, page_size: 10000 });
+            // Kỳ báo cáo (tiêu đề "Tháng 8 Năm 2026"…) suy từ khoảng ngày của bộ lọc Thời gian — trước v1.10.7 là state riêng của ô "Kỳ"
+            const period = useMemo(() => rangePeriod(filters.from_date, filters.to_date), [filters.from_date, filters.to_date]);
             const [pagination, setPagination] = useState({ total_rows: 0, total_pages: 1, page: 1 });
             const [summary, setSummary] = useState({ total_debit: 0, total_credit: 0 });
             const [colSearch, setColSearch] = useState({});
@@ -4550,17 +4586,6 @@ window.showConnectionLost = function() {
                 }).then(res => { if(res) { setMeta(res); setIsLoggedIn(true); } })
                   .catch(err => { if (window.isNetworkError(err)) window.showConnectionLost(); });
             }, []);
-
-            useEffect(() => {
-                if (period.type === 'custom') return;
-                const { year, type, value } = period;
-                let s, e;
-                if (type==='month') { s = new Date(year, value-1, 1); e = new Date(year, value, 0); }
-                else if (type==='quarter') { s = new Date(year, (value-1)*3, 1); e = new Date(year, value*3, 0); }
-                else { s = new Date(year, 0, 1); e = new Date(year, 11, 31); }
-                const f = (d) => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
-                setFilters(p => ({ ...p, from_date: f(s), to_date: f(e) }));
-            }, [period]);
 
             const handleLogin = async (e) => {
                 e.preventDefault();
@@ -4948,8 +4973,10 @@ window.showConnectionLost = function() {
             const [incomeMonthLoading, setIncomeMonthLoading] = useState(false);
             const [incomeMonthSort, setIncomeMonthSort] = useState({ field: null, dir: 'asc' });
             const [incomeMonthFilters, setIncomeMonthFilters] = useState(() => ({ range: thisYearRange(), active: '', alloc_status: '', acc_des_ids: [], tran_no_search: '' }));
-            const [incomeMonthMeta, setIncomeMonthMeta] = useState(null);   // { months, labels } của lần truy vấn gần nhất → cột bảng vẽ theo đây
+            const [incomeMonthMeta, setIncomeMonthMeta] = useState(null);   // { months, labels, allocStatus } của lần truy vấn gần nhất → cột bảng + dòng ghi chú vẽ theo đây
             const [incomeMonthPageSize, setIncomeMonthPageSize] = useState(1000);
+            const incomeMonthCountKeyRef = useRef('');   // bộ lọc của lần cộng tổng gần nhất — trùng thì gửi lại tổng
+            const [incomeMonthTiming, setIncomeMonthTiming] = useState(null);   // đo lần truy vấn gần nhất (thanh trạng thái)
             const incomeMonthScrollRef = useRef();
             const [incomeMonthColSearch, setIncomeMonthColSearch] = useState({});
             // Chưa truy vấn: cột tháng theo khoảng đang chọn. Đã truy vấn: theo months server trả (đổi khoảng mà chưa bấm Truy vấn thì
@@ -4975,25 +5002,38 @@ window.showConnectionLost = function() {
                 return query;
             };
 
-            const loadIncomeMonthData = async (targetPage = 1, targetPageSize = incomeMonthPageSize) => {
+            // opts.fresh (Truy vấn / Lọc / Enter ô Số CT): luôn cộng lại tổng. Đổi trang / sắp xếp với bộ lọc như lần cộng trước → gửi lại
+            // tổng, server khỏi cộng (v1.10.7 — như sổ cái, Bẫy 20). Thêm tham số lọc mới vào buildIncomeMonthQuery là tự vào countKey.
+            const loadIncomeMonthData = async (targetPage = 1, targetPageSize = incomeMonthPageSize, opts = {}) => {
                 if (abortRef.current) abortRef.current.abort();
                 const _ctrl = new AbortController(); abortRef.current = _ctrl;
                 setIncomeMonthLoading(true);
-                const extras = {};
-                if (targetPage > 1 && targetPageSize === incomeMonthPageSize && incomeMonthPagination.total_rows > 0) {
-                    extras.known_total = incomeMonthPagination.total_rows;
-                    extras.known_sums  = JSON.stringify(incomeMonthSummary);
+                const query = buildIncomeMonthQuery(targetPage, targetPageSize);
+                const countKey = [...query.entries()].filter(([k]) => !['page', 'page_size', 'order_by', 'order_dir'].includes(k)).sort().join('&');
+                if (!opts.fresh && countKey === incomeMonthCountKeyRef.current && incomeMonthPagination.total_rows > 0) {
+                    query.set('known_total', incomeMonthPagination.total_rows);
+                    query.set('known_sums', JSON.stringify(incomeMonthSummary));
                 }
                 try {
-                    const r = await fetch(`/api/income_alloc_month?${buildIncomeMonthQuery(targetPage, targetPageSize, extras).toString()}`, { signal: _ctrl.signal });
+                    const t0 = performance.now();
+                    const r = await fetch(`/api/income_alloc_month?${query.toString()}`, { signal: _ctrl.signal });
                     if (r.status === 401) { setIsLoggedIn(false); return; }
+                    const tResp = performance.now();
                     const res = await r.json();
+                    const tJson = performance.now();
                     if (res.status === 'ok') {
-                        setIncomeMonthMeta({ months: res.months || [], labels: res.labels || null });
+                        incomeMonthCountKeyRef.current = countKey;
+                        setIncomeMonthMeta({ months: res.months || [], labels: res.labels || null, allocStatus: incomeMonthFilters.alloc_status });
                         setIncomeMonthData(res.data);
                         setIncomeMonthPagination(res.pagination);
                         setIncomeMonthSummary(res.summary || {});
                         markTabApplied('income_alloc_month');
+                        const st = parseServerTiming(r.headers.get('Server-Timing'));
+                        requestAnimationFrame(() => requestAnimationFrame(() => {
+                            if (_ctrl.signal.aborted) return;
+                            const now = performance.now();
+                            setIncomeMonthTiming({ ...st, total: now - t0, wait: tResp - t0, read: tJson - tResp, draw: now - tJson, rows: (res.data || []).length });
+                        }));
                     } else {
                         alert('Không truy vấn được Doanh thu chờ phân bổ theo tháng.\n\n' + (res.message || JSON.stringify(res)));
                     }
@@ -6401,6 +6441,13 @@ window.showConnectionLost = function() {
                 setToggleGroupRender(v => v + 1);
             };
 
+            // Bộ lọc Thời gian của 7 tab dữ liệu — cùng 1 khoảng filters.from_date / to_date như ô "Kỳ" cũ (v1.10.7)
+            const timeFilter = (
+                <TimeRangePicker from={parseDMY(filters.from_date)} to={parseDMY(filters.to_date)} mode={timeMode}
+                    onChange={(f, t, md) => { setFilters(p => ({ ...p, from_date: fmtDMY(f), to_date: fmtDMY(t) })); setTimeMode(md); }}
+                    isActive={activeDropdown === 'time'} onToggle={setActiveDropdown} />
+            );
+
             const toggleFilter = (key, id) => {
                 if (key === 'from_date' || key === 'to_date') {
                     setFilters(p => ({ ...p, [key]: id }));
@@ -6527,13 +6574,7 @@ window.showConnectionLost = function() {
                             <div className="bg-white border-b border-slate-200 px-6 pt-2 pb-3 shrink-0 z-[900]">
                                 <div className="space-y-2">
                                     <div className="flex flex-wrap items-center gap-2">
-                                        <div className="ds-slot"><PeriodDropdown period={period} setPeriod={setPeriod} from={filters.from_date} to={filters.to_date} isActive={activeDropdown === 'period'} onToggle={setActiveDropdown} /></div>
-                                        <div className="ds-slot">
-                                            <IOSDatePicker label="Từ ngày" value={filters.from_date} onChange={val => toggleFilter('from_date', val)} disabled={period.type !== 'custom'} />
-                                        </div>
-                                        <div className="ds-slot">
-                                            <IOSDatePicker label="Đến ngày" value={filters.to_date} onChange={val => toggleFilter('to_date', val)} disabled={period.type !== 'custom'} />
-                                        </div>
+                                        <div className="ds-slot">{timeFilter}</div>
                                         <FilterConfigurator tab="ledger" defaultOutside={["filters.tran_ids", "filters.org_ids"]} onApply={() => loadData(1, filters.page_size, null, { fresh: true })} setActiveDropdown={setActiveDropdown} items={[
                                             { key: 'filters.tran_ids', label: 'Loại CT', active: filters.tran_ids.length > 0, clear: () => setFilters(p => ({ ...p, tran_ids: [] })),
                                               node: <PremiumDropdown label="Loại CT" items={meta.tran_ids} selectedItems={filters.tran_ids} onSelect={id => toggleFilter('tran_ids', id)} isActive={activeDropdown === 'Loại CT'} onToggle={setActiveDropdown} /> },
@@ -6673,9 +6714,7 @@ window.showConnectionLost = function() {
                             <div className="bg-white border-b border-slate-200 px-6 pt-2 pb-3 shrink-0 z-[900]">
                                 <div className="space-y-2">
                                     <div className="flex flex-wrap items-center gap-2">
-                                        <div className="ds-slot"><PeriodDropdown period={period} setPeriod={setPeriod} from={filters.from_date} to={filters.to_date} isActive={activeDropdown === 'period'} onToggle={setActiveDropdown} /></div>
-                                        <div className="ds-slot"><IOSDatePicker label="Từ ngày" value={filters.from_date} onChange={val => toggleFilter('from_date', val)} disabled={period.type !== 'custom'} /></div>
-                                        <div className="ds-slot"><IOSDatePicker label="Đến ngày" value={filters.to_date} onChange={val => toggleFilter('to_date', val)} disabled={period.type !== 'custom'} /></div>
+                                        <div className="ds-slot">{timeFilter}</div>
                                         <FilterConfigurator tab="sale" defaultOutside={["saleFilters.tran_no_search", "filters.org_ids"]} onApply={() => loadSaleData()} setActiveDropdown={setActiveDropdown} items={[
                                             { key: 'saleFilters.tran_no_search', label: 'Số chứng từ', active: !!(saleFilters.tran_no_search || '').trim(), clear: () => setSaleFilters(p => ({ ...p, tran_no_search: '' })),
                                               node: <div className="relative">
@@ -6811,9 +6850,7 @@ window.showConnectionLost = function() {
                             <div className="bg-white border-b border-slate-200 px-6 pt-2 pb-3 shrink-0 z-[900]">
                                 <div className="space-y-2">
                                     <div className="flex flex-wrap items-center gap-2">
-                                        <div className="ds-slot"><PeriodDropdown period={period} setPeriod={setPeriod} from={filters.from_date} to={filters.to_date} isActive={activeDropdown === 'period'} onToggle={setActiveDropdown} /></div>
-                                        <div className="ds-slot"><IOSDatePicker label="Từ ngày" value={filters.from_date} onChange={val => toggleFilter('from_date', val)} disabled={period.type !== 'custom'} /></div>
-                                        <div className="ds-slot"><IOSDatePicker label="Đến hết ngày" value={filters.to_date} onChange={val => toggleFilter('to_date', val)} disabled={period.type !== 'custom'} /></div>
+                                        <div className="ds-slot">{timeFilter}</div>
                                         <FilterConfigurator tab="income_alloc" defaultOutside={["incomeAllocFilters.tran_no_search", "filters.org_ids"]} onApply={() => loadIncomeAllocData()} setActiveDropdown={setActiveDropdown} items={[
                                             { key: 'incomeAllocFilters.tran_no_search', label: 'Số chứng từ', active: !!(incomeAllocFilters.tran_no_search || '').trim(), clear: () => setIncomeAllocFilters(p => ({ ...p, tran_no_search: '' })),
                                               node: <div className="relative">
@@ -6907,21 +6944,23 @@ window.showConnectionLost = function() {
                         <>
                             <div className="bg-white border-b border-slate-200 px-6 pt-2 pb-3 shrink-0 z-[900]">
                                 <div className="flex flex-wrap items-center gap-2">
-                                    <MonthRangePicker value={incomeMonthFilters.range} onChange={range => setIncomeMonthFilters(p => ({ ...p, range }))} isActive={activeDropdown === 'month_range'} onToggle={setActiveDropdown} />
-                                    <FilterConfigurator tab="income_alloc_month" defaultOutside={["incomeMonthFilters.tran_no_search", "filters.org_ids"]} onApply={() => loadIncomeMonthData()} setActiveDropdown={setActiveDropdown} items={[
+                                    <TimeRangePicker id="im_time" only="month" maxMonths={MONTH_RANGE_MAX} isActive={activeDropdown === 'im_time'} onToggle={setActiveDropdown}
+                                        from={new Date(incomeMonthFilters.range.from.y, incomeMonthFilters.range.from.m - 1, 1)} to={new Date(incomeMonthFilters.range.to.y, incomeMonthFilters.range.to.m, 0)}
+                                        onChange={(f, t) => setIncomeMonthFilters(p => ({ ...p, range: { from: { y: f.getFullYear(), m: f.getMonth() + 1 }, to: { y: t.getFullYear(), m: t.getMonth() + 1 } } }))} />
+                                    <FilterConfigurator tab="income_alloc_month" defaultOutside={["incomeMonthFilters.tran_no_search", "filters.org_ids"]} onApply={() => loadIncomeMonthData(1, incomeMonthPageSize, { fresh: true })} setActiveDropdown={setActiveDropdown} items={[
                                         { key: 'incomeMonthFilters.tran_no_search', label: 'Số chứng từ', active: !!(incomeMonthFilters.tran_no_search || '').trim(), clear: () => setIncomeMonthFilters(p => ({ ...p, tran_no_search: '' })),
                                           node: <div className="relative">
                                             <Icon name="search" size={14} stroke={2} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-4 pointer-events-none"/>
-                                            <input type="text" value={incomeMonthFilters.tran_no_search} onChange={e => setIncomeMonthFilters(p => ({ ...p, tran_no_search: e.target.value }))} onKeyDown={e => { if (e.key === 'Enter') loadIncomeMonthData(); }} placeholder="Số chứng từ" className={`ds-input pl-8 w-36 ${incomeMonthFilters.tran_no_search ? 'is-on' : ''}`} />
+                                            <input type="text" value={incomeMonthFilters.tran_no_search} onChange={e => setIncomeMonthFilters(p => ({ ...p, tran_no_search: e.target.value }))} onKeyDown={e => { if (e.key === 'Enter') loadIncomeMonthData(1, incomeMonthPageSize, { fresh: true }); }} placeholder="Số chứng từ" className={`ds-input pl-8 w-[120px] ${incomeMonthFilters.tran_no_search ? 'is-on' : ''}`} />
                                             </div> },
                                         { key: 'filters.org_ids', label: 'Đơn vị', active: filters.org_ids.length > 0, clear: () => setFilters(p => ({ ...p, org_ids: [] })),
                                           node: <PremiumDropdown label="Đơn vị" items={meta.orgs} selectedItems={filters.org_ids} onSelect={id => toggleFilter('org_ids', id)} isActive={activeDropdown === 'Đơn vị'} onToggle={setActiveDropdown} align="right" /> },
                                         { key: 'incomeMonthFilters.alloc_status', label: 'Giá trị phân bổ', active: !!incomeMonthFilters.alloc_status, clear: () => setIncomeMonthFilters(p => ({ ...p, alloc_status: '' })),
-                                          node: <div className="ds-seg">{[['', 'Tất cả'], ['remaining', 'Còn giá trị'], ['done', 'Đã hết'], ['in_period', 'Có phân bổ trong kỳ']].map(([v, l]) => (
-                                              <button key={'s' + v} type="button" onClick={() => setIncomeMonthFilters(p => ({ ...p, alloc_status: v }))} className={incomeMonthFilters.alloc_status === v ? 'is-on' : ''}>{l}</button>))}</div> },
+                                          node: <ChoiceDropdown id="im_alloc_status" label="Phân bổ" value={incomeMonthFilters.alloc_status} onChange={v => setIncomeMonthFilters(p => ({ ...p, alloc_status: v }))} isActive={activeDropdown === 'im_alloc_status'} onToggle={setActiveDropdown}
+                                              options={IM_ALLOC_STATUS} /> },
                                         { key: 'incomeMonthFilters.active', label: 'Trạng thái thẻ', active: !!incomeMonthFilters.active, clear: () => setIncomeMonthFilters(p => ({ ...p, active: '' })),
-                                          node: <div className="ds-seg">{[['', 'Tất cả'], ['1', 'Đang hiệu lực'], ['0', 'Ngừng']].map(([v, l]) => (
-                                              <button key={'a' + v} type="button" onClick={() => setIncomeMonthFilters(p => ({ ...p, active: v }))} className={incomeMonthFilters.active === v ? 'is-on' : ''}>{l}</button>))}</div> },
+                                          node: <ChoiceDropdown id="im_active" label="Trạng thái thẻ" value={incomeMonthFilters.active} onChange={v => setIncomeMonthFilters(p => ({ ...p, active: v }))} isActive={activeDropdown === 'im_active'} onToggle={setActiveDropdown}
+                                              options={[['', 'Tất cả'], ['1', 'Đang hiệu lực'], ['0', 'Ngừng']]} /> },
                                         { key: 'filters.item_ids', label: 'Hàng hóa', active: filters.item_ids.length > 0, clear: () => setFilters(p => ({ ...p, item_ids: [] })),
                                           node: <PremiumDropdown label="Hàng hóa" items={meta.items} selectedItems={filters.item_ids} onSelect={id => toggleFilter('item_ids', id)} isActive={activeDropdown === 'Hàng hóa'} onToggle={setActiveDropdown} /> },
                                         { key: 'filters.pr_detail_ids', label: 'Đối tượng', active: filters.pr_detail_ids.length > 0, clear: () => setFilters(p => ({ ...p, pr_detail_ids: [] })),
@@ -6939,7 +6978,7 @@ window.showConnectionLost = function() {
                                         <PageSizeDropdown value={incomeMonthPageSize} onChange={newSize => { setIncomeMonthPageSize(newSize); }} />
                                         <span className="ds-meta"><b>{Number(incomeMonthPagination.total_rows || 0).toLocaleString()}</b> dòng</span>
                                         <ExportButton kind="income_alloc_month" {...exportBtn} />
-                                        <button onClick={() => loadIncomeMonthData()} disabled={incomeMonthLoading}
+                                        <button onClick={() => loadIncomeMonthData(1, incomeMonthPageSize, { fresh: true })} disabled={incomeMonthLoading}
                                             title={isTabDirty('income_alloc_month') ? 'Bộ lọc đã thay đổi! Nhấn để áp dụng bộ lọc mới' : 'Truy vấn dữ liệu'}
                                             className={`ds-btn ds-btn-pri ${isTabDirty('income_alloc_month') ? 'ds-btn-need-query' : ''}`}>
                                             {isTabDirty('income_alloc_month') && <span className="ds-btn-dirty-dot" />}
@@ -6948,7 +6987,7 @@ window.showConnectionLost = function() {
                                         </button>
                                     </div>
                                 </div>
-                                <div className="text-[12px] text-ink-3 mt-2">Số tháng = kỳ phân bổ kết thúc trong tháng đó · {(incomeMonthView.grid.byId.CUM_BEFORE || {}).label} = trước tháng đầu kỳ · Giá trị còn lại = Doanh thu − {(incomeMonthView.grid.byId.CUM_BEFORE || {}).label} − {(incomeMonthView.grid.byId.CUM_IN || {}).label}</div>
+                                <div className="text-[12px] text-ink-3 mt-2">Số tháng = kỳ phân bổ kết thúc trong tháng đó · {(incomeMonthView.grid.byId.CUM_BEFORE || {}).label} = trước tháng đầu kỳ · Giá trị còn lại = Doanh thu − {(incomeMonthView.grid.byId.CUM_BEFORE || {}).label} − {(incomeMonthView.grid.byId.CUM_IN || {}).label}{(incomeMonthMeta ? incomeMonthMeta.allocStatus : incomeMonthFilters.alloc_status) !== 'all' && ' · Không hiện thẻ đã phân bổ hết trước kỳ'}</div>
                             </div>
                             <div className="flex-1 min-h-0 p-3 overflow-hidden bg-canvas flex flex-col relative">
                                 {incomeMonthLoading && <div className="ds-loading"><div className="ds-loadbar"></div><div className="ds-loadpill"><Icon name="loader" size={14} className="animate-spin"/>Đang truy vấn dữ liệu...</div></div>}
@@ -6985,9 +7024,7 @@ window.showConnectionLost = function() {
                             <div className="bg-white border-b border-slate-200 px-6 pt-2 pb-3 shrink-0 z-[900]">
                                 <div className="space-y-2">
                                     <div className="flex flex-wrap items-center gap-2">
-                                        <div className="ds-slot"><PeriodDropdown period={period} setPeriod={setPeriod} from={filters.from_date} to={filters.to_date} isActive={activeDropdown === 'period'} onToggle={setActiveDropdown} /></div>
-                                        <div className="ds-slot"><IOSDatePicker label="Từ ngày" value={filters.from_date} onChange={val => toggleFilter('from_date', val)} disabled={period.type !== 'custom'} /></div>
-                                        <div className="ds-slot"><IOSDatePicker label="Đến ngày" value={filters.to_date} onChange={val => toggleFilter('to_date', val)} disabled={period.type !== 'custom'} /></div>
+                                        <div className="ds-slot">{timeFilter}</div>
                                         <FilterConfigurator tab="voucher" defaultOutside={["voucherFilters.tran_no_search", "filters.org_ids"]} onApply={() => loadVoucherData()} setActiveDropdown={setActiveDropdown} items={[
                                             { key: 'voucherFilters.tran_no_search', label: 'Số chứng từ', active: !!(voucherFilters.tran_no_search || '').trim(), clear: () => setVoucherFilters(p => ({ ...p, tran_no_search: '' })),
                                               node: <div className="relative">
@@ -7111,9 +7148,7 @@ window.showConnectionLost = function() {
                             <div className="bg-white border-b border-slate-200 px-6 pt-2 pb-3 shrink-0 z-[900]">
                                 <div className="space-y-2">
                                     <div className="flex flex-wrap items-center gap-2">
-                                        <div className="ds-slot"><PeriodDropdown period={period} setPeriod={setPeriod} from={filters.from_date} to={filters.to_date} isActive={activeDropdown === 'period'} onToggle={setActiveDropdown} /></div>
-                                        <div className="ds-slot"><IOSDatePicker label="Từ ngày" value={filters.from_date} onChange={val => toggleFilter('from_date', val)} disabled={period.type !== 'custom'} /></div>
-                                        <div className="ds-slot"><IOSDatePicker label="Đến ngày" value={filters.to_date} onChange={val => toggleFilter('to_date', val)} disabled={period.type !== 'custom'} /></div>
+                                        <div className="ds-slot">{timeFilter}</div>
                                         <FilterConfigurator tab="purchase" defaultOutside={["filters.tran_ids", "filters.org_ids"]} onApply={() => loadPurchaseData()} setActiveDropdown={setActiveDropdown} items={[
                                             { key: 'filters.tran_ids', label: 'Loại CT', active: filters.tran_ids.length > 0, clear: () => setFilters(p => ({ ...p, tran_ids: [] })),
                                               node: <PremiumDropdown label="Loại CT" items={meta.tran_ids} selectedItems={filters.tran_ids} onSelect={id => toggleFilter('tran_ids', id)} isActive={activeDropdown === 'Loại CT'} onToggle={setActiveDropdown} /> },
@@ -7253,9 +7288,7 @@ window.showConnectionLost = function() {
                             <div className="bg-white border-b border-slate-200 px-6 pt-2 pb-3 shrink-0 z-[900]">
                                 <div className="space-y-2">
                                     <div className="flex flex-wrap items-center gap-2">
-                                        <div className="ds-slot"><PeriodDropdown period={period} setPeriod={setPeriod} from={filters.from_date} to={filters.to_date} isActive={activeDropdown === 'period'} onToggle={setActiveDropdown} /></div>
-                                        <div className="ds-slot"><IOSDatePicker label="Từ ngày" value={filters.from_date} onChange={val => toggleFilter('from_date', val)} disabled={period.type !== 'custom'} /></div>
-                                        <div className="ds-slot"><IOSDatePicker label="Đến ngày" value={filters.to_date} onChange={val => toggleFilter('to_date', val)} disabled={period.type !== 'custom'} /></div>
+                                        <div className="ds-slot">{timeFilter}</div>
                                         <FilterConfigurator tab="warehouse" defaultOutside={["filters.tran_ids", "filters.org_ids"]} onApply={() => loadWarehouseData()} setActiveDropdown={setActiveDropdown} items={[
                                             { key: 'filters.tran_ids', label: 'Loại CT', active: filters.tran_ids.length > 0, clear: () => setFilters(p => ({ ...p, tran_ids: [] })),
                                               node: <PremiumDropdown label="Loại CT" items={meta.tran_ids} selectedItems={filters.tran_ids} onSelect={id => toggleFilter('tran_ids', id)} isActive={activeDropdown === 'Loại CT'} onToggle={setActiveDropdown} /> },
@@ -7399,9 +7432,7 @@ window.showConnectionLost = function() {
                             <div className="bg-white border-b border-slate-200 px-6 pt-2 pb-3 shrink-0 z-[900]">
                                 <div className="space-y-2">
                                     <div className="flex flex-wrap items-center gap-2">
-                                        <div className="ds-slot"><PeriodDropdown period={period} setPeriod={setPeriod} from={filters.from_date} to={filters.to_date} isActive={activeDropdown === 'period'} onToggle={setActiveDropdown} /></div>
-                                        <div className="ds-slot"><IOSDatePicker label="Từ ngày" value={filters.from_date} onChange={val => toggleFilter('from_date', val)} disabled={period.type !== 'custom'} /></div>
-                                        <div className="ds-slot"><IOSDatePicker label="Đến ngày" value={filters.to_date} onChange={val => toggleFilter('to_date', val)} disabled={period.type !== 'custom'} /></div>
+                                        <div className="ds-slot">{timeFilter}</div>
                                         <FilterConfigurator tab="warehouse_balance" defaultOutside={["filters.org_ids"]} onApply={() => loadWarehouseBalanceData()} setActiveDropdown={setActiveDropdown} items={[
                                             { key: 'filters.org_ids', label: 'Đơn vị', active: filters.org_ids.length > 0, clear: () => setFilters(p => ({ ...p, org_ids: [] })),
                                               node: <PremiumDropdown label="Đơn vị" items={meta.orgs} selectedItems={filters.org_ids} onSelect={id => toggleFilter('org_ids', id)} isActive={activeDropdown === 'Đơn vị'} onToggle={setActiveDropdown} /> },
@@ -7598,7 +7629,8 @@ window.showConnectionLost = function() {
                                 filters={filters}
                                 setFilters={setFilters}
                                 period={period}
-                                setPeriod={setPeriod}
+                                timeMode={timeMode}
+                                setTimeMode={setTimeMode}
                                 meta={meta}
                                 onToggleFilter={toggleFilter}
                                 activeDropdown={activeDropdown}
@@ -7735,7 +7767,8 @@ window.showConnectionLost = function() {
                     <AutoUpdateModal isUpdating={autoUpdate.isUpdating} progress={autoUpdate.progress} onClose={() => autoUpdate.setIsUpdating(false)} />
                     </div>
                     </div>
-                    <AppStatusBar meta={meta} filters={filters} appVersion={appVersion} timing={activeTab === 'ledger' ? queryTiming : null} />
+                    <AppStatusBar meta={meta} filters={filters} appVersion={appVersion}
+                        timing={activeTab === 'ledger' ? queryTiming : activeTab === 'income_alloc_month' ? incomeMonthTiming : null} />
                 </div>
             );
         };

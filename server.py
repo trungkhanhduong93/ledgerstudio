@@ -2221,7 +2221,7 @@ def _write_xlsx_to_disk(job_id, headers, row_iter, filename, total_estimate, out
 
     spec (tuỳ chọn — DT chờ phân bổ theo tháng, v1.10.6): {'header_dates': {cột: datetime} tiêu đề là ngày thật (hiện mm/yyyy),
     'formulas': {cột: '=SUM(O{r}:Z{r})'} ô ghi công thức ({r} = số dòng Excel) kèm giá trị tính sẵn, 'sum_cols': [cột…] dòng
-    "Tổng cộng" cuối bảng (1 sheet → công thức SUM, nhiều sheet → số)}.
+    "Tổng cộng" cuối bảng (1 sheet → công thức SUM, nhiều sheet → số), 'bold_cols': [cột…] ô số in đậm (v1.10.7)}.
 
     ⚠️ pyodbc trả cột tiền/số lượng kiểu Decimal. Bản cũ chỉ nhận int/float là số ⇒ mọi cột Decimal
     (số lượng, đơn giá, thành tiền của phiếu nhập/kho/bán hàng…) bị ghi thành CHỮ: SUM ra 0, ô có tam giác xanh.
@@ -2248,6 +2248,9 @@ def _write_xlsx_to_disk(job_id, headers, row_iter, filename, total_estimate, out
         hdr_dates, formulas = spec.get('header_dates') or {}, spec.get('formulas') or {}
         sum_cols = [c for c in (spec.get('sum_cols') or []) if c < ncols]
         sums = {c: _Dec(0) for c in sum_cols}
+        bold_cols = set(spec.get('bold_cols') or [])
+        int_bold = workbook.add_format(dict(base, num_format='#,##0', bold=True)) if bold_cols else int_format
+        dec_bold = workbook.add_format(dict(base, num_format='#,##0.##', bold=True)) if bold_cols else dec_format
         hdr_date_format = workbook.add_format(dict(base, bold=True, bg_color='#F1F5F9', align='center', valign='vcenter',
                                                    border=1, border_color='#CBD5E1', num_format='mm/yyyy'))
 
@@ -2281,11 +2284,14 @@ def _write_xlsx_to_disk(job_id, headers, row_iter, filename, total_estimate, out
                         widths[col_num] = max(widths[col_num], 12)
                 elif isinstance(val, (int, float, _Dec)) and not isinstance(val, bool):
                     num = float(val)
-                    if col_num in formulas:
-                        worksheet.write_formula(row_num, col_num, formulas[col_num].replace('{r}', str(row_num + 1)),
-                                                int_format if num.is_integer() else dec_format, num)
+                    if col_num in bold_cols:
+                        nfmt = int_bold if num.is_integer() else dec_bold
                     else:
-                        worksheet.write_number(row_num, col_num, num, int_format if num.is_integer() else dec_format)
+                        nfmt = int_format if num.is_integer() else dec_format
+                    if col_num in formulas:
+                        worksheet.write_formula(row_num, col_num, formulas[col_num].replace('{r}', str(row_num + 1)), nfmt, num)
+                    else:
+                        worksheet.write_number(row_num, col_num, num, nfmt)
                     if col_num in sums:
                         sums[col_num] += val if isinstance(val, _Dec) else _Dec(repr(val))
                     if count < 200 and col_num < ncols:
@@ -4369,9 +4375,10 @@ def _month_key(m):
     return f"M{m.year:04d}{m.month:02d}"
 
 
-def _income_month_cte(months):
-    """CTE D (tổng chi tiết theo từng tháng) + CTE S (số HĐ, số hợp đồng từ SALE nếu DB có đủ cột). Ngày ghi thẳng dạng
-    'YYYYMMDD' (tự sinh từ date, không nhận chữ người dùng) → khỏi 70 tham số và khỏi lệch thứ tự '?' (Bẫy 2)."""
+def _income_month_cte(months, sale=True):
+    """CTE D (tổng chi tiết theo từng tháng) + CTE S (số HĐ, số hợp đồng từ SALE nếu DB có đủ cột — chỉ bản xuất còn dùng S; danh
+    sách tra SALE theo khoá của trang, xem _income_month_sale_lookup). Ngày ghi thẳng dạng 'YYYYMMDD' (tự sinh từ date, không
+    nhận chữ người dùng) → khỏi 70 tham số và khỏi lệch thứ tự '?' (Bẫy 2)."""
     lit = lambda d: "'" + d.strftime('%Y%m%d') + "'"
     start, end_next = months[0], _add_month(months[-1])
     parts = [f"SUM(CASE WHEN DAY_END < {lit(start)} THEN AMOUNT ELSE 0 END) AS CUM_BEFORE"]
@@ -4382,7 +4389,7 @@ def _income_month_cte(months):
     parts.append(f"SUM(CASE WHEN DAY_END < {lit(end_next)} THEN AMOUNT ELSE 0 END) AS CUM_AMT")
     sql = ("WITH D AS (SELECT FR_KEY, " + ", ".join(parts) +
            " FROM dbo.INCOME_ALLOCATION_DETAIL WITH (NOLOCK) GROUP BY FR_KEY)")
-    if _sale_link_ok():
+    if sale and _sale_link_ok():
         sql += """, S AS (
             SELECT S.TRAN_ID, S.TRAN_NO, S.TRAN_DATE, S.ORGANIZATION_ID,
                    MAX(S.VAT_TRAN_NO) AS VAT_TRAN_NO, MAX(CAST(S.COMMENTS AS NVARCHAR(4000))) AS CONTRACT_NO
@@ -4434,16 +4441,19 @@ _INCOME_MONTH_SALE_JOIN = ("LEFT JOIN S ON S.TRAN_ID = T.TRAN_ID AND S.TRAN_NO =
 
 def _income_month_where(args, months):
     """Dùng lại bộ lọc của danh sách DT chờ phân bổ (A.TRAN_DATE ≤ hết "đến tháng", ACTIVE, Giá trị phân bổ, đơn vị, hàng,
-    đối tượng, TK đích, số CT…). Mặc định "hiện hết": không gửi active / alloc_status = tất cả. Thêm 'in_period' = có phân bổ
-    trong kỳ."""
+    đối tượng, TK đích, số CT…). Mặc định: mọi trạng thái thẻ (không gửi active). alloc_status: '' = còn giá trị đầu kỳ,
+    'remaining' = còn giá trị cuối kỳ, 'done' = hết trong kỳ, 'in_period' = có phân bổ trong kỳ, 'all' = tất cả.
+    Trum 29/09: thẻ đã hết giá trị TRƯỚC kỳ (Doanh thu − Lũy kế trước kỳ = 0) thì bỏ qua — mọi lựa chọn trừ 'all'."""
     last_day = date.fromordinal(_add_month(months[-1]).toordinal() - 1)
     a = {k: args.get(k) for k in args}
     a['from_date'] = months[0].strftime("%d/%m/%Y")
     a['to_date'] = last_day.strftime("%d/%m/%Y")
     a['active'] = args.get('active', '')
     status = args.get('alloc_status', '')
-    a['alloc_status'] = '' if status == 'in_period' else status
+    a['alloc_status'] = status if status in ('remaining', 'done') else ''
     where_sql, params, _f, _t = _build_income_alloc_where(a)
+    if status != 'all':
+        where_sql += " AND (A.INCOME_AMOUNT - ISNULL(D.CUM_BEFORE,0)) <> 0"
     if status == 'in_period':
         where_sql += " AND ISNULL(D.CUM_IN,0) <> 0"
     return where_sql, params
@@ -4458,6 +4468,133 @@ def _income_month_sort(months):
     })
     wl.update({_month_key(m): f"ISNULL(D.{_month_key(m)},0)" for m in months})
     return wl
+
+
+def _income_month_order(args, months):
+    """ORDER BY của danh sách + bản xuất (cùng một thứ tự — Bẫy 6). Thêm A.PR_KEY làm khoá phụ: dòng trùng khoá sắp xếp (cùng ngày +
+    số CT…) có thứ tự cố định → sang trang không lặp / sót dòng."""
+    sql = _resolve_order_by(args, _income_month_sort(months), "A.TRAN_DATE, A.TRAN_NO")
+    return sql if re.search(r"\bA\.PR_KEY\b", sql) else sql + ", A.PR_KEY"   # \b: sắp theo A.PR_KEY_CTU vẫn thêm khoá phụ
+
+
+def _income_month_page_sql(months, where_sql, order_by_sql, totals, paged):
+    """Câu lấy trang (v1.10.7 — Trum 29/09: lọc 3 tháng gần 3 phút). Trước: câu đếm riêng + câu trang, mỗi câu gom LẠI toàn bộ
+    lịch phân bổ (D — không có index FR_KEY), câu trang còn sắp xếp nguyên dòng rồi nối CTE S gom cả bảng SALE.
+      • K sắp xếp + đánh số trên cột HẸP (khoá thẻ + các số của D), xong mới nối lấy đủ cột cho các dòng của trang.
+      • totals → cộng tổng bằng COUNT/SUM … OVER () ngay trong câu này: D chỉ tính 1 lần (bỏ câu đếm riêng). Tổng khớp câu đếm cũ
+        từng số (đo DS_TEST_PERF 29/09). App gửi lại tổng khi chỉ đổi trang / sắp xếp → totals=False.
+      • Số HĐ / Số hợp đồng không nối ở đây — _income_month_sale_lookup tra riêng cho các dòng trả về.
+    DB giả cỡ thật (125k thẻ, 1,33 triệu dòng lịch, SALE 400k), 3 tháng: đếm 0,61 s + trang 2,07 s → 0,96 s + tra SALE 0,03 s."""
+    nums = ["CUM_BEFORE"] + [_month_key(m) for m in months] + ["CUM_IN"]
+    k_cols = [f"ISNULL(D.{n},0) AS {n}" for n in nums]
+    out_tot = ""
+    if totals:
+        k_cols += (["COUNT(*) OVER () AS T_ROWS", "SUM(A.INCOME_AMOUNT) OVER () AS T_INCOME_AMOUNT"]
+                   + [f"SUM(ISNULL(D.{n},0)) OVER () AS T_{n}" for n in nums]
+                   + ["SUM(A.INCOME_AMOUNT - ISNULL(D.CUM_BEFORE,0) - ISNULL(D.CUM_IN,0)) OVER () AS T_CON_LAI"])
+        out_tot = ", " + ", ".join(f"K.T_{n}" for n in ["ROWS", "INCOME_AMOUNT"] + nums + ["CON_LAI"])
+    have = set(_income_alloc_cols())
+    base = [f"A.{c}" for c in INCOME_MONTH_BASE if c in have]
+    return f"""{_income_month_cte(months, sale=False)}, K AS (
+            SELECT A.PR_KEY AS K_KEY, {", ".join(k_cols)}, ROW_NUMBER() OVER (ORDER BY {order_by_sql}) AS RowNum
+            {INCOME_MONTH_FROM} WHERE {where_sql})
+        SELECT {", ".join(base)}, {", ".join("K." + n for n in nums)}, (A.INCOME_AMOUNT - K.CUM_BEFORE - K.CUM_IN) AS CON_LAI,
+               PD.PR_DETAIL_NAME AS PR_DETAIL_NAME, AC.ACCOUNT_NAME AS ACCOUNT_NAME_DES{out_tot}
+        FROM K JOIN dbo.INCOME_ALLOCATION A WITH (NOLOCK) ON A.PR_KEY = K.K_KEY
+            LEFT JOIN dbo.DM_PR_DETAIL PD WITH (NOLOCK) ON PD.PR_DETAIL_ID = A.PR_DETAIL_ID
+            LEFT JOIN dbo.DM_ACCOUNT   AC WITH (NOLOCK) ON AC.ACCOUNT_ID   = A.ACCOUNT_ID_DES
+        {"WHERE K.RowNum > ? AND K.RowNum <= ?" if paged else ""} ORDER BY K.RowNum"""
+
+
+def _income_month_count(cursor, months, where_sql, w_params, sum_keys):
+    """Câu đếm + cộng tổng riêng — chỉ còn dùng khi trang xin vượt quá trang cuối (câu trang không trả dòng nào để đọc tổng)."""
+    mkeys = [_month_key(m) for m in months]
+    cursor.execute(f"""{_income_month_cte(months, sale=False)}
+        SELECT COUNT(*), SUM(A.INCOME_AMOUNT), SUM(ISNULL(D.CUM_BEFORE,0)), {", ".join(f"SUM(ISNULL(D.{k},0))" for k in mkeys)},
+               SUM(ISNULL(D.CUM_IN,0)), SUM(A.INCOME_AMOUNT - ISNULL(D.CUM_BEFORE,0) - ISNULL(D.CUM_IN,0))
+        {INCOME_MONTH_FROM} WHERE {where_sql}""", w_params)
+    row = cursor.fetchone()
+    return int(row[0] or 0), {k: float(v or 0) for k, v in zip(sum_keys, row[1:])}
+
+
+# Tra SALE theo lô: danh sách ngày CT / số CT ĐỆM tới các cỡ cố định (lặp giá trị cuối) → câu SQL giống nhau giữa các trang, SQL Server
+# dùng lại plan đã biên dịch. Danh sách IN 1.000 số CT viết thẳng biên dịch mất 0,5–2 s MỖI trang (đo 29/09), VALUES đệm: 33–68 ms 1 lần.
+_IM_SALE_NOS = (64, 256, 1024, 1536)   # số CT khác nhau tối đa mỗi lượt = 1.536 (+ ≤ 128 ngày → dưới trần 2.100 tham số)
+_IM_SALE_DATES = (8, 32, 128)          # lượt có > 128 ngày CT khác nhau (trang sắp theo cột khác, ngày rải rác) → lọc khoảng ngày
+
+
+def _pad_to(xs, sizes):
+    n = next((s for s in sizes if s >= len(xs)), len(xs))
+    return xs + [xs[-1]] * (n - len(xs))
+
+
+def _sql_dt(d):
+    """date / datetime → 'YYYYMMDD HH:MM:SS[.mmm]': SQL đổi chuỗi sang kiểu cột (index TRAN_DATE vẫn dùng được), không phụ thuộc
+    DATEFORMAT (Bẫy 3). Cũng là khoá so ngày ở Python."""
+    s = d.strftime('%Y%m%d %H:%M:%S')
+    ms = getattr(d, 'microsecond', 0) // 1000
+    return f"{s}.{ms:03d}" if ms else s
+
+
+def _as_dt(v):
+    """Giá trị ngày từ DB → date/datetime. Driver "SQL Server" (mặc định của app) trả CHUỖI cho cột kiểu date / datetime2
+    ('2026-01-15', '2026-01-15 10:00:00.0000000') — iPOS dùng smalldatetime (ra datetime) nhưng DB khách khác cấu trúc thì vẫn khớp."""
+    if isinstance(v, (date, datetime)):
+        return v
+    if isinstance(v, str):
+        s = v.strip()
+        for n, f in ((19, '%Y-%m-%d %H:%M:%S'), (10, '%Y-%m-%d')):
+            try:
+                return datetime.strptime(s[:n], f)
+            except ValueError:
+                pass
+    return None
+
+
+def _income_month_sale_lookup(cursor, rows):
+    """Số HĐ (SALE.VAT_TRAN_NO) / Số hợp đồng (SALE.COMMENTS) cho ĐÚNG các dòng đang trả về — thay CTE S gom cả bảng SALE mỗi lần
+    lấy trang. Tra SALE theo ngày CT + số CT của các dòng (index TRAN_DATE), rồi khớp đủ Mã + Số + Ngày + Đơn vị như phép nối cũ
+    (Bẫy 26), so khoá kiểu collation CI của iPOS: bỏ khoảng trắng cuối, không phân biệt hoa thường; nhiều phiếu SALE cùng khoá →
+    MAX như cũ. Chia lượt theo NGÀY (khoá xếp theo ngày CT): ≤ 128 ngày → tra từng ngày; nhiều hơn → khoảng ngày của lượt.
+    Gán VAT_TRAN_NO / CONTRACT_NO vào từng dòng (TRAN_DATE còn là ngày, chưa đổi chữ). Trả số lượt đã chạy."""
+    norm = lambda s: str(s).rstrip(' ').upper()
+    want, pairs = {}, set()
+    for r in rows:
+        r['VAT_TRAN_NO'] = r['CONTRACT_NO'] = None
+        tid, no, d, org = r.get('TRAN_ID'), r.get('TRAN_NO'), _as_dt(r.get('TRAN_DATE')), r.get('ORGANIZATION_ID')
+        if tid is None or no is None or org is None or d is None:
+            continue   # thiếu khoá → phép nối cũ cũng không khớp
+        want.setdefault((_sql_dt(d), norm(no), norm(tid), norm(org)), []).append(r)
+        pairs.add((_sql_dt(d), no))
+    chunks, dates, nos = [], set(), set()
+    for d, no in sorted(pairs):
+        if no not in nos and len(nos) >= _IM_SALE_NOS[-1]:
+            chunks.append((dates, nos))
+            dates, nos = set(), set()
+        dates.add(d)
+        nos.add(no)
+    if nos:
+        chunks.append((dates, nos))
+    for dates, nos in chunks:
+        ds, ns = sorted(dates), _pad_to(sorted(nos), _IM_SALE_NOS)
+        if len(ds) <= _IM_SALE_DATES[-1]:
+            ds = _pad_to(ds, _IM_SALE_DATES)
+            date_sql = f"S.TRAN_DATE IN ({','.join('?' * len(ds))})"
+        else:
+            ds = [ds[0], ds[-1]]
+            date_sql = "S.TRAN_DATE >= ? AND S.TRAN_DATE <= ?"
+        cursor.execute(f"""SELECT S.TRAN_ID, S.TRAN_NO, S.TRAN_DATE, S.ORGANIZATION_ID,
+                                  MAX(S.VAT_TRAN_NO), MAX(CAST(S.COMMENTS AS NVARCHAR(4000)))
+                           FROM dbo.SALE S WITH (NOLOCK)
+                           WHERE {date_sql} AND S.TRAN_NO IN (SELECT n FROM (VALUES {','.join(['(?)'] * len(ns))}) AS X(n))
+                           GROUP BY S.TRAN_ID, S.TRAN_NO, S.TRAN_DATE, S.ORGANIZATION_ID""", ds + ns)
+        for tid, no, d, org, vat, contract in cursor.fetchall():
+            d = _as_dt(d)
+            if tid is None or no is None or org is None or d is None:
+                continue
+            for r in want.get((_sql_dt(d), norm(no), norm(tid), norm(org)), ()):
+                r['VAT_TRAN_NO'], r['CONTRACT_NO'] = vat, contract
+    return len(chunks)
 
 
 def _income_month_meta(months, labels):
@@ -4487,58 +4624,88 @@ def _income_month_row(r, months):
 @app.route("/api/income_alloc_month")
 @with_db_lock
 def get_income_alloc_month():
-    """Doanh thu chờ phân bổ theo tháng — xem khối chú thích ở trên."""
+    """Doanh thu chờ phân bổ theo tháng — xem khối chú thích ở trên. Tốc độ (v1.10.7): 1 câu lấy trang kèm tổng
+    (_income_month_page_sql) + tra Số HĐ / Số hợp đồng cho các dòng của trang (_income_month_sale_lookup). Header Server-Timing
+    (page / count / sale / build / json / total — ms) → thanh trạng thái; mỗi lần truy vấn ghi 1 dòng vào datastudio.log."""
     try:
+        t_start = time.perf_counter()
+        tm = {}
         args = request.args
         page = max(1, int(args.get("page", 1)))
         page_size = max(1, int(args.get("page_size", 1000)))
         export_all = args.get("export_all") == "1"
+        # App gửi known_* khi bộ lọc không đổi so với lần cộng tổng trước (đổi trang, sắp xếp) → khỏi cộng lại. Bấm Truy vấn thì
+        # không gửi → luôn cộng lại (như sổ cái — Bẫy 20).
         known_total, known_sums = args.get("known_total"), args.get("known_sums")
-        skip_count = page > 1 and known_total is not None and known_sums is not None and not export_all
+        reuse = known_total is not None and known_sums is not None and not export_all
         months, labels = _income_month_range(args)
         mkeys = [_month_key(m) for m in months]
-        cte = _income_month_cte(months)
         where_sql, w_params = _income_month_where(args, months)
-        order_by_sql = _resolve_order_by(args, _income_month_sort(months), "A.TRAN_DATE, A.TRAN_NO")
+        order_by_sql = _income_month_order(args, months)
         cursor = get_connection().cursor()
-
         sum_keys = ["income_amount", "cum_before"] + [k.lower() for k in mkeys] + ["cum_in", "con_lai"]
-        if skip_count:
+        tot_cols = ["T_INCOME_AMOUNT", "T_CUM_BEFORE"] + [f"T_{k}" for k in mkeys] + ["T_CUM_IN", "T_CON_LAI"]
+
+        offset = (page - 1) * page_size
+        t = time.perf_counter()
+        cursor.execute(_income_month_page_sql(months, where_sql, order_by_sql, totals=not reuse, paged=not export_all),
+                       w_params + ([] if export_all else [offset, offset + page_size]))
+        columns = [c[0] for c in cursor.description]
+        rows = [dict(zip(columns, raw)) for raw in cursor.fetchall()]
+        tm['page'] = time.perf_counter() - t
+        mode = ['rownum']
+        if reuse:
             total_rows = int(known_total)
             try:
                 summary = json.loads(known_sums)
             except (TypeError, ValueError):
                 summary = {}
-        else:
-            cnt_sql = f"""{cte}
-                SELECT COUNT(*), SUM(A.INCOME_AMOUNT), SUM(ISNULL(D.CUM_BEFORE,0)),
-                       {", ".join(f"SUM(ISNULL(D.{k},0))" for k in mkeys)},
-                       SUM(ISNULL(D.CUM_IN,0)), SUM(A.INCOME_AMOUNT - ISNULL(D.CUM_BEFORE,0) - ISNULL(D.CUM_IN,0))
-                {INCOME_MONTH_FROM} WHERE {where_sql}"""
-            cursor.execute(cnt_sql, w_params)
-            row = cursor.fetchone()
-            total_rows = int(row[0] or 0)
-            summary = {k: float(v or 0) for k, v in zip(sum_keys, row[1:])}
+            mode.append('count-reuse')
+        elif rows:
+            total_rows = int(rows[0]['T_ROWS'] or 0)
+            summary = {k: float(rows[0][c] or 0) for k, c in zip(sum_keys, tot_cols)}
+            mode.append('totals')
+        elif export_all or page == 1:
+            total_rows, summary = 0, {k: 0.0 for k in sum_keys}
+            mode.append('totals')
+        else:   # xin trang vượt quá trang cuối (bộ lọc vừa đổi) → không có dòng để đọc tổng → đếm riêng
+            t = time.perf_counter()
+            total_rows, summary = _income_month_count(cursor, months, where_sql, w_params, sum_keys)
+            tm['count'] = time.perf_counter() - t
+            mode.append('count')
+        for r in rows:
+            for c in ['T_ROWS'] + tot_cols:
+                r.pop(c, None)
 
-        # Số HĐ / Số hợp đồng (CTE S) nối SAU khi đánh số dòng → trang chỉ nối đúng các dòng của trang
-        offset = (page - 1) * page_size
-        page_where = "" if export_all else "WHERE T.RowNum > ? AND T.RowNum <= ?"
-        sql = f"""{cte}, T AS (
-                SELECT {_income_month_select(months)}, ROW_NUMBER() OVER (ORDER BY {order_by_sql}) AS RowNum
-                {INCOME_MONTH_FROM} WHERE {where_sql})
-            SELECT T.*, {_income_month_sale_cols()} FROM T {_INCOME_MONTH_SALE_JOIN if _sale_link_ok() else ''}
-            {page_where} ORDER BY T.RowNum"""
-        cursor.execute(sql, w_params + ([] if export_all else [offset, offset + page_size]))
-        columns = [c[0] for c in cursor.description]
-        rows = [_income_month_row(dict(zip(columns, raw)), months) for raw in cursor.fetchall()]
+        lookups = 0
+        if rows and _sale_link_ok():
+            t = time.perf_counter()
+            lookups = _income_month_sale_lookup(cursor, rows)
+            tm['sale'] = time.perf_counter() - t
+        else:
+            for r in rows:
+                r['VAT_TRAN_NO'] = r['CONTRACT_NO'] = None
+        t = time.perf_counter()
+        rows = [_income_month_row(r, months) for r in rows]
+        tm['build'] = time.perf_counter() - t
         if export_all:
             total_rows = len(rows)
 
-        return jsonify({
+        t = time.perf_counter()
+        resp = jsonify({
             "status": "ok", "data": rows, "summary": summary, **_income_month_meta(months, labels),
             "pagination": {"total_rows": total_rows, "total_pages": max(1, (total_rows + page_size - 1) // page_size),
                            "page": 1 if export_all else page},
         })
+        tm['json'] = time.perf_counter() - t
+        tm['total'] = time.perf_counter() - t_start
+        resp.headers['Server-Timing'] = _server_timing(tm, "+".join(mode)) + f', lookups;desc="{lookups}"'
+        if _export_log_path():   # Trum gửi datastudio.log là biết khâu nào chậm trên DB thật
+            _xlog.info("dt theo thang: CSDL %s, %d thang, trang %d x %d, %d dong, %s: sql trang %.2fs%s, tra SALE %.2fs (%d luot), tong %.2fs",
+                       (session.get('db_config') or {}).get('database', ''), len(months), page, page_size, total_rows,
+                       "+".join(mode), tm['page'], f", dem rieng {tm['count']:.2f}s" if 'count' in tm else "",
+                       tm.get('sale', 0), lookups, tm['total'])
+        return resp
     except Exception as e:
         msg = str(e)
         if "đăng nhập" not in msg:
@@ -4554,7 +4721,7 @@ def get_income_alloc_month_count():
         months, _labels = _income_month_range(request.args)
         where_sql, w_params = _income_month_where(request.args, months)
         cursor = get_connection().cursor()
-        cursor.execute(f"{_income_month_cte(months)} SELECT COUNT(*) {INCOME_MONTH_FROM} WHERE {where_sql}", w_params)
+        cursor.execute(f"{_income_month_cte(months, sale=False)} SELECT COUNT(*) {INCOME_MONTH_FROM} WHERE {where_sql}", w_params)
         return jsonify({"status": "ok", "total": int(cursor.fetchone()[0] or 0)})
     except Exception as e:
         msg = str(e)
@@ -4577,12 +4744,14 @@ def _income_month_export_cols(months, labels):
 def _income_month_xlsx_spec(cols, months):
     """Như file mẫu: tiêu đề cột tháng là NGÀY thật (hiện mm/yyyy); Lũy kế trong kỳ = SUM các ô tháng, Còn lại = Doanh thu − LK
     trước − LK trong kỳ ghi CÔNG THỨC (kèm giá trị tính sẵn); dòng tổng cuối SUM các cột tiền. Cột phụ thuộc bị ẩn khi xuất
-    "Như đang xem" → ô đó ghi số, không ghi công thức."""
+    "Như đang xem" → ô đó ghi số, không ghi công thức. Dải LK trước · các tháng · LK trong kỳ · Còn lại in đậm như màn hình
+    (v1.10.7, Trum 29/09 — chỉ in đậm, không tô nền)."""
     from xlsxwriter.utility import xl_col_to_name as L
     pos = {k: i for i, (k, _) in enumerate(cols)}
     mk = [_month_key(m) for m in months]
     spec = {'header_dates': {pos[_month_key(m)]: datetime(m.year, m.month, 1) for m in months if _month_key(m) in pos},
-            'formulas': {}, 'sum_cols': [pos[k] for k in ["INCOME_AMOUNT", "CUM_BEFORE"] + mk + ["CUM_IN", "CON_LAI"] if k in pos]}
+            'formulas': {}, 'sum_cols': [pos[k] for k in ["INCOME_AMOUNT", "CUM_BEFORE"] + mk + ["CUM_IN", "CON_LAI"] if k in pos],
+            'bold_cols': [pos[k] for k in ["CUM_BEFORE"] + mk + ["CUM_IN", "CON_LAI"] if k in pos]}
     if "CUM_IN" in pos and mk and all(k in pos for k in mk):
         idx = [pos[k] for k in mk]
         if idx == list(range(idx[0], idx[0] + len(idx))):
@@ -4602,7 +4771,7 @@ def get_income_alloc_month_stream_csv():
         total_estimate = int(args.get("total", 0) or 0)
         months, labels = _income_month_range(args)
         where_sql, w_params = _income_month_where(args, months)
-        order_by_sql = _resolve_order_by(args, _income_month_sort(months), "A.TRAN_DATE, A.TRAN_NO")
+        order_by_sql = _income_month_order(args, months)
         full = _income_month_export_cols(months, labels)
         raw_cols = (args.get("cols") or "").strip()
         if raw_cols:   # "MONTHS" (khối cột tháng trên màn hình) → bung ra các khoá tháng
