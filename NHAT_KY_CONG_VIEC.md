@@ -2,7 +2,7 @@
 
 > Toàn bộ những gì đã làm với **LedgerStudio**, và **vì sao**. Đọc file này trước khi sửa tiếp.
 > Kiến trúc và ma trận báo cáo: [CLAUDE.md](CLAUDE.md).
-> Phiên gần nhất: **28/09/2026** · EXE build mới nhất: **iPOS_Ledger_Studio v1.10.5** (đã phát hành 28/09, mục 29) · `main` có thêm v1.10.6 dịch lỗi (mục 30, CHƯA build/phát hành) · việc tiếp theo: CLAUDE.md mục 6 — tên hiển thị DataStudio · v1.9.6–1.9.9 do Gemini làm, ghi ở GEMINI.md
+> Phiên gần nhất: **29/09/2026** · EXE build mới nhất: **iPOS_Ledger_Studio v1.10.6** (đã phát hành 29/09, commit `f363678`, mục 30–32) · việc tiếp theo: CLAUDE.md mục 6 — tên hiển thị DataStudio · v1.9.6–1.9.9 do Gemini làm, ghi ở GEMINI.md
 
 ---
 
@@ -1084,7 +1084,7 @@ hành: `/api/check_update` thật — máy 1.10.3 thấy [v1.10.5, v1.10.4], má
 - Test cập nhật thật (EXE cũ bấm "Cập nhật ngay") KHÔNG chạy ở v1.10.4 lẫn v1.10.5 (Trum ngắt lần chạy ở v1.10.4). Code tải/thay EXE
   không đổi trong cả loạt v1.10.x; test thật đạt ở 4 lần phát hành v1.10.0–v1.10.3 (CLAUDE.md đầu file).
 
-## 30. v1.10.6 (ĐÃ PUSH, CHƯA build/phát hành): dịch mọi lỗi tiếng Anh sang tiếng Việt kèm cách khắc phục *(29/09/2026)*
+## 30. v1.10.6 (phần 1, đã phát hành 29/09): dịch mọi lỗi tiếng Anh sang tiếng Việt kèm cách khắc phục *(29/09/2026)*
 
 **Yêu cầu Trum:** gửi ảnh hộp "Xuất file không thành công" khi xuất BC007 (IACC_CHULONG, Tháng 8/2026, Đơn vị: Tất cả, ≈ 2.856.815 dòng) lỗi
 `('01000', '[01000] [Microsoft][ODBC SQL Server Driver][DBNETLIB]ConnectionWrite (send()). (10054) (SQLGetData); … General network error …')`
@@ -1113,7 +1113,7 @@ CSS `.ds-errtext` / `.ds-err-box`; 5 chỗ hiện lỗi dùng `ErrText`; `alert`
   test_client + Windows auth vào `localhost\SQLEXPRESS` TRUNGDEMO). Thư mục tạm — có thể đã bị dọn.
 - Chưa: build EXE, phát hành, test cập nhật thật (xem mục 29).
 
-## 31. v1.10.6 (phần 2, CHƯA build/phát hành): xuất file lớn chịu đứt mạng *(29/09/2026)*
+## 31. v1.10.6 (phần 2, đã phát hành 29/09): xuất file lớn chịu đứt mạng *(29/09/2026)*
 
 **Yêu cầu Trum:** "tiếp tục task cải thiện tải file Excel hơn 2 triệu dòng bị đứt kết nối… chậm hơn chút cũng được miễn là xuất ra được
 file đẹp, chuẩn, không bị đứt giữa chừng". Nối tiếp mục 30 (sự cố 10054 khi xuất BC007 ≈ 2.856.815 dòng CHULONG qua VPN) và CLAUDE.md mục 6 cũ.
@@ -1152,7 +1152,7 @@ cũ sai "stream → browser tải file CSV trực tiếp".
   thể là 1 lượt quét LEDGER). Khác biệt: kết nối chỉ mở lúc tải (~4 phút thay vì ~9), đứt thì tải lại tối đa 1 khúc (~40 s).
 - Chưa: build EXE, phát hành, đo trên CHULONG (CLAUDE.md mục 6), "Tách sheet theo đơn vị" vẫn chạy trong trình duyệt.
 
-## 32. v1.10.6 (phần 3, CHƯA build/phát hành): danh sách "Doanh thu chờ phân bổ theo tháng" + tooltip thanh bên *(29/09/2026)*
+## 32. v1.10.6 (phần 3, đã phát hành 29/09): danh sách "Doanh thu chờ phân bổ theo tháng" + tooltip thanh bên *(29/09/2026)*
 
 **Yêu cầu Trum:** xem bảng DT chờ phân bổ, đọc mẫu `D:\Tele Download\Bao cao_DTCTH_sample.xlsx` (14 dòng, 30 cột A–AD: ... Lũy kế năm
 trước · 12 cột tháng 2026 (điền tới T8) · Lũy kế năm nay `=SUM(O:Z)` · Giá trị còn lại `=I-N-AA` · Tên đối tượng (trống) · Loại doanh thu),
@@ -1185,4 +1185,11 @@ bảng cũ `INCOME_ALLOC_FROM` JOIN DM_PR_DETAIL. `index.html`: `INCOME_MONTH_GR
 | Hồi quy | `test_compare` 123 · `test_net` 35 · `xuat_ui` 30 | đạt |
 
 - 404 `/icon.svg`, `/manifest.json` lúc nạp trang trong harness: harness chỉ phục vụ `build_web/` (EXE thật có 2 file này) — có từ trước, không liên quan.
-- Chưa: chạy trên DB thật của iPOS so 14 dòng mẫu (CLAUDE.md mục 6 việc 5), đo tốc độ trang (CTE S quét SALE mỗi trang), build EXE, phát hành.
+- Chưa: chạy trên DB thật của iPOS so 14 dòng mẫu (CLAUDE.md mục 6 việc 5), đo tốc độ trang (CTE S quét SALE mỗi trang).
+
+**Phát hành v1.10.6 (29/09, gộp mục 30–32):** `pre-push-qa` VÀNG (chưa kiểm trên DB thật: tốc độ xuất CHULONG, bảng theo tháng trên
+DB iPOS). Build 16.657.405 byte, EXE chạy thử `/api/version` = 1.10.6, app.js có tab mới. Commit `f363678` push `main`, zip tạo lại từ EXE
+vừa build, release `v1.10.6` "Chống đứt mạng + DT theo tháng" (30 ký tự). API `releases/latest`: tag v1.10.6, digest EXE = SHA-256 file
+build; `_release_summary` rút đúng 6 gạch đầu dòng (bỏ mục Cập nhật). **Test cập nhật thật:** tải EXE release v1.10.5 vào thư mục tạm,
+chạy → `/api/check_update` has_update=True, `changes` = [v1.10.6, 6 dòng] → `POST /api/apply_update` → 4 s sau `/api/version` = 1.10.6,
+thư mục còn đúng 1 EXE, SHA-256 = bản build, `check_update` hết báo bản mới.
