@@ -1414,3 +1414,48 @@ IP / tên máy chủ. Rủi ro ghi cả commit: chưa đăng nhập DB thật b�
   16.683.521 byte → v1.10.8 lên sau 5,9 s, thư mục còn 1 file, SHA = release; cửa sổ bản mới mở, `/api/metadata` 401 (phải đăng nhập
   lại — đúng ý Trum); đóng cửa sổ → EXE + cổng tắt 2,7 s, không sót Chrome.
 - Chưa: đăng nhập DB thật (CHULONG) bằng v1.10.8 — lần mở app kế tiếp trên máy Trum chính là bài này.
+
+## 37. v1.10.9 (bản xem trước, CHƯA commit / phát hành): thư mục lưu file xuất theo từng màn hình *(30/09/2026)*
+
+**Yêu cầu Trum (30/09):** "cho phép cấu hình từng màn hình dữ liệu và báo cáo: cấu hình đường dẫn thư mục mặc định để khi xuất excel nó tự
+nhớ theo máy đó cái đường dẫn mà máy đó đã khai báo. Còn không khai báo thì vẫn là đường dẫn thư mục mặc định". Tui hỏi 6 câu, Trum: (1) đổi
+ngay tại chỗ xuất — ok; (2) hộp chọn thư mục Windows + ô dán đường dẫn — ok; (3) nhớ theo máy, chung mọi CSDL — ok; (4) thư mục đã khai mà
+hỏng lúc xuất → **"cảnh báo và yêu cầu chọn lại thư mục"** (KHÔNG theo đề xuất "tự tạo lại / lưu về mặc định"); (5) Tách sheet theo đơn vị
+cũng theo thư mục của màn — ok; (6) "Áp dụng cho mọi màn hình" — ok. Nút "Tạo lại thư mục này" trong hộp cảnh báo (người dùng tự bấm) đã
+báo trước, Trum duyệt "làm đi".
+
+**Đọc code trước khi sửa thấy:** 16/17 kiểu xuất đặt file qua 1 hàm `_export_dir()`; "Tách sheet theo đơn vị" dựng file ở trình duyệt rồi
+tải qua `<a download>` → rơi vào Downloads của Chrome, không có Mở file / Mở folder; `/api/open_file` + `/api/open_folder` chỉ cho mở trong
+`_export_dir()` (so `startswith`, `realpath`) và không xét đuôi file; `_rx_reserve_path` + `_cleanup_orphan_exports` xoá `*.part` trong thư
+mục xuất.
+
+**Đã sửa:** xem CLAUDE.md mục 3.5 + Bẫy 29. `server.py`: khối "THƯ MỤC LƯU FILE XUẤT THEO MÀN HÌNH" (`_EXPORT_SCREENS`, `_export_dirs_*`,
+`_export_dir_for`, `_clean_dir_input`, `_export_dir_state`, `_export_dir_problem`, `_in_export_roots`, `_pick_folder_native` /
+`_pick_owner_window` / `_pick_folder_sta`), `GET/POST /api/export/dir`, `POST /api/export/pick_dir`, `POST /api/export/save_file`,
+`_rx_reserve_path(…, folder)`, `_start_export_job` + `report_export_start` kiểm thư mục, `open_file` / `open_folder` siết lại, 1 luật dịch lỗi
+thư mục mất khi ghi. `index.html`: `ExportDirDialog`, `ExportDirHost`, `askExportDir`, `ensureExportDir`, `shortPath`, dòng "Lưu vào" ở menu
+Xuất Excel + hộp Xuất báo cáo, `doExport` / `startServerExport` kiểm + hỏi lại, tách sheet gửi file về server.
+
+**Cân nhắc đã chọn:**
+- Server tự suy màn hình từ route / `report_type`, trang không gửi đường dẫn lúc xuất → không ghi được ra chỗ lạ bằng cách sửa request.
+- Không lưu về mặc định khi hỏng (Trum chốt) — kiểm trước khi đếm / tải để không bắt chờ hết phần tải mới báo.
+- Hộp chọn thư mục qua ctypes (IFileOpenDialog) thay vì tkinter (thêm vài MB vào EXE, hộp kiểu cũ) hay PowerShell FolderBrowserDialog
+  (khởi động 1–2 s, dễ nằm sau cửa sổ app).
+- Không dọn `.part` ở thư mục người dùng chọn (Firefox cũng dùng đuôi này).
+- Nhật ký + `.session_key` giữ ở thư mục mặc định: 1 chỗ cố định để Trum gửi nhật ký.
+
+**Verify** (bộ kiểm ngoài repo, scratchpad phiên e5f4e321: `t_dirs.py`, `ui_server.py`, `ui_dirs.js`, `pick_test.py`, `owner_test.py`,
+`verify_exe.py`, `smoke_exe.py`; máy chủ thử chạy từ `build_web`, `_make_conn` giả nối SQL Express thật TRUNGDEMO, cấu hình + thư mục mặc
+định nằm trong scratchpad):
+
+| Mức | Bài | Kết quả |
+|---|---|---|
+| M1 | `ast.parse`, `import server` (chặn `kill_process_on_port`), `webbuild/build.js` | qua |
+| M2 | `t_dirs.py` (`test_client`): mặc định như cũ; khai / đổi / về mặc định / chọn đúng thư mục mặc định; dấu nháy + `\` cuối; đường dẫn không đầy đủ (`abc`, `D:abc`, `\abc`), quá dài, màn lạ, thư mục chưa có (không tự tạo → create), ổ không có, là file, ký tự cấm, thư mục bị `icacls /deny` ghi; áp dụng mọi màn (18 khoá) + xoá hết; thư mục đổi tên → `export_dir` + `can_create`; ổ mạng treo → trả lời sau 1 s; file cấu hình hỏng / khoá lạ; `.part` của người dùng không bị xoá, thư mục mặc định vẫn dọn; dịch lỗi Errno 2 / WinError 64 (không lẫn luật SQL 10054); Mở file `.xlsx` được, `.exe` / ngoài thư mục / `..` / cùng tiền tố / Origin lạ bị chặn, Mở folder file đã xoá → mở thư mục chứa; `save_file` đúng thư mục, trùng tên (2), tên `..\` bị bỏ, thân rỗng, thư mục hỏng 409; job thật (SQL Express): sổ cái xlsx / bán hàng csv / tiền (mặc định) / BC007 ghi đúng thư mục, thư mục hỏng → job lỗi `export_dir` + BC007 409 trước khi dựng plan, không tự tạo lại | **76/76** |
+| M3 giao diện | `ui_dirs.js` (puppeteer, bản dịch sẵn, SQL Express thật): dòng Lưu vào + thẻ mặc định, không tràn menu; hộp: điền sẵn + focus, Enter lưu, Esc không lưu; chưa có → "chưa có trên máy" + Tạo thư mục này; con trỏ về cuối đường dẫn; Chọn thư mục… (hộp Windows giả) / Hủy trong hộp; Về mặc định; áp dụng mọi màn → tab khác + báo cáo thấy; thư mục hỏng: menu đỏ, xuất → hộp cảnh báo, chưa chạy job; Tạo lại → xuất tiếp đúng thư mục; chọn thư mục khác → "Lưu và xuất tiếp" (chỉ đổi màn đó); Hủy = không xuất; Tách sheet theo đơn vị → file xlsx (PK) trong thư mục của tab + hộp Đã xuất xong; BC007: hộp thư mục nằm TRÊN hộp Xuất báo cáo, Esc chỉ đóng hộp trên, Enter chỉ lưu không kích xuất, xuất vào thư mục mới; báo cáo thư mục hỏng → dòng đỏ, Hủy không gọi start; không alert, không lỗi JS | **35/35** |
+| M3 hộp Windows thật | `pick_test.py`: Chrome `--app` thật tiêu đề "DataStudio" + máy chủ thử hộp thật: hộp hiện đúng tiêu đề, chủ = cửa sổ app, nằm trên app, app bị khoá, app đứng trước → hộp đứng trước; bấm "Chọn thư mục" → trả đúng thư mục có dấu; đóng hộp → `cancel`; app mở khoá lại. `owner_test.py`: app KHÔNG đứng trước → `_pick_owner_window` vẫn chọn đúng cửa sổ DataStudio | **17/17** + qua |
+| M3 EXE | build 18:50 → v1.10.9, 16.704.069 byte, SHA-256 `cc91fcc5…aa8e`; `verify_exe.py`: `version.txt` 1.10.9, app.js / app.css / index.html trùng từng byte `build_web` đã chạy 35/35, server đủ 17 hàm mới; `smoke_exe.py`: server 2,6 s, `/api/export/dir` = Downloads\iPOS_Ledger_Studio (chưa khai), POST màn lạ 400, Origin lạ 403, không tạo file cấu hình thật, đóng cửa sổ → EXE + cổng 5050 tắt 4,3 s | qua |
+
+- Lần chạy thử hộp Windows bản đầu (chủ hộp = chỉ cửa sổ đứng trước): lượt Outlook của Trum đang đứng trước → hộp không có chủ, hiện SAU
+  Outlook → thêm tìm cửa sổ "DataStudio" (`_pick_owner_window`). Chạy thử hộp thật là giành focus vài giây trên máy Trum — đừng chạy lặp.
+- Chưa: chọn thư mục thật trên ổ mạng / USB của máy Trum; `pre-push-qa` (chưa commit).

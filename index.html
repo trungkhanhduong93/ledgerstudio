@@ -533,6 +533,24 @@ window.showConnectionLost = function() {
         .ds-expcols .ds-seg { display: flex; width: 100%; }
         .ds-expcols .ds-seg button { flex: 1; }
         .ds-expcols small { display: block; margin-top: 6px; font-size: 11.5px; color: var(--ds-ink-3); }
+        /* Thư mục lưu file theo màn hình (v1.10.9): dòng "Lưu vào … Đổi" (menu Xuất Excel, hộp Xuất báo cáo) + hộp "Thư mục lưu file" */
+        .ds-savedir { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; color: var(--ds-ink-3); }
+        .ds-savedir > svg { flex: none; }
+        .ds-savedir .ds-sd-path { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--ds-ink-2); }
+        .ds-savedir.is-bad .ds-sd-path { color: var(--ds-bad-ink); }
+        .ds-savedir .ds-tag, .ds-expdir .ds-tag { flex: none; height: 18px; padding: 0 6px; font-size: 11px; }
+        .ds-sd-btn { flex: none; margin-left: auto; height: 24px; padding: 0 8px; border-radius: 6px; font-size: 12px; font-weight: 500; color: var(--ds-brand); white-space: nowrap; transition: background-color .12s; }
+        .ds-sd-btn:hover:not(:disabled) { background: var(--ds-brand-soft); }
+        .ds-sd-btn:disabled { opacity: .45; cursor: not-allowed; }
+        .ds-expdir { padding: 7px 12px 9px; border-top: 1px solid var(--ds-line-soft); background: var(--ds-wash); }
+        .ds-expdir .ds-poplabel { margin: 0; }
+        .ds-expdir .ds-sd-line { display: flex; align-items: center; gap: 6px; margin-top: 2px; font: 11.5px/1.5 ui-monospace, Consolas, monospace; color: var(--ds-ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .ds-expdir .ds-sd-line svg { flex: none; color: var(--ds-ink-3); }
+        .ds-expdir.is-bad .ds-sd-line { color: var(--ds-bad-ink); }
+        .ds-expdir .ds-sd-warn { margin-top: 3px; font-size: 11.5px; line-height: 1.4; color: var(--ds-bad-ink); }
+        .ds-dirinput { display: flex; gap: 8px; }
+        .ds-dirinput .ds-filename { flex: 1; min-width: 0; }
+        .ds-dirinput .ds-filename input { font: 12px/1 ui-monospace, Consolas, monospace; }
         .ds-upd-force { max-width: 400px; text-align: center; }
         .ds-upd-hero { padding: 28px 24px 0; }
         .ds-upd-badge { width: 56px; height: 56px; margin: 0 auto 16px; display: grid; place-items: center; border-radius: 50%; background: var(--ds-brand-soft); color: var(--ds-brand); animation: dsUpPulse 2s ease-in-out infinite; }
@@ -2629,6 +2647,196 @@ window.showConnectionLost = function() {
             return h ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
         };
 
+        // ===== THƯ MỤC LƯU FILE THEO MÀN HÌNH (v1.10.9, Trum 30/09) =====
+        // Mỗi màn hình (8 tab dữ liệu + 9 báo cáo) nhớ 1 thư mục lưu file xuất TRÊN MÁY NÀY — server giữ ở %LocalAppData%\
+        // iPOS_Ledger_Studio\export_dirs.json, chung mọi CSDL; chưa khai → Downloads\iPOS_Ledger_Studio. Đổi ở dòng "Lưu vào" của menu
+        // Xuất Excel (tab dữ liệu) / hộp Xuất báo cáo. Thư mục đã khai mà hỏng (rút USB, mất ổ mạng, bị xoá…) → KHÔNG lưu chỗ khác:
+        // cảnh báo + bắt chọn lại (ensureExportDir chạy TRƯỚC khi xuất), chọn xong xuất tiếp. Khoá màn hình = id tab / mã báo cáo —
+        // trùng _EXPORT_SCREENS ở server. KHÔNG tính gì từ DOC_TABS ở cấp trên cùng: DOC_TABS khai báo SAU khối này (chạy lúc nạp là undefined).
+        const exportScreenName = (s) => NAV_DOC_META[s] ? NAV_DOC_META[s][0] : NAV_REPORT_META[s] ? `${NAV_REPORT_META[s][1]} (${s})` : s;
+        // Đường dẫn dài → "D:\…\Thang 08\BC007": giữ ổ / máy chủ + các thư mục cuối cho vừa chỗ hẹp (rê chuột xem đủ)
+        const shortPath = (p, max = 46) => {
+            p = String(p || '');
+            if (p.length <= max) return p;
+            const unc = p.startsWith('\\\\'), parts = p.split('\\');
+            const head = unc ? '\\\\' + parts[2] : parts[0];
+            let tail = parts[parts.length - 1];
+            for (let i = parts.length - 2; i > (unc ? 2 : 0); i--) {
+                if ((head + '\\…\\' + parts[i] + '\\' + tail).length > max) break;
+                tail = parts[i] + '\\' + tail;
+            }
+            const s = head + '\\…\\' + tail;
+            return s.length <= max ? s : '…' + p.slice(-(max - 1));
+        };
+        const exportDirHost = { open: null };   // ExportDirHost (gắn 1 lần trong App) đặt hàm mở hộp vào đây
+        // Mở hộp "Thư mục lưu file" từ bất cứ đâu → Promise: thông tin thư mục sau khi Lưu ({ dir, custom, … }), null khi Hủy.
+        // warn = { dir, reason, canCreate }: thư mục đã khai đang hỏng → hộp cảnh báo, nút chính "Lưu và xuất tiếp".
+        const askExportDir = (screen, warn) => new Promise(resolve => {
+            if (exportDirHost.open) exportDirHost.open({ id: Date.now() + Math.random(), screen, warn: warn || null, resolve });
+            else resolve(null);
+        });
+        // Kiểm thư mục lưu của màn hình TRƯỚC khi xuất → thông tin thư mục (dùng được, hoặc vừa chọn lại); null = người dùng Hủy, thôi xuất.
+        const ensureExportDir = async (screen) => {
+            let j = null;
+            try { j = await fetch(`/api/export/dir?screen=${encodeURIComponent(screen)}`).then(r => r.json()); }
+            catch (e) { return {}; }   // không hỏi được phần chạy nền → cứ xuất, job tự báo lỗi như cũ
+            if (!j || j.status !== 'ok' || j.ok) return j || {};
+            return await askExportDir(screen, { dir: j.dir, reason: j.reason, canCreate: j.can_create });
+        };
+
+        const ExportDirDialog = ({ req, onClose }) => {
+            const { screen, warn } = req;
+            const [info, setInfo] = React.useState(null);        // { dir, default, custom } của màn hình
+            const [val, setVal] = React.useState(warn ? warn.dir : '');
+            const [all, setAll] = React.useState(false);
+            const [busy, setBusy] = React.useState('');          // '' | 'pick' (đang mở hộp chọn của Windows) | 'save'
+            const [err, setErr] = React.useState(null);          // { text, canCreate, dir }
+            const inputRef = React.useRef(null);
+            // đường dẫn dài: đưa con trỏ về cuối để ô hiện phần cuối (tên thư mục) thay vì "C:\Users\…"
+            const caretEnd = () => setTimeout(() => { const el = inputRef.current; if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }, 0);
+            React.useEffect(() => {
+                let alive = true;
+                if (warn) caretEnd();
+                fetch(`/api/export/dir?screen=${encodeURIComponent(screen)}&quick=1`).then(r => r.json()).then(j => {
+                    if (!alive || j.status !== 'ok') return;
+                    setInfo(j);
+                    if (!warn) { setVal(v => v || j.dir); caretEnd(); }
+                }).catch(() => {});
+                return () => { alive = false; };
+            // eslint-disable-next-line react-hooks/exhaustive-deps
+            }, []);
+            const save = async (opts = {}) => {
+                if (busy) return;
+                const dir = opts.dir !== undefined ? opts.dir : val.trim();
+                if (!dir) { setErr({ text: 'Chưa có đường dẫn thư mục.' }); return; }
+                setBusy('save'); setErr(null);
+                try {
+                    const r = await fetch('/api/export/dir', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ screen, dir, all, create: !!opts.create }) });
+                    const j = await r.json().catch(() => ({}));
+                    if (r.ok && j.status === 'ok') { onClose(j); return; }
+                    setErr({ text: j.message || `Máy chủ báo lỗi (HTTP ${r.status}).`, canCreate: !!j.can_create, dir: j.dir });
+                } catch (e) { setErr({ text: viErr(e) }); }
+                setBusy('');
+            };
+            const pick = async () => {
+                if (busy) return;
+                setBusy('pick'); setErr(null);
+                try {
+                    const j = await fetch('/api/export/pick_dir', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ start: val.trim() || (info && info.dir) || '' }) }).then(r => r.json());
+                    if (j.status === 'ok' && j.dir) setVal(j.dir);
+                    else if (j.status === 'error') setErr({ text: j.message || 'Không mở được hộp chọn thư mục.' });
+                } catch (e) { setErr({ text: viErr(e) }); }
+                setBusy('');
+                caretEnd();
+            };
+            // Esc / Enter bắt ở pha capture của window + chặn lan: hộp này có thể nằm TRÊN hộp Xuất báo cáo — hộp đó nghe keydown ở window
+            // (Enter = xuất, Esc = đóng) → không chặn thì 1 phím chạy cả 2 hộp. Enter trên nút thì để nút tự bấm.
+            React.useEffect(() => {
+                const onKey = (e) => {
+                    if (e.key !== 'Escape' && e.key !== 'Enter') return;
+                    e.stopPropagation();
+                    if (e.key === 'Escape') { e.preventDefault(); if (!busy) onClose(null); }
+                    else if (!e.isComposing && !(e.target && e.target.tagName === 'BUTTON')) { e.preventDefault(); save(); }
+                };
+                window.addEventListener('keydown', onKey, true);
+                return () => window.removeEventListener('keydown', onKey, true);
+            });
+            const def = info ? info.default : '';
+            return (
+                <div className="ds-scrim" style={{ zIndex: 100001 }} onMouseDown={e => { if (e.target === e.currentTarget && !busy) onClose(null); }}>
+                    <div className="ds-dialog is-wide" role="dialog" aria-modal="true">
+                        <div className="ds-dlg-head">
+                            <div className={`ds-dlg-ic ${warn ? 'is-warn' : ''}`}><Icon name={warn ? 'alert-circle' : 'folder-open'} size={18} stroke={2} /></div>
+                            <div className="flex-1 min-w-0">
+                                <h3>{warn ? 'Không lưu được vào thư mục đã chọn' : 'Thư mục lưu file'}</h3>
+                                <div className="ds-dlg-sub">{exportScreenName(screen)} · nhớ trên máy này</div>
+                            </div>
+                            <button onClick={() => { if (!busy) onClose(null); }} className="ds-iconbtn ds-dlg-x" title="Đóng (Esc)"><Icon name="x" size={16} stroke={2} /></button>
+                        </div>
+                        <div className="ds-dlg-body space-y-4">
+                            {warn && (
+                                <div className="ds-note is-warn">
+                                    <Icon name="alert-circle" size={14} stroke={2} />
+                                    <div className="min-w-0">
+                                        <div><b className="break-all">{warn.dir}</b></div>
+                                        <div>{warn.reason}</div>
+                                        <div className="mt-1">Chọn lại thư mục để xuất tiếp{warn.canCreate ? ', hoặc tạo lại đúng thư mục cũ.' : '.'}</div>
+                                        {warn.canCreate && (
+                                            <button type="button" className="ds-btn mt-2" disabled={!!busy} onClick={() => save({ dir: warn.dir, create: true })}>
+                                                <Icon name="plus" size={14} stroke={2} /> Tạo lại thư mục này
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                            <div>
+                                <div className="ds-field-label">Thư mục lưu file xuất của màn hình này</div>
+                                <div className="ds-dirinput">
+                                    <div className="ds-filename">
+                                        <input ref={inputRef} value={val} autoFocus spellCheck={false} placeholder="D:\KeToan\BaoCao"
+                                            onChange={e => { setVal(e.target.value); setErr(null); }} />
+                                    </div>
+                                    <button type="button" className="ds-btn" disabled={!!busy} onClick={pick}>
+                                        {busy === 'pick' ? <><Icon name="loader" size={14} className="animate-spin" /> Đang mở…</> : <><Icon name="folder-open" size={14} stroke={2} /> Chọn thư mục…</>}
+                                    </button>
+                                </div>
+                                <div className="text-[12px] text-ink-3 mt-1.5">
+                                    {busy === 'pick' ? 'Chọn thư mục trong hộp của Windows rồi bấm "Chọn thư mục".'
+                                        : 'Bấm "Chọn thư mục…", hoặc copy đường dẫn trên thanh địa chỉ của File Explorer rồi dán vào ô.'}
+                                </div>
+                                {err && (
+                                    <div className="ds-note is-bad mt-2">
+                                        <Icon name="alert-circle" size={14} stroke={2} />
+                                        <div className="min-w-0 flex-1">
+                                            <ErrText text={err.text} />
+                                            {err.canCreate && (
+                                                <button type="button" className="ds-btn mt-2" disabled={!!busy} onClick={() => save({ dir: err.dir, create: true })}>
+                                                    <Icon name="plus" size={14} stroke={2} /> Tạo thư mục này
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                            <label className="ds-lg-check" style={{ marginBottom: 0 }}>
+                                <input type="checkbox" checked={all} onChange={e => setAll(e.target.checked)} />
+                                <span className="ds-cbox"><Icon name="check" size={11} stroke={3} /></span>
+                                <span>Áp dụng cho mọi màn hình ({DOC_TABS.length + REPORT_TYPES.length} màn dữ liệu và báo cáo)</span>
+                            </label>
+                            <div className="ds-savedir">
+                                <span className="shrink-0">Mặc định:</span>
+                                <span className="ds-sd-path" title={def}>{def ? shortPath(def, 56) : 'Downloads\\iPOS_Ledger_Studio'}</span>
+                                <button type="button" className="ds-sd-btn" disabled={!!busy || !def} onClick={() => { setVal(def); setErr(null); caretEnd(); }}>Về mặc định</button>
+                            </div>
+                        </div>
+                        <div className="ds-dlg-foot">
+                            <div className="hidden sm:flex items-center gap-1.5 text-[12px] text-ink-3 mr-auto">
+                                <span className="ds-kbd">Enter</span> lưu <span className="ds-kbd ml-2">Esc</span> đóng
+                            </div>
+                            <button onClick={() => onClose(null)} disabled={!!busy} className="ds-btn">Hủy</button>
+                            <button onClick={() => save()} disabled={!!busy || !val.trim()} className="ds-btn ds-btn-pri">
+                                {busy === 'save' ? <Icon name="loader" size={14} className="animate-spin" /> : <Icon name="check" size={14} stroke={2} />} {warn ? 'Lưu và xuất tiếp' : 'Lưu'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+        // Gắn 1 lần trong App: giữ hộp "Thư mục lưu file" đang mở (mỗi lần mở là 1 hộp mới — key theo id).
+        const ExportDirHost = () => {
+            const [req, setReq] = React.useState(null);
+            const cur = React.useRef(null);
+            React.useEffect(() => {
+                const open = (r) => { if (cur.current) cur.current.resolve(null); cur.current = r; setReq(r); };
+                exportDirHost.open = open;
+                return () => { if (exportDirHost.open === open) exportDirHost.open = null; };
+            }, []);
+            if (!req) return null;
+            return <ExportDirDialog key={req.id} req={req} onClose={(res) => { cur.current = null; req.resolve(res || null); setReq(null); }} />;
+        };
+
         const ReportExportDialog = ({ open, onClose, cfg }) => {
             const [step, setStep] = React.useState('options');   // options | running | done | error | cancelled
             const [format, setFormat] = React.useState('xlsx');
@@ -2636,6 +2844,7 @@ window.showConnectionLost = function() {
             const [fileBase, setFileBase] = React.useState('');
             const [nameEdited, setNameEdited] = React.useState(false);
             const [exportDir, setExportDir] = React.useState('');
+            const [dirInfo, setDirInfo] = React.useState(null);   // thư mục lưu của báo cáo (v1.10.9): { dir, custom, ok, reason }
             const [job, setJob] = React.useState(null);
             const [speed, setSpeed] = React.useState(0);
             const [errorMsg, setErrorMsg] = React.useState('');
@@ -2659,8 +2868,10 @@ window.showConnectionLost = function() {
                 const v = cfg.defaultVariant || '';
                 setStep('options'); setFormat('xlsx'); setVariant(v);
                 setFileBase(cfg.fileBase(v)); setNameEdited(false);
-                setJob(null); setSpeed(0); setErrorMsg(''); setCancelling(false); setActionMsg('');
-                fetch('/api/export/dir').then(r => r.json()).then(j => { if (aliveRef.current && j.status === 'ok') setExportDir(j.dir); }).catch(() => {});
+                setJob(null); setSpeed(0); setErrorMsg(''); setCancelling(false); setActionMsg(''); setDirInfo(null);
+                fetch(`/api/export/dir?screen=${cfg.code}&quick=1`).then(r => r.json()).then(j => {
+                    if (aliveRef.current && j.status === 'ok') { setExportDir(j.dir); setDirInfo(j); }
+                }).catch(() => {});
             // eslint-disable-next-line react-hooks/exhaustive-deps
             }, [open]);
 
@@ -2695,10 +2906,19 @@ window.showConnectionLost = function() {
                 timerRef.current = setTimeout(poll, 400);
             }, []);
 
+            const applyDir = (d) => { if (d && d.dir) { setExportDir(d.dir); setDirInfo(d); } };
+            const changeDir = async () => applyDir(await askExportDir(cfg.code));
+            const checkingRef = React.useRef(false);
             const start = async () => {
-                if (step === 'running') return;
+                if (step === 'running' || checkingRef.current) return;
                 const name = fileBase.trim();
                 if (!name) { setActionMsg('Hãy nhập tên file trước khi xuất.'); return; }
+                // Thư mục lưu đã khai mà hỏng → cảnh báo + bắt chọn lại TRƯỚC khi xuất (v1.10.9); Hủy chọn = thôi xuất
+                checkingRef.current = true;
+                const d = await ensureExportDir(cfg.code);
+                checkingRef.current = false;
+                if (!aliveRef.current || !d) return;
+                applyDir(d);
                 setActionMsg(''); setErrorMsg(''); setCancelling(false); setSpeed(0); samplesRef.current = []; phaseRef.current = '';
                 setJob({ status: 'running', phase: 'prepare', current: 0, total: cfg.estimate(variant) || 0, filename: `${name}.${format}` });
                 setStep('running');
@@ -2707,6 +2927,12 @@ window.showConnectionLost = function() {
                     const r = await fetch('/api/report_export/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
                     const j = await r.json().catch(() => ({}));
                     if (!aliveRef.current) return;
+                    if (j.code === 'export_dir') {   // thư mục vừa hỏng sau lần kiểm ở trên → hỏi lại rồi xuất tiếp
+                        setStep('options');
+                        const d2 = await askExportDir(cfg.code, { dir: j.dir, reason: j.reason, canCreate: j.can_create });
+                        if (d2 && aliveRef.current) { applyDir(d2); start(); }
+                        return;
+                    }
                     if (!r.ok || j.status !== 'ok') { setErrorMsg(j.message || `Máy chủ báo lỗi (HTTP ${r.status}).`); setStep('error'); return; }
                     jobIdRef.current = j.job_id;
                     setJob(prev => ({ ...prev, filename: j.filename }));
@@ -2851,11 +3077,14 @@ window.showConnectionLost = function() {
                                             <input value={fileBase} onChange={e => { setFileBase(e.target.value); setNameEdited(true); setActionMsg(''); }} spellCheck={false} />
                                             <span>.{format}</span>
                                         </div>
-                                        <div className="flex items-center gap-1.5 mt-1.5 text-[12px] text-ink-3 min-w-0">
-                                            <Icon name="folder-open" size={13} stroke={2} className="shrink-0" />
+                                        <div className={`ds-savedir mt-1.5 ${dirInfo && !dirInfo.ok ? 'is-bad' : ''}`}>
+                                            <Icon name="folder-open" size={13} stroke={2} />
                                             <span className="shrink-0">Lưu vào</span>
-                                            <span className="text-ink-2 truncate" title={exportDir}>{exportDir || 'Downloads\\iPOS_Ledger_Studio'}</span>
+                                            <span className="ds-sd-path" title={exportDir}>{exportDir ? shortPath(exportDir, 58) : 'Downloads\\iPOS_Ledger_Studio'}</span>
+                                            {dirInfo && !dirInfo.custom && <span className="ds-tag">mặc định</span>}
+                                            <button type="button" className="ds-sd-btn" onClick={changeDir} title="Chọn thư mục lưu riêng cho báo cáo này — nhớ trên máy này">Đổi thư mục</button>
                                         </div>
+                                        {dirInfo && !dirInfo.ok && <div className="ds-err mt-0.5">{dirInfo.reason} Bấm "Đổi thư mục" để chọn lại.</div>}
                                         <div className="text-[12px] text-ink-4 mt-0.5">Trùng tên file cũ sẽ tự thêm (2), (3)… — không ghi đè file đang mở.</div>
                                     </div>
 
@@ -4422,11 +4651,19 @@ window.showConnectionLost = function() {
         const ExportButton = ({ kind, open, setOpen, exporting, cols, onCols, gridLays, viewCounts, onExport }) => {
             const ref = useRef(null);
             const isOpen = open === kind;
+            const [dir, setDir] = useState(null);   // thư mục lưu của tab (v1.10.9) — hỏi lại mỗi lần mở menu (có thể vừa đổi ở tab khác / "mọi màn hình")
             useEffect(() => {
                 const onDown = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(null); };
                 if (isOpen) document.addEventListener('mousedown', onDown);
                 return () => document.removeEventListener('mousedown', onDown);
             }, [isOpen]);
+            useEffect(() => {
+                if (!isOpen) return;
+                let alive = true;
+                fetch(`/api/export/dir?screen=${kind}&quick=1`).then(r => r.json()).then(j => { if (alive && j.status === 'ok') setDir(j); }).catch(() => {});
+                return () => { alive = false; };
+            }, [isOpen, kind]);
+            const changeDir = () => { setOpen(null); askExportDir(kind); };
             return (
                 <div className="relative shrink-0" ref={ref}>
                     <button
@@ -4462,6 +4699,15 @@ window.showConnectionLost = function() {
                                 <span className="ds-fmt">ORG</span>
                                 <span><b>Tách sheet theo đơn vị (.xlsx)</b><small>Mỗi đơn vị 1 sheet trong 1 file Excel</small></span>
                             </button>
+                            <div className={`ds-expdir ${dir && !dir.ok ? 'is-bad' : ''}`}>
+                                <div className="flex items-center gap-1.5">
+                                    <span className="ds-poplabel">Lưu vào</span>
+                                    {dir && !dir.custom && <span className="ds-tag">mặc định</span>}
+                                    <button type="button" className="ds-sd-btn" onClick={changeDir} title="Chọn thư mục lưu riêng cho danh sách này — nhớ trên máy này">Đổi thư mục</button>
+                                </div>
+                                <div className="ds-sd-line" title={dir ? dir.dir : ''}><Icon name="folder-open" size={13} stroke={2} />{dir ? shortPath(dir.dir, 36) : '…'}</div>
+                                {dir && !dir.ok && <div className="ds-sd-warn">{dir.reason} Bấm "Đổi thư mục" để chọn lại.</div>}
+                            </div>
                         </div>
                     )}
                 </div>
@@ -6449,6 +6695,7 @@ window.showConnectionLost = function() {
                 setExporting(true);
                 exportCancelRef.current = false;
                 setExportProgress({ phase: 'job', sub: 'prepare', current: 0, total, format });
+                let dirIssue = null;   // thư mục lưu hỏng lúc tạo job (v1.10.9) → hỏi chọn lại rồi xuất lại
                 try {
                     const q = buildExportQuery(kind);
                     q.set('total', String(total));
@@ -6477,6 +6724,7 @@ window.showConnectionLost = function() {
                             break;
                         }
                         if (sj.status === 'cancelled' || (sj.status === 'error' && exportCancelRef.current)) break;   // tự bấm Hủy → đóng êm
+                        if (sj.status === 'error' && sj.code === 'export_dir') { dirIssue = { dir: sj.dir, reason: sj.reason, canCreate: sj.can_create }; break; }
                         if (sj.status === 'error') {
                             alert('Xuất file không thành công.\n\n' + (sj.error || ''));
                             break;
@@ -6488,6 +6736,7 @@ window.showConnectionLost = function() {
                     setExporting(false);
                     setExportProgress(null);
                 }
+                if (dirIssue && await askExportDir(kind, dirIssue)) await startServerExport(kind, total, format, viewKeys);
             };
 
             const openExportedFile = async (path) => {
@@ -6517,8 +6766,10 @@ window.showConnectionLost = function() {
                 // kind: 'ledger' | 'purchase' | 'warehouse' | 'sale' | 'voucher' | 'income_alloc' | 'pr_detail' ; mode: 'single' | 'by_org' ; format: 'xlsx' | 'csv'
                 if (typeof XLSX === 'undefined' && mode === 'by_org') { alert('Thư viện XLSX chưa tải được. Vui lòng kiểm tra kết nối.'); return; }
                 const viewKeys = exportCols === 'view' ? viewExportKeys(kind) : null;   // chụp bố cục lúc bấm xuất
-                setExporting(true);
                 setExportOpen(null);
+                // Thư mục lưu đã khai mà hỏng → cảnh báo + bắt chọn lại TRƯỚC khi đếm / tải (v1.10.9); Hủy chọn = thôi xuất
+                if (!(await ensureExportDir(kind))) return;
+                setExporting(true);
                 setExportProgress({ phase: 'fetch', current: 0, total: 0 });
                 try {
                     // ===== BƯỚC 1: Lấy số dòng trước =====
@@ -6623,16 +6874,24 @@ window.showConnectionLost = function() {
                     setExportProgress({ phase: 'write', current: rows.length, total: rows.length });
                     await yieldToUI();
 
-                    // Dùng XLSX.write + Blob → tránh writeFile internal heavy enumeration
+                    // Dùng XLSX.write (mảng byte) → tránh writeFile internal heavy enumeration
                     const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array', compression: true });
-                    const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-                    const blobUrl = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = blobUrl;
-                    a.download = fname;
-                    document.body.appendChild(a);
-                    a.click();
-                    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(blobUrl); }, 100);
+                    // v1.10.9: server ghi file vào thư mục lưu của tab (trước đây trình duyệt tự tải về Downloads của Chrome) → cùng hộp
+                    // "Đã xuất xong" Mở file / Mở folder như 2 kiểu kia. Thư mục vừa hỏng → hỏi chọn lại rồi ghi lại, file dựng sẵn giữ nguyên.
+                    while (true) {
+                        const sr = await fetch(`/api/export/save_file?screen=${kind}&filename=${encodeURIComponent(fname)}`,
+                            { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: wbout });
+                        const sj = await sr.json().catch(() => ({}));
+                        if (sj.status === 'ok') { setExportDone({ file_path: sj.path, filename: sj.filename, total: rows.length, retries: 0 }); break; }
+                        if (sj.code === 'export_dir') {
+                            setExportProgress(null);
+                            if (!(await askExportDir(kind, { dir: sj.dir, reason: sj.reason, canCreate: sj.can_create }))) break;
+                            setExportProgress({ phase: 'write', current: rows.length, total: rows.length });
+                            continue;
+                        }
+                        alert('Xuất file không thành công.\n\n' + (sj.message || `Máy chủ báo lỗi (HTTP ${sr.status}).`));
+                        break;
+                    }
                 } catch (err) {
                     alert('Lỗi xuất Excel.\n\n' + viErr(err));
                 } finally {
@@ -7959,6 +8218,8 @@ window.showConnectionLost = function() {
                             />
                         </div>
                     )}
+                    {/* Hộp "Thư mục lưu file" (v1.10.9) — mở qua askExportDir() từ menu Xuất Excel / hộp Xuất báo cáo, nằm trên mọi hộp khác */}
+                    <ExportDirHost />
                     {/* MODAL: Tải xong → Mở file / Mở folder */}
                     {exportDone && (
                         <div className="ds-scrim z-[9999]">

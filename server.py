@@ -266,6 +266,11 @@ _Q = lambda m, i=1: (m.group(i) if m and m.group(i) else '').strip()
 _VI_ERR_RULES = [
     (None, r'cancelled by user',
      lambda m: ("Đã huỷ xuất file theo yêu cầu.", "Bấm Xuất lại nếu cần file.")),
+    # thư mục lưu file mất giữa lúc ghi (v1.10.9: thư mục lưu theo màn hình có thể là ổ USB / ổ mạng). Lỗi OSError của Python —
+    # đứng TRƯỚC luật mạng SQL: "[WinError 64] The specified network name is no longer available" là ổ mạng, không phải SQL.
+    (None, r'\[winerror (?:3|21|53|64|67|1231)\]|\[errno 2\] no such file',
+     lambda m: ("Không tìm thấy thư mục hoặc ổ đĩa để ghi file — ổ USB / ổ mạng vừa bị ngắt, hoặc thư mục bị xoá.",
+                "Cắm lại ổ (ổ mạng thì bật VPN công ty), hoặc bấm Đổi ở dòng \"Lưu vào\" để chọn thư mục khác, rồi xuất lại.")),
     (None, r'cannot open database "([^"]+)"',
      lambda m: (f'Không mở được cơ sở dữ liệu "{_Q(m)}" — sai tên CSDL, hoặc tài khoản SQL chưa được cấp quyền vào CSDL này.',
                 "Kiểm tra lại ô Cơ sở dữ liệu (đúng tên, đúng hoa thường). Tên đúng mà vẫn lỗi thì nhờ IT cấp quyền cho tài khoản vào CSDL.")),
@@ -2053,6 +2058,258 @@ def _export_dir():
     return base
 
 
+# ============== THƯ MỤC LƯU FILE XUẤT THEO MÀN HÌNH (v1.10.9, Trum 30/09) ==============
+# Mỗi màn hình (8 tab dữ liệu + 9 báo cáo) khai được 1 thư mục lưu file riêng, nhớ THEO MÁY (theo tài khoản Windows), dùng
+# chung mọi CSDL: %LocalAppData%\iPOS_Ledger_Studio\export_dirs.json = {"v": 1, "dirs": {"<màn hình>": "<thư mục>"}}.
+# Màn chưa khai → _export_dir() (Downloads\iPOS_Ledger_Studio) như cũ. Nhật ký logs\datastudio.log + .session_key vẫn ở thư
+# mục mặc định. Thư mục đã khai mà không ghi được (rút USB, mất ổ mạng, bị xoá, không quyền) → KHÔNG lưu sang chỗ khác: trả
+# code 'export_dir' để app cảnh báo và bắt chọn lại (Trum chốt) — app kiểm TRƯỚC khi xuất, server kiểm lại lúc tạo job.
+# Khoá màn hình = khoá kind của App (/api/<kind>/stream_csv) + mã báo cáo — thêm tab/báo cáo thì thêm vào đây + EXPORT_SCREENS (index.html).
+_EXPORT_SCREENS = ('ledger', 'sale', 'voucher', 'purchase', 'warehouse', 'income_alloc', 'income_alloc_month',
+                   'warehouse_balance', 'pr_detail',
+                   'BC005', 'BC006', 'BC007', 'BC008', 'BC009', 'BC010', 'BC011', 'BC012', 'BC013')
+# Excel không mở được file có đường dẫn đầy đủ > 218 ký tự; tên file xuất thường ~40 ký tự → chặn thư mục quá sâu ngay lúc khai.
+_EXPORT_DIR_MAX = 170
+_EXPORT_DIR_WAIT = 6          # giây chờ tối đa khi kiểm 1 thư mục (ổ mạng mất kết nối có thể treo vài chục giây)
+_export_dirs_lock = threading.Lock()
+_export_known_dirs = set()    # thư mục đã ghi file trong lần chạy này — "Mở file"/"Mở folder" vẫn mở được sau khi đổi thư mục
+
+
+def _export_dirs_path():
+    return os.path.join(os.path.dirname(_saved_logins_path()), "export_dirs.json")
+
+
+def _export_dirs_read():
+    try:
+        with open(_export_dirs_path(), "r", encoding="utf-8") as f:
+            dirs = json.load(f).get("dirs") or {}
+    except (OSError, ValueError, AttributeError):
+        return {}
+    return {k: v for k, v in dirs.items() if k in _EXPORT_SCREENS and isinstance(v, str) and v.strip()}
+
+
+def _export_dirs_write(dirs):
+    path = _export_dirs_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump({"v": 1, "dirs": dirs}, f, ensure_ascii=False, indent=1)
+    os.replace(tmp, path)
+
+
+def _export_dir_for(screen):
+    """(thư mục lưu của màn hình, đã khai riêng?) — chưa khai / khoá lạ → thư mục mặc định."""
+    d = _export_dirs_read().get(screen) if screen in _EXPORT_SCREENS else None
+    return (d, True) if d else (_export_dir(), False)
+
+
+def _clean_dir_input(raw):
+    """Chữ người dùng dán → đường dẫn tuyệt đối đã chuẩn hoá; '' nếu không phải đường dẫn đầy đủ. Bỏ dấu nháy 2 đầu (lệnh
+    "Copy as path" của Explorer), khoảng trắng, dấu \\ thừa cuối. Nhận ổ đĩa (D:\\…) hoặc thư mục mạng (\\\\máy\\chia sẻ\\…)."""
+    s = str(raw or "").strip().strip('"').strip()
+    if not s:
+        return ""
+    s = os.path.normpath(s)
+    drive, rest = os.path.splitdrive(s)
+    if not drive or (len(drive) == 2 and not rest.startswith(("\\", "/"))):   # "thư mục" không có ổ, hoặc "D:abc"
+        return ""
+    return s
+
+
+def _export_dir_state(folder, write_test=True):
+    """(dùng được?, lý do, tạo lại được?) của 1 thư mục đích. write_test: ghi thử 1 file rỗng rồi xoá — thư mục chỉ đọc / ổ mạng
+    mất quyền chỉ lộ ra khi ghi thật. Chạy ở luồng riêng, quá _EXPORT_DIR_WAIT giây coi như không truy cập được."""
+    out = {}
+
+    def run():
+        try:
+            if not os.path.isdir(folder):
+                drive = os.path.splitdrive(folder)[0]
+                if os.path.exists(folder):
+                    out["r"] = (False, "Đường dẫn này là một file, không phải thư mục.", False)
+                elif drive and os.path.isdir(drive + os.sep):
+                    out["r"] = (False, "Thư mục không còn — đã bị xoá hoặc đổi tên.", True)
+                else:
+                    out["r"] = (False, f"Không thấy ổ {drive} — ổ USB / ổ mạng đã bị ngắt, hoặc máy chưa vào mạng công ty.", False)
+                return
+            if write_test:
+                probe = os.path.join(folder, f".ds_ghi_thu_{uuid.uuid4().hex[:8]}.tmp")
+                with open(probe, "xb"):
+                    pass
+                os.remove(probe)
+            out["r"] = (True, "", False)
+        except Exception:
+            out["r"] = (False, "Thư mục không cho ghi file — không có quyền, hoặc ổ chỉ đọc.", False)
+
+    t = threading.Thread(target=run, daemon=True, name="export-dir-check")
+    t.start()
+    t.join(_EXPORT_DIR_WAIT)
+    return out.get("r") or (False, f"Không truy cập được thư mục (quá {_EXPORT_DIR_WAIT} giây) — ổ mạng mất kết nối hoặc chưa bật VPN.", False)
+
+
+def _export_dir_problem(screen):
+    """None nếu thư mục của màn hình ghi được; không thì dict lỗi (code 'export_dir') — app cảnh báo + bắt chọn lại thư mục."""
+    folder, custom = _export_dir_for(screen)
+    if not custom:
+        return None   # thư mục mặc định: _export_dir() tự tạo, không tạo được thì rơi về thư mục người dùng như cũ
+    ok, reason, can_create = _export_dir_state(folder)
+    if ok:
+        return None
+    return {"status": "error", "code": "export_dir", "screen": screen, "dir": folder, "reason": reason, "can_create": can_create,
+            "message": (f"Không lưu được file vào thư mục đã chọn cho màn hình này: {reason[:1].lower()}{reason[1:]}\n"
+                        f"{_VI_FIX} Chọn lại thư mục lưu (hoặc cắm lại ổ USB / bật VPN nếu là ổ mạng) rồi xuất lại.\n"
+                        f"{_VI_DETAIL} {folder}")}
+
+
+def _in_export_roots(path):
+    """Đường dẫn nằm trong thư mục mặc định / thư mục đã khai / thư mục đã ghi file lần chạy này? (chặn /api/open_file, /api/open_folder
+    mở lung tung). So abspath chứ không realpath: realpath tra cả thư mục đã khai trên ổ mạng đang mất kết nối — treo vài chục giây."""
+    norm = lambda p: os.path.normcase(os.path.abspath(p))
+    target = norm(path)
+    for root in {_export_dir(), *_export_dirs_read().values(), *_export_known_dirs}:
+        try:
+            if os.path.commonpath([target, norm(root)]) == norm(root):
+                return True
+        except ValueError:   # khác ổ đĩa
+            pass
+    return False
+
+
+def _pick_folder_native(start, title):
+    """Hộp chọn thư mục kiểu mới của Windows (IFileOpenDialog + FOS_PICKFOLDERS) qua ctypes — không cần pywin32 / comtypes, không
+    kéo tkinter vào EXE. Chạy ở luồng riêng khởi tạo COM kiểu STA (luồng request của Werkzeug không bảo đảm). Chủ của hộp = cửa sổ
+    Chrome đang đứng trước (chính cửa sổ app vừa bấm nút) → hộp nổi TRÊN app, app bị khoá tới khi đóng hộp; không có chủ thì
+    Windows để hộp nằm SAU cửa sổ app (tiến trình server không được giành quyền đứng trước). Trả đường dẫn, '' khi bấm Hủy."""
+    out = {}
+
+    def run():
+        try:
+            out["dir"] = _pick_folder_sta(start, title)
+        except BaseException as e:
+            out["err"] = e
+
+    t = threading.Thread(target=run, daemon=True, name="pick-folder")
+    t.start()
+    t.join()
+    if "err" in out:
+        raise out["err"]
+    return out.get("dir", "")
+
+
+def _pick_owner_window(user32):
+    """Cửa sổ làm chủ hộp chọn thư mục: cửa sổ đang đứng trước nếu là cửa sổ app (Chrome/Edge, tiêu đề "DataStudio" — <title> của
+    index.html; mở trong tab trình duyệt thì "DataStudio - Google Chrome"); không thì cửa sổ app đầu tiên đang hiện (người dùng bấm
+    nút xong chuyển sang Outlook…: hộp vẫn nằm trên app, không lọt ra sau); không có nữa thì cửa sổ Chrome/Edge đang đứng trước."""
+    import ctypes
+    from ctypes import wintypes
+
+    def info(h):
+        c, t = ctypes.create_unicode_buffer(64), ctypes.create_unicode_buffer(256)
+        user32.GetClassNameW(h, c, 64)
+        user32.GetWindowTextW(h, t, 256)
+        return c.value, t.value
+
+    def is_app(h):
+        if not h or not user32.IsWindowVisible(h):
+            return False
+        c, t = info(h)
+        return c == "Chrome_WidgetWin_1" and (t == "DataStudio" or t.startswith("DataStudio - "))
+
+    user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+    user32.IsWindowVisible.argtypes = [wintypes.HWND]
+    fg = user32.GetForegroundWindow()
+    if is_app(fg):
+        return fg
+    found = []
+
+    def each(h, _):
+        if is_app(h):
+            found.append(h)
+            return False   # dừng duyệt
+        return True
+
+    user32.EnumWindows(ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)(each), 0)
+    if found:
+        return found[0]
+    return fg if fg and info(fg)[0] == "Chrome_WidgetWin_1" else None
+
+
+def _pick_folder_sta(start, title):
+    import ctypes
+    from ctypes import wintypes
+    ole32 = ctypes.OleDLL("ole32")          # hàm trả HRESULT: lỗi → OSError
+    ole32v = ctypes.WinDLL("ole32")         # CoUninitialize / CoTaskMemFree trả void
+    shell32 = ctypes.OleDLL("shell32")
+    user32 = ctypes.WinDLL("user32")
+    user32.GetForegroundWindow.restype = wintypes.HWND
+    user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+    ole32v.CoTaskMemFree.argtypes = [ctypes.c_void_p]
+    ole32v.CoTaskMemFree.restype = None
+
+    class GUID(ctypes.Structure):
+        _fields_ = [("d1", wintypes.DWORD), ("d2", wintypes.WORD), ("d3", wintypes.WORD), ("d4", ctypes.c_ubyte * 8)]
+
+    def guid(s):
+        g = GUID()
+        ole32.CLSIDFromString(ctypes.c_wchar_p(s), ctypes.byref(g))
+        return g
+
+    def vcall(obj, idx, restype, *argtypes):
+        """Hàm thứ idx trong bảng vtable của đối tượng COM."""
+        vtbl = ctypes.cast(obj, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))).contents
+        fn = ctypes.WINFUNCTYPE(restype, ctypes.c_void_p, *argtypes)(vtbl[idx])
+        return lambda *a: fn(obj, *a)
+
+    # IFileOpenDialog: 2 Release · 3 Show · 9 SetOptions · 10 GetOptions · 12 SetFolder · 17 SetTitle · 18 SetOkButtonLabel · 20 GetResult
+    # IShellItem: 2 Release · 5 GetDisplayName
+    FOS = 0x8 | 0x20 | 0x40 | 0x800          # NOCHANGEDIR | PICKFOLDERS | FORCEFILESYSTEM | PATHMUSTEXIST
+    SIGDN_FILESYSPATH = 0x80058000
+    ERROR_CANCELLED = 0x800704C7
+    ole32.CoInitializeEx(None, 0x2 | 0x4)    # APARTMENTTHREADED | DISABLE_OLE1DDE
+    dlg = ctypes.c_void_p()
+    try:
+        ole32.CoCreateInstance(ctypes.byref(guid("{DC1C5A9C-E88A-4DDE-A5A1-60F82A20AEF7}")), None, 1,
+                               ctypes.byref(guid("{D57C7288-D4AD-4768-BE02-9D969532D960}")), ctypes.byref(dlg))
+        opts = wintypes.DWORD()
+        vcall(dlg, 10, ctypes.HRESULT, ctypes.POINTER(wintypes.DWORD))(ctypes.byref(opts))
+        vcall(dlg, 9, ctypes.HRESULT, wintypes.DWORD)(opts.value | FOS)
+        vcall(dlg, 17, ctypes.HRESULT, wintypes.LPCWSTR)(title)
+        vcall(dlg, 18, ctypes.HRESULT, wintypes.LPCWSTR)("Chọn thư mục")
+        if start and os.path.isdir(start):
+            item = ctypes.c_void_p()
+            try:
+                shell32.SHCreateItemFromParsingName(ctypes.c_wchar_p(start), None,
+                                                    ctypes.byref(guid("{43826D1E-E718-42EE-BC55-A1E261C37BFE}")), ctypes.byref(item))
+                vcall(dlg, 12, ctypes.HRESULT, ctypes.c_void_p)(item)
+            except OSError:
+                pass
+            finally:
+                if item:
+                    vcall(item, 2, ctypes.c_ulong)()
+        owner = _pick_owner_window(user32)
+        try:
+            vcall(dlg, 3, ctypes.HRESULT, wintypes.HWND)(owner)
+        except OSError as e:
+            if (e.winerror or 0) & 0xFFFFFFFF == ERROR_CANCELLED:
+                return ""
+            raise
+        item = ctypes.c_void_p()
+        vcall(dlg, 20, ctypes.HRESULT, ctypes.POINTER(ctypes.c_void_p))(ctypes.byref(item))
+        try:
+            name = ctypes.c_void_p()
+            vcall(item, 5, ctypes.HRESULT, ctypes.c_uint, ctypes.POINTER(ctypes.c_void_p))(SIGDN_FILESYSPATH, ctypes.byref(name))
+            try:
+                return ctypes.wstring_at(name.value)
+            finally:
+                ole32v.CoTaskMemFree(name)
+        finally:
+            vcall(item, 2, ctypes.c_ulong)()
+    finally:
+        if dlg:
+            vcall(dlg, 2, ctypes.c_ulong)()
+        ole32v.CoUninitialize()
+
+
 # In-memory map theo dõi tiến trình job export
 # { job_id: { status, current, total, file_path, filename, error } }
 _export_jobs = {}
@@ -2671,11 +2928,14 @@ def save_export_route():
 def open_file_route():
     """Mở file (CSV/Excel) bằng app mặc định của OS."""
     try:
+        if not _is_local_request():
+            return jsonify({"status": "error", "message": "Yêu cầu không hợp lệ."}), 403
         data = request.get_json(force=True, silent=True) or {}
         path = data.get("path", "")
-        # Validate: chỉ cho mở file trong _export_dir để tránh bị abuse
-        norm = os.path.realpath(path)
-        if not norm.startswith(os.path.realpath(_export_dir())):
+        # Validate: chỉ mở file xuất (.xlsx/.csv) nằm trong thư mục lưu (mặc định / đã khai theo màn hình) để tránh bị abuse
+        # — thư mục người dùng khai có thể chứa file khác, kể cả .exe.
+        norm = os.path.abspath(path)
+        if not path or not _in_export_roots(norm) or os.path.splitext(norm)[1].lower() not in ('.xlsx', '.csv', '.xls'):
             return jsonify({"status": "error", "message": "Đường dẫn không hợp lệ"}), 400
         if not os.path.exists(norm):
             return jsonify({"status": "error", "message": "File không tồn tại"}), 404
@@ -2694,12 +2954,15 @@ def open_file_route():
 def open_folder_route():
     """Mở Explorer/Finder vào folder chứa file (highlight file)."""
     try:
+        if not _is_local_request():
+            return jsonify({"status": "error", "message": "Yêu cầu không hợp lệ."}), 403
         data = request.get_json(force=True, silent=True) or {}
         path = data.get("path", "")
-        norm = os.path.realpath(path)
-        exp_root = os.path.realpath(_export_dir())
-        if not norm.startswith(exp_root):
+        norm = os.path.abspath(path)
+        if not path or not _in_export_roots(norm):
             return jsonify({"status": "error", "message": "Đường dẫn không hợp lệ"}), 400
+        # file đã bị xoá / đổi tên → mở thư mục chứa nó (thư mục lưu theo màn hình), mất cả thư mục mới về thư mục mặc định
+        exp_root = os.path.dirname(norm) if os.path.isdir(os.path.dirname(norm)) else _export_dir()
         if platform.system() == "Windows":
             win_path = os.path.normpath(norm)
             if os.path.exists(win_path):
@@ -2728,10 +2991,23 @@ def _start_export_job(filename, headers, sql, params, transform_row, total_estim
     """
     job_id = uuid.uuid4().hex
     started = time.time()
+    ext = 'xlsx' if filename.lower().endswith('.xlsx') else 'csv'
+    # Thư mục lưu theo màn hình (v1.10.9): màn hình = đoạn giữa /api/<màn>/stream_csv — trùng khoá kind của App. Thư mục đã khai
+    # mà hỏng → job lỗi ngay, code 'export_dir' (app cảnh báo + bắt chọn lại rồi xuất lại). App đã kiểm trước khi gọi; đây là lưới
+    # an toàn khi thư mục mất trong lúc app còn đang đếm dòng.
+    parts = request.path.strip('/').split('/')
+    screen = parts[1] if len(parts) == 3 and parts[0] == 'api' else ''
+    problem = _export_dir_problem(screen)
+    if problem:
+        with _export_jobs_lock:
+            _export_jobs[job_id] = {'status': 'error', 'phase': 'error', 'current': 0, 'total': total_estimate, 'file_path': None,
+                                    'filename': filename, 'error': problem['message'], 'cancelled': False, 'started': started,
+                                    'elapsed': 0, 'retries': 0, 'retry': None, 'format': ext,
+                                    **{k: problem[k] for k in ('code', 'screen', 'dir', 'reason', 'can_create')}}
+        return job_id
     # Tên file không trùng file cũ: trước đây xuất lại cùng khoảng ngày là GHI ĐÈ — mà file cũ đang mở trong Excel
     # thì Windows khoá file ⇒ job lỗi "Permission denied". Nay tự thêm (2), (3)… và ghi ra *.part rồi mới đổi tên.
-    ext = 'xlsx' if filename.lower().endswith('.xlsx') else 'csv'
-    final_path = _rx_reserve_path(filename, ext)
+    final_path = _rx_reserve_path(filename, ext, _export_dir_for(screen)[0])
     filename = os.path.basename(final_path)
     with _export_jobs_lock:
         _export_jobs[job_id] = {
@@ -7392,7 +7668,139 @@ _export_reserved = set()
 
 @app.route("/api/export/dir")
 def get_export_dir():
-    return jsonify({"status": "ok", "dir": _export_dir()})
+    """Thư mục lưu file. Không có screen → thư mục mặc định (như cũ). Có screen → thư mục của màn đó, đã khai riêng chưa, dùng
+    được không (app gọi TRƯỚC khi xuất: hỏng thì cảnh báo + bắt chọn lại). quick=1: chỉ xem còn thư mục không, không ghi thử
+    (menu Xuất Excel gọi mỗi lần mở — khỏi tạo file thử trong thư mục người dùng mỗi lần)."""
+    screen = request.args.get("screen", "")
+    if not screen:
+        return jsonify({"status": "ok", "dir": _export_dir()})
+    folder, custom = _export_dir_for(screen)
+    ok, reason, can_create = (_export_dir_state(folder, write_test=request.args.get("quick") != "1") if custom
+                              else (True, "", False))
+    return jsonify({"status": "ok", "screen": screen, "dir": folder, "default": _export_dir(), "custom": custom,
+                    "ok": ok, "reason": reason, "can_create": can_create})
+
+
+@app.route("/api/export/dir", methods=["POST"])
+def set_export_dir():
+    """Khai thư mục lưu cho 1 màn hình ({screen, dir, all, create}). all=True: mọi màn hình. dir rỗng (hoặc đúng thư mục mặc định)
+    → về mặc định. create=True: tạo thư mục nếu chưa có — chỉ khi người dùng tự bấm "Tạo thư mục" / "Tạo lại thư mục".
+    Thư mục phải ghi được mới lưu."""
+    if not _is_local_request():
+        return jsonify({"status": "error", "message": "Yêu cầu không hợp lệ."}), 403
+    data = request.get_json(force=True, silent=True) or {}
+    screen = str(data.get("screen") or "")
+    if screen not in _EXPORT_SCREENS:
+        return jsonify({"status": "error", "message": "Màn hình không hợp lệ."}), 400
+    raw = str(data.get("dir") or "").strip()
+    folder = _clean_dir_input(raw) if raw else ""
+
+    def bad(what, fix, can_create=False):
+        return jsonify({"status": "error", "code": "bad_dir", "dir": folder or raw, "reason": what, "can_create": can_create,
+                        "message": f"{what}\n{_VI_FIX} {fix}\n{_VI_DETAIL} {folder or raw}"}), 400
+
+    if raw and not folder:
+        return bad("Đường dẫn chưa đúng — cần đường dẫn đầy đủ, bắt đầu bằng ổ đĩa (D:\\...) hoặc thư mục mạng (\\\\máy chủ\\...).",
+                   "Bấm \"Chọn thư mục…\", hoặc copy đường dẫn từ thanh địa chỉ của File Explorer rồi dán vào ô.")
+    if folder and os.path.normcase(folder) == os.path.normcase(_export_dir()):
+        folder = ""   # chọn đúng thư mục mặc định = về mặc định
+    if folder:
+        if len(folder) > _EXPORT_DIR_MAX:
+            return bad(f"Đường dẫn quá dài ({len(folder)} ký tự) — Excel không mở được file nằm sâu như vậy.",
+                       f"Chọn thư mục có đường dẫn ngắn hơn ({_EXPORT_DIR_MAX} ký tự trở xuống).")
+        if data.get("create") and not os.path.isdir(folder):
+            try:
+                os.makedirs(folder, exist_ok=True)
+            except FileNotFoundError:
+                return bad("Không tạo được thư mục — ổ đĩa không còn.", "Cắm lại ổ USB / bật VPN nếu là ổ mạng, hoặc chọn thư mục khác.")
+            except OSError:
+                return bad("Không tạo được thư mục này.",
+                           "Kiểm tra lại tên thư mục (không dùng ký tự / : * ? \" < > |) và quyền ghi trên ổ đĩa, hoặc chọn thư mục khác.")
+        ok, reason, can_create = _export_dir_state(folder)
+        if not ok and can_create:   # đang khai đường dẫn mới: thư mục chưa có (không phải "đã bị xoá")
+            return bad("Thư mục này chưa có trên máy.", "Bấm \"Tạo thư mục này\" để tạo, hoặc kiểm tra lại đường dẫn.", True)
+        if not ok:
+            return bad(reason, "Chọn thư mục khác.")
+    try:
+        with _export_dirs_lock:
+            dirs = _export_dirs_read()
+            for s in (_EXPORT_SCREENS if data.get("all") else (screen,)):
+                if folder:
+                    dirs[s] = folder
+                else:
+                    dirs.pop(s, None)
+            _export_dirs_write(dirs)
+    except OSError as e:
+        logger.exception("Khong luu duoc export_dirs.json")
+        return jsonify({"status": "error", "message": (f"Không lưu được cấu hình thư mục trên máy này.\n{_VI_FIX} Thử lại. Vẫn lỗi thì "
+                                                       f"chụp màn hình gửi người hỗ trợ DataStudio.\n{_VI_DETAIL} {_err_brief(e)}")}), 500
+    now, custom = _export_dir_for(screen)
+    return jsonify({"status": "ok", "screen": screen, "dir": now, "default": _export_dir(), "custom": custom, "ok": True,
+                    "reason": "", "can_create": False})
+
+
+_pick_lock = threading.Lock()
+
+
+@app.route("/api/export/pick_dir", methods=["POST"])
+def pick_export_dir():
+    """Mở hộp chọn thư mục của Windows (nổi trên cửa sổ app) → {status: 'ok', dir} | {status: 'cancel'} | lỗi. Chờ tới khi người
+    dùng đóng hộp. Mỗi lần 1 hộp (bấm 2 lần → 'busy'). Chỉ chọn — lưu cấu hình vẫn qua POST /api/export/dir."""
+    if not _is_local_request():
+        return jsonify({"status": "error", "message": "Yêu cầu không hợp lệ."}), 403
+    if platform.system() != "Windows":
+        return jsonify({"status": "error", "message": "Hộp chọn thư mục chỉ có trên Windows — dán đường dẫn thư mục vào ô."}), 400
+    data = request.get_json(force=True, silent=True) or {}
+    start = _clean_dir_input(data.get("start")) or _export_dir()
+    if not _pick_lock.acquire(blocking=False):
+        return jsonify({"status": "busy"})
+    try:
+        folder = _pick_folder_native(start, "Chọn thư mục lưu file xuất")
+    except Exception as e:
+        logger.exception("Khong mo duoc hop chon thu muc")
+        return jsonify({"status": "error", "message": (f"Không mở được hộp chọn thư mục của Windows.\n{_VI_FIX} Copy đường dẫn từ thanh "
+                                                       f"địa chỉ của File Explorer rồi dán vào ô.\n{_VI_DETAIL} {_err_brief(e)}")}), 500
+    finally:
+        _pick_lock.release()
+    return jsonify({"status": "ok", "dir": folder} if folder else {"status": "cancel"})
+
+
+@app.route("/api/export/save_file", methods=["POST"])
+def save_export_file():
+    """Lưu file Excel dựng ở trình duyệt ("Tách sheet theo đơn vị") vào thư mục của màn hình (?screen=&filename=, body = nội dung
+    file). Trước v1.10.9 trình duyệt tự tải về Downloads của Chrome — lệch 2 kiểu xuất kia và không có Mở file / Mở folder.
+    Trùng tên tự thêm (2), (3)…; ghi ra *.part rồi mới đổi tên."""
+    if not _is_local_request():
+        return jsonify({"status": "error", "message": "Yêu cầu không hợp lệ."}), 403
+    screen = request.args.get("screen", "")
+    problem = _export_dir_problem(screen)
+    if problem:
+        return jsonify(problem), 409
+    path = _rx_reserve_path(request.args.get("filename") or "DanhSach", "xlsx", _export_dir_for(screen)[0])
+    tmp = path + ".part"
+    try:
+        size = 0
+        with open(tmp, "wb") as f:
+            while True:
+                chunk = request.stream.read(1 << 20)
+                if not chunk:
+                    break
+                f.write(chunk)
+                size += len(chunk)
+        if not size:
+            raise ValueError("File rỗng — trình duyệt không gửi nội dung.")
+        os.replace(tmp, path)
+    except Exception as e:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        logger.exception("Loi luu file tach sheet")
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        with _export_jobs_lock:
+            _export_reserved.discard(path.lower())
+    return jsonify({"status": "ok", "path": path, "filename": os.path.basename(path), "dir": os.path.dirname(path), "size": size})
 
 
 def _rx_list(v):
@@ -7401,23 +7809,28 @@ def _rx_list(v):
     return [x.strip() for x in str(v or '').split(',') if x.strip()]
 
 
-def _rx_reserve_path(filename, ext):
-    """Tên file sạch + không đè file đã có (file cũ có thể đang mở trong Excel → ghi đè sẽ lỗi quyền)."""
+def _rx_reserve_path(filename, ext, folder=None):
+    """Tên file sạch + không đè file đã có (file cũ có thể đang mở trong Excel → ghi đè sẽ lỗi quyền).
+    folder: thư mục lưu của màn hình (_export_dir_for) — không truyền = thư mục mặc định."""
     base = os.path.basename(str(filename or '')).strip()
     if base.lower().endswith('.' + ext):
         base = base[:-(len(ext) + 1)]
     base = _re.sub(r'[<>:"/\\|?*\x00-\x1f]+', '_', base).strip(' ._')[:150] or 'BaoCao'
-    folder = _export_dir()
-    # Dọn *.part mồ côi (EXE bị tắt ngang lúc đang ghi) — chỉ file cũ hơn 6 giờ, không đụng job đang chạy
-    try:
-        now = time.time()
-        for fn in os.listdir(folder):
-            fp = os.path.join(folder, fn)
-            if fn.endswith('.part') and now - os.path.getmtime(fp) > 6 * 3600:
-                os.remove(fp)
-    except Exception:
-        pass
+    default = _export_dir()
+    folder = folder or default
+    # Dọn *.part mồ côi (EXE bị tắt ngang lúc đang ghi) — chỉ file cũ hơn 6 giờ, không đụng job đang chạy. CHỈ ở thư mục mặc định:
+    # thư mục người dùng chọn có thể chứa file tải dở của trình duyệt khác (Firefox cũng dùng đuôi .part).
+    if os.path.normcase(folder) == os.path.normcase(default):
+        try:
+            now = time.time()
+            for fn in os.listdir(folder):
+                fp = os.path.join(folder, fn)
+                if fn.endswith('.part') and now - os.path.getmtime(fp) > 6 * 3600:
+                    os.remove(fp)
+        except Exception:
+            pass
     with _export_jobs_lock:
+        _export_known_dirs.add(folder)
         i = 1
         while True:
             name = f"{base}.{ext}" if i == 1 else f"{base} ({i}).{ext}"
@@ -7803,6 +8216,9 @@ def report_export_start():
         db_cfg = session.get('db_config')
         if not db_cfg:
             return jsonify({"status": "error", "message": "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại."}), 401
+        problem = _export_dir_problem(rpt)   # thư mục đã khai cho báo cáo này hỏng → app cảnh báo + bắt chọn lại (kiểm trước khi dựng plan)
+        if problem:
+            return jsonify(problem), 409
         info = _rx_header(data.get('header'))
         params = data.get('params') if isinstance(data.get('params'), dict) else {}
         # Bộ lọc đơn vị (_org_filter_sql) và khoá cache sổ quỹ cần session + pool → tính ở đây, dưới khoá DB
@@ -7811,7 +8227,7 @@ def report_export_start():
             plan = _rx_plan(rpt, str(data.get('variant') or ''), info, params, data.get('payload'))
         if isinstance(plan, str):
             return jsonify({"status": "error", "message": plan}), 400
-        path = _rx_reserve_path(data.get('filename') or rpt, fmt)
+        path = _rx_reserve_path(data.get('filename') or rpt, fmt, _export_dir_for(rpt)[0])
         job_id = _rx_start_job(path, fmt, plan, db_cfg, rpt)
         return jsonify({"status": "ok", "job_id": job_id, "filename": os.path.basename(path),
                         "dir": os.path.dirname(path)})
