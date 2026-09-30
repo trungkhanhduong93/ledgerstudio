@@ -1415,7 +1415,7 @@ IP / tên máy chủ. Rủi ro ghi cả commit: chưa đăng nhập DB thật b�
   lại — đúng ý Trum); đóng cửa sổ → EXE + cổng tắt 2,7 s, không sót Chrome.
 - Chưa: đăng nhập DB thật (CHULONG) bằng v1.10.8 — lần mở app kế tiếp trên máy Trum chính là bài này.
 
-## 37. v1.10.9 (bản xem trước, CHƯA commit / phát hành): thư mục lưu file xuất theo từng màn hình *(30/09/2026)*
+## 37. v1.10.9 (đã phát hành 30/09, commit `8de4fcc`): thư mục lưu file xuất theo từng màn hình *(30/09/2026)*
 
 **Yêu cầu Trum (30/09):** "cho phép cấu hình từng màn hình dữ liệu và báo cáo: cấu hình đường dẫn thư mục mặc định để khi xuất excel nó tự
 nhớ theo máy đó cái đường dẫn mà máy đó đã khai báo. Còn không khai báo thì vẫn là đường dẫn thư mục mặc định". Tui hỏi 6 câu, Trum: (1) đổi
@@ -1458,4 +1458,13 @@ Xuất Excel + hộp Xuất báo cáo, `doExport` / `startServerExport` kiểm +
 
 - Lần chạy thử hộp Windows bản đầu (chủ hộp = chỉ cửa sổ đứng trước): lượt Outlook của Trum đang đứng trước → hộp không có chủ, hiện SAU
   Outlook → thêm tìm cửa sổ "DataStudio" (`_pick_owner_window`). Chạy thử hộp thật là giành focus vài giây trên máy Trum — đừng chạy lặp.
-- Chưa: chọn thư mục thật trên ổ mạng / USB của máy Trum; `pre-push-qa` (chưa commit).
+- **Phát hành 30/09** (Trum: "push phát hành"): `pre-push-qa` **VÀNG** — rà diff 6 file (785+/44−), 9 route `stream_csv` khớp đủ 9 khoá
+  màn hình, quét bí mật chỉ in vị trí (sạch), chạy lại `t_dirs.py` 76/76 + `ui_dirs.js` 35/35; rủi ro ghi cả commit: chưa thử ổ USB / ổ
+  mạng thật. Commit `8de4fcc` (push `f968260..8de4fcc`), zip tạo lại từ EXE mới (zip cũ là v1.10.8), release `v1.10.9` "Thư mục lưu theo
+  màn hình" (25 ký tự), ghi chú theo mẫu mục 3.4 — `_release_summary` rút tiêu đề + 4 ý. API `releases/latest` không đăng nhập: tag v1.10.9,
+  không nháp, digest EXE = `cc91fcc5…aa8e`; `/api/check_update` giả bản 1.10.8 → có bản mới + 4 ý, bản 1.10.9 → không báo lại.
+- **Test cập nhật thật** (`upd_real.ps1` phiên 015249d4, đổi mốc sang 1.10.9): EXE release v1.10.8 (SHA `93d383ed…7e97`) ở thư mục tạm →
+  `POST /api/apply_update` → tải 16.704.069 byte → v1.10.9 lên sau 61,6 s (tải mất ~59 s vì mạng tới GitHub chậm lúc đó; lần v1.10.8 là 5,9 s),
+  thư mục còn 1 file, SHA = release; cửa sổ bản mới mở, `/api/metadata` 401 (phải đăng nhập lại); đóng cửa sổ → EXE + cổng tắt 2,7 s, không
+  sót Chrome. Lần đầu bộ cập nhật của v1.10.8 (có canh `/api/presence`) chạy ở vai bản cũ: ổn.
+- Chưa: chọn thư mục thật trên ổ mạng / USB của máy Trum.
