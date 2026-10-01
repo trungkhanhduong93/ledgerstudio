@@ -234,6 +234,9 @@ window.showConnectionLost = function() {
         .ds-head { display: flex; align-items: baseline; gap: 10px; flex: none; padding: 12px 24px 0; background: #fff; }
         .ds-head h1 { margin: 0; font-size: 16px; line-height: 22px; font-weight: 600; letter-spacing: -0.01em; color: var(--ds-ink); }
         .ds-head span { font-size: 12px; color: var(--ds-ink-3); }
+        /* nút gạt ở dòng tiêu đề (Bán ra | Mua vào của BC013): thấp hơn nút thanh lọc để dòng tiêu đề chỉ cao thêm ~4px */
+        .ds-head .ds-seg { height: 26px; margin-left: 6px; align-self: center; }
+        .ds-head .ds-seg button { height: 22px; padding: 0 10px; font-size: 12px; }
         .ds-status { display: flex; align-items: center; gap: 16px; height: 26px; flex: none; padding: 0 14px; background: #fff; border-top: 1px solid var(--ds-line); font-size: 11.5px; color: var(--ds-ink-3); white-space: nowrap; overflow: hidden; }
         .ds-status b { font-weight: 500; color: var(--ds-ink-2); font-variant-numeric: tabular-nums; }
         .ds-status .ds-dot { display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: var(--ds-ok); vertical-align: 1px; }
@@ -2398,7 +2401,7 @@ window.showConnectionLost = function() {
 
         const APP_NAME = 'DataStudio';
         const REPORT_TYPES = [
-            { id: 'BC013', name: '6.2 - BẢNG KÊ HÓA ĐƠN, CHỨNG TỪ HÀNG HÓA, DỊCH VỤ BÁN RA' },
+            { id: 'BC013', name: 'BẢNG KÊ THUẾ GTGT (BÁN RA / MUA VÀO)' },
             { id: 'BC005', name: 'BẢNG CÂN ĐỐI KẾ TOÁN' },
             { id: 'BC006', name: 'BẢNG CÂN ĐỐI PHÁT SINH' },
             { id: 'BC007', name: 'SỔ NHẬT KÝ CHUNG (S03a-DN)' },
@@ -2414,13 +2417,28 @@ window.showConnectionLost = function() {
         // Bảng cân đối phát sinh (bảng cân đối tài khoản) theo TT200 là Mẫu F01 - DN; BC011 không có mẫu nhà nước.
         const REPORT_FORM_CODE = {
             BC005: 'Mẫu B01 - DN', BC006: 'Mẫu F01 - DN', BC007: 'Mẫu S03a - DN', BC008: 'Mẫu S38 - DN',
-            BC009: 'Mẫu B03 - DN', BC010: 'Mẫu B03 - DN', BC011: '', BC012: 'Mẫu S07 - DN', BC013: 'Mẫu 6.2 - GTGT',
+            BC009: 'Mẫu B03 - DN', BC010: 'Mẫu B03 - DN', BC011: '', BC012: 'Mẫu S07 - DN',   // BC013: theo loại — VAT_KINDS
         };
         const REPORT_TITLE = {
             BC005: 'BẢNG CÂN ĐỐI KẾ TOÁN', BC006: 'BẢNG CÂN ĐỐI PHÁT SINH', BC007: 'SỔ NHẬT KÝ CHUNG',
             BC008: 'SỔ CHI TIẾT TÀI KHOẢN', BC009: 'BÁO CÁO LƯU CHUYỂN TIỀN TỆ (Trực tiếp)',
             BC010: 'BÁO CÁO LƯU CHUYỂN TIỀN TỆ (Gián tiếp)', BC011: 'BẢNG TỔNG HỢP PHÁT SINH CÔNG NỢ',
-            BC012: 'SỔ TIỀN MẶT VÀ TIỀN NGÂN HÀNG', BC013: '6.2 - BẢNG KÊ HÓA ĐƠN, CHỨNG TỪ HÀNG HÓA, DỊCH VỤ BÁN RA',
+            BC012: 'SỔ TIỀN MẶT VÀ TIỀN NGÂN HÀNG',   // BC013: theo loại — VAT_KINDS
+        };
+        // Bảng kê thuế GTGT (BC013) — 1 báo cáo, 2 loại theo TRAN_ID của VAT_TRANSACTION_VIEW (Trum 01/10/2026): BR = VAT_BR bán ra,
+        // MV = VAT_MV mua vào (trước v1.11.0 chỉ có bán ra, lọc DEBIT_CREDIT = 'CRD'). Tiêu đề, mẫu, chữ cột, dòng tổng dưới bảng,
+        // TK ghi ở tiêu đề khi chưa lọc TK (= TK iPOS đặt sẵn cho 2 bảng kê) và tên file đều theo loại. Loại của DỮ LIỆU ĐANG HIỆN
+        // = reportData.vat_kind (server trả) — tờ báo cáo + file xuất đọc nó, không đọc nút vừa bấm (Bẫy 6).
+        const VAT_KINDS = {
+            BR: { label: 'Bán ra', title: 'BẢNG KÊ THUẾ GTGT BÁN RA', form: 'Mẫu 6.2 - GTGT', acc: '33311', file: 'BC013_Bang_Ke_Thue_GTGT_Ban_Ra',
+                  party: 'Tên người mua', taxCode: 'Mã số thuế người mua', amount: 'Doanh số bán chưa có thuế',
+                  totals: [['Tổng doanh thu hàng hoá dịch vụ bán ra:', 'total_amount_item'],
+                           ['Tổng doanh thu hàng hoá dịch vụ bán ra chịu thuế GTGT:', 'taxable_amount_item'],
+                           ['Thuế GTGT của hàng hoá dịch vụ bán ra:', 'total_vat_amount']] },
+            MV: { label: 'Mua vào', title: 'BẢNG KÊ THUẾ GTGT MUA VÀO', form: 'Mẫu 6.1 - GTGT', acc: '1331', file: 'BC013_Bang_Ke_Thue_GTGT_Mua_Vao',
+                  party: 'Tên người bán', taxCode: 'Mã số thuế người bán', amount: 'Doanh số mua chưa có thuế',
+                  totals: [['Tổng giá trị hàng hoá, dịch vụ mua vào:', 'total_amount_item'],
+                           ['Tổng thuế GTGT của hàng hoá, dịch vụ mua vào:', 'total_vat_amount']] },
         };
 
         // Chỉ tiêu LCTT trực tiếp (BC009) — Mẫu B03-DN. id rỗng = dòng tiêu đề (không in giá trị).
@@ -3291,7 +3309,7 @@ window.showConnectionLost = function() {
             );
         };
 
-        const ReportTab = ({ filters, setFilters, period, timeMode, setTimeMode, meta, onToggleFilter, activeDropdown, setActiveDropdown, reportData: initialReportData, loadReportData, loading, monthList, monthlyData: initialMonthlyData, jobList, jobData: initialJobData, reportType, setReportType, setPendingReportType, setShowClearModal, trialBalanceData, trialBalanceTotal, cashBookData, vatSalesTotals, vatSalesMode, setVatSalesMode, journalViewMode, setJournalViewMode, showNotice, isDirty }) => {
+        const ReportTab = ({ filters, setFilters, period, timeMode, setTimeMode, meta, onToggleFilter, activeDropdown, setActiveDropdown, reportData: initialReportData, loadReportData, loading, monthList, monthlyData: initialMonthlyData, jobList, jobData: initialJobData, reportType, setReportType, setPendingReportType, setShowClearModal, trialBalanceData, trialBalanceTotal, cashBookData, vatSalesTotals, vatSalesMode, vatKind, onVatView, journalViewMode, setJournalViewMode, showNotice, isDirty }) => {
             const paperScrollRef = React.useRef(null);
             const paperRef = React.useRef(null), sizerRef = React.useRef(null);   // ReportBar đặt zoom vào tờ này
             const isLandscape = ['BC001', 'BC002', 'BC003', 'BC004', 'BC006', 'BC007', 'BC011', 'BC012', 'BC013'].includes(reportType);
@@ -3510,7 +3528,7 @@ window.showConnectionLost = function() {
                 BC005: 'BC005_Bang_Can_Doi_Ke_Toan', BC006: 'BC006_Bang_Can_Doi_Phat_Sinh', BC007: 'BC007_So_Nhat_Ky_Chung',
                 BC008: 'BC008_So_Chi_Tiet_Tai_Khoan', BC009: 'BC009_LCTT_Truc_Tiep', BC010: 'BC010_LCTT_Gian_Tiep',
                 BC011: 'BC011_Tong_Hop_Phat_Sinh_Cong_No', BC012: 'BC012_So_Tien_Mat_Va_Tien_Ngan_Hang',
-                BC013: 'BC013_Bang_Ke_Hoa_Don_Ban_Ra'
+                // BC013: theo loại bán ra / mua vào — VAT_KINDS[…].file
             };
             const isServerExport = ['BC007', 'BC008', 'BC012', 'BC013'].includes(reportType);
             const [showExport, setShowExport] = React.useState(false);
@@ -3529,12 +3547,15 @@ window.showConnectionLost = function() {
                 : { bold: !!(row.is_parent || row.id.length <= 3), indent: row.id.length > 3 };
 
             const accLabel = (ids) => ids.map(id => { const a = (meta.accounts || []).find(x => x.id === id); return a ? `${id} - ${a.name}` : id; }).join(', ');
+            // Bảng kê thuế GTGT: loại của dữ liệu ĐANG HIỆN (server trả kèm dữ liệu) — chưa xem lần nào thì theo nút đang chọn
+            const vatShown = reportType === 'BC013' ? ((reportData && reportData.vat_kind) || vatKind || 'BR') : null;
+            const vk = vatShown ? VAT_KINDS[vatShown] : null;
             // Khối tiêu đề tờ báo cáo — DÙNG CHUNG cho màn hình và file xuất để hai bên không bao giờ lệch nhau
             const buildReportHeader = (f, p) => {
                 const orgs = meta.orgs || [];
                 const subLines = [];
                 if (['BC008', 'BC011', 'BC012', 'BC013'].includes(reportType)) {
-                    const def = reportType === 'BC012' ? '111, 112, 113' : reportType === 'BC013' ? accLabel(['33311']) : '—';
+                    const def = reportType === 'BC012' ? '111, 112, 113' : vk ? accLabel([vk.acc]) : '—';
                     subLines.push(`Tài khoản: ${f.acc_ids.length > 0 ? accLabel(f.acc_ids) : def}`);
                 }
                 if (reportType === 'BC011') {
@@ -3546,8 +3567,8 @@ window.showConnectionLost = function() {
                     company_name: company.name || '',
                     company_line: `${company.address || ''}${company.tax_code ? ` — MST: ${company.tax_code}` : ''}`,
                     unit_line: `Đơn vị: ${f.org_ids.length > 0 ? ((orgs.find(o => o.id === f.org_ids[0]) || {}).name || f.org_ids[0]) : 'Tất cả'}`,
-                    form_code: REPORT_FORM_CODE[reportType] !== undefined ? REPORT_FORM_CODE[reportType] : 'Mẫu B02 - DN',
-                    title: REPORT_TITLE[reportType] || (['BC002', 'BC004'].includes(reportType) ? 'BÁO CÁO KẾT QUẢ KINH DOANH THEO CÔNG VIỆC' : 'BÁO CÁO KẾT QUẢ KINH DOANH THEO THÁNG'),
+                    form_code: vk ? vk.form : REPORT_FORM_CODE[reportType] !== undefined ? REPORT_FORM_CODE[reportType] : 'Mẫu B02 - DN',
+                    title: vk ? vk.title : REPORT_TITLE[reportType] || (['BC002', 'BC004'].includes(reportType) ? 'BÁO CÁO KẾT QUẢ KINH DOANH THEO CÔNG VIỆC' : 'BÁO CÁO KẾT QUẢ KINH DOANH THEO THÁNG'),
                     sub_lines: subLines,
                     period_text: p.type === 'month' ? `Tháng ${p.value} Năm ${p.year}`
                         : p.type === 'quarter' ? `Quý ${p.value} Năm ${p.year}`
@@ -3569,7 +3590,7 @@ window.showConnectionLost = function() {
                 const cfIndicators = reportType === 'BC009' ? CF_DIRECT_INDICATORS : CF_INDIRECT_INDICATORS;
                 return {
                     code: reportType,
-                    title: (REPORT_TYPES.find(r => r.id === reportType) || {}).name || hdr.title,
+                    title: vk ? vk.title : (REPORT_TYPES.find(r => r.id === reportType) || {}).name || hdr.title,
                     periodText: hdr.period_text,
                     unitText: hdr.sub_lines[hdr.sub_lines.length - 1],
                     serverQuery: isServerExport,
@@ -3596,7 +3617,7 @@ window.showConnectionLost = function() {
                     },
                     // Tên file: Mã_Tên-báo-cáo[_Mẫu][_TK…][_DV…]_Kỳ — không dấu, không khoảng trắng
                     fileBase: (v) => {
-                        const parts = [REPORT_FILE[reportType] || reportType];
+                        const parts = [vk ? vk.file : REPORT_FILE[reportType] || reportType];
                         if (reportType === 'BC007') parts.push({ detail: 'ChiTiet', summary: 'TongHop', full: 'DayDuCot' }[v] || 'ChiTiet');
                         if (reportType === 'BC013') parts.push(v === 'summary' ? 'TongHop' : 'ChiTiet');
                         if (['BC008', 'BC011', 'BC012', 'BC013'].includes(reportType) && f.acc_ids.length > 0)
@@ -3615,6 +3636,7 @@ window.showConnectionLost = function() {
                             // BC007/BC008/BC012/BC013: server tự truy vấn toàn bộ (không phụ thuộc trang đang xem)
                             body.params = { from_date: f.from_date, to_date: f.to_date, org_ids: f.org_ids, acc_ids: f.acc_ids,
                                 contra_acc_ids: f.contra_acc_ids, tran_no: f.tran_no || '' };
+                            if (vatShown) body.params.vat_kind = vatShown;   // BC013: loại của dữ liệu đang hiện
                         } else if (reportType === 'BC005') {
                             body.payload = { rows: CDKT_INDICATORS.map(row => ({ id: row.id, name: row.name, type: row.type,
                                 closing: Number((reportData.closing || {})[row.id] || 0),
@@ -3652,10 +3674,12 @@ window.showConnectionLost = function() {
                                     <button onClick={() => setJournalViewMode('summary')} className={`${journalViewMode === 'summary' ? 'is-on' : ''}`}>Tổng hợp</button>
                                 </div>
                             )}
+                            {/* Bảng kê thuế GTGT: nút Bán ra | Mua vào nằm ở dòng tiêu đề trang (App → AppPageHeader). Bấm là tải lại
+                                (App.onVatView đổi state rồi tải ở lượt vẽ sau — xem changeVatView) */}
                             {reportType === 'BC013' && (
                                 <div className="ds-seg">
-                                    <button disabled={loading} onClick={() => { if (vatSalesMode === 'detail' || loading) return; setVatSalesMode('detail'); loadReportData(1, 'detail'); }} className={`${vatSalesMode === 'detail' ? 'is-on' : ''}`}>Chi tiết</button>
-                                    <button disabled={loading} onClick={() => { if (vatSalesMode === 'summary' || loading) return; setVatSalesMode('summary'); loadReportData(1, 'summary'); }} className={`${vatSalesMode === 'summary' ? 'is-on' : ''}`}>Tổng hợp</button>
+                                    <button disabled={loading} onClick={() => { if (vatSalesMode === 'detail' || loading) return; onVatView('detail'); }} className={`${vatSalesMode === 'detail' ? 'is-on' : ''}`}>Chi tiết</button>
+                                    <button disabled={loading} onClick={() => { if (vatSalesMode === 'summary' || loading) return; onVatView('summary'); }} className={`${vatSalesMode === 'summary' ? 'is-on' : ''}`}>Tổng hợp</button>
                                 </div>
                             )}
                             {reportType === 'BC011' ? (
@@ -3921,10 +3945,10 @@ window.showConnectionLost = function() {
                                             <tr>
                                                 <th rowSpan="2" className="px-1 py-2 text-center w-[3%] text-xs font-bold">TT</th>
                                                 <th colSpan="3" className="px-1 py-2 text-center text-xs font-bold">Hóa đơn, chứng từ, biên lai nộp thuế</th>
-                                                <th rowSpan="2" className="px-1 py-2 text-center w-[16%] text-xs font-bold">Tên người mua</th>
-                                                <th rowSpan="2" className="px-1 py-2 text-center w-[10%] text-xs font-bold">Mã số thuế người mua</th>
+                                                <th rowSpan="2" className="px-1 py-2 text-center w-[16%] text-xs font-bold">{vk.party}</th>
+                                                <th rowSpan="2" className="px-1 py-2 text-center w-[10%] text-xs font-bold">{vk.taxCode}</th>
                                                 <th rowSpan="2" className="px-1 py-2 text-center w-[17%] text-xs font-bold">Mặt hàng</th>
-                                                <th rowSpan="2" className="px-1 py-2 text-center w-[11%] text-xs font-bold col-value">Doanh số bán chưa có thuế</th>
+                                                <th rowSpan="2" className="px-1 py-2 text-center w-[11%] text-xs font-bold col-value">{vk.amount}</th>
                                                 <th rowSpan="2" className="px-1 py-2 text-center w-[6%] text-xs font-bold">Thuế suất (%)</th>
                                                 <th rowSpan="2" className="px-1 py-2 text-center w-[11%] text-xs font-bold col-value">Thuế GTGT</th>
                                                 <th rowSpan="2" className="px-1 py-2 text-center w-[6%] text-xs font-bold">Ghi chú</th>
@@ -4244,9 +4268,9 @@ window.showConnectionLost = function() {
 {reportType === 'BC013' ? (
                                 <div className="mt-6 text-xs text-slate-900 font-semibold">
                                     <div className="space-y-1.5 ml-4">
-                                        <div>Tổng doanh thu hàng hoá dịch vụ bán ra: <span className="font-bold">{formatNum(vatSalesTotals.total_amount_item)}</span></div>
-                                        <div>Tổng doanh thu hàng hoá dịch vụ bán ra chịu thuế GTGT: <span className="font-bold">{formatNum(vatSalesTotals.taxable_amount_item)}</span></div>
-                                        <div>Thuế GTGT của hàng hoá dịch vụ bán ra: <span className="font-bold">{formatNum(vatSalesTotals.total_vat_amount)}</span></div>
+                                        {vk.totals.map(([label, key]) => (
+                                            <div key={key}>{label} <span className="font-bold">{formatNum(vatSalesTotals[key])}</span></div>
+                                        ))}
                                     </div>
                                     <div className="mt-8 flex justify-end">
                                         <div className="text-center text-xs pr-8">
@@ -4528,7 +4552,7 @@ window.showConnectionLost = function() {
             BC010: ['LCTT gián tiếp', 'Lưu chuyển tiền tệ — gián tiếp (B03-DN)'],
             BC011: ['TH phát sinh công nợ', 'Tổng hợp phát sinh công nợ'],
             BC012: ['Sổ quỹ tiền mặt, NH', 'Sổ tiền mặt và tiền ngân hàng'],
-            BC013: ['Bảng kê bán ra', 'Bảng kê hóa đơn, chứng từ hàng hóa, dịch vụ bán ra (6.2)'],
+            BC013: ['Bảng kê thuế GTGT', 'Bảng kê thuế GTGT bán ra / mua vào'],
         };
         const NAV_DOCS = DOC_TABS.map(t => ({ id: t.id, label: (NAV_DOC_META[t.id] || [t.name])[0], icon: (NAV_DOC_META[t.id] || [])[1] || 'table' }));
         const NAV_REPORTS = [...REPORT_TYPES].sort((a, b) => a.id.localeCompare(b.id))
@@ -4714,10 +4738,11 @@ window.showConnectionLost = function() {
             );
         };
 
-        const AppPageHeader = ({ activeTab, reportType }) => {
+        // children: nút nằm cùng dòng tiêu đề (hiện chỉ có Bán ra | Mua vào của BC013)
+        const AppPageHeader = ({ activeTab, reportType, children }) => {
             if (activeTab === 'report') {
                 const r = NAV_REPORTS.find(x => x.id === reportType);
-                return <div className="app-pagehead ds-head"><h1>{r ? r.label : reportType}</h1><span>{reportType}{r ? ` · ${r.full}` : ''}</span></div>;
+                return <div className="app-pagehead ds-head"><h1>{r ? r.label : reportType}</h1><span>{reportType}{r ? ` · ${r.full}` : ''}</span>{children}</div>;
             }
             const d = NAV_DOCS.find(x => x.id === activeTab);
             return <div className="app-pagehead ds-head"><h1>{d ? d.label : ''}</h1></div>;
@@ -5101,6 +5126,8 @@ window.showConnectionLost = function() {
             const [cashBookData, setCashBookData] = useState({ rows: [], pagination: { total_rows: 0, total_pages: 1, page: 1 } });
         const [vatSalesTotals, setVatSalesTotals] = useState({ total_amount_item: 0, taxable_amount_item: 0, total_vat_amount: 0 });
         const [vatSalesMode, setVatSalesMode] = useState('detail');
+        const [vatKind, setVatKind] = useState('BR');   // bảng kê thuế GTGT: 'BR' bán ra | 'MV' mua vào (VAT_KINDS)
+        const [vatReloadTick, setVatReloadTick] = useState(0);   // tăng = tải lại bảng kê ở lượt vẽ sau (changeVatView)
         const [journalViewMode, setJournalViewMode] = useState('detail');
             const [trialBalanceTotal, setTrialBalanceTotal] = useState(null);
             const [pendingReportType, setPendingReportType] = useState(null);
@@ -6385,13 +6412,14 @@ window.showConnectionLost = function() {
                             filters.tran_no || '',
                             journalViewMode,
                             vatSalesMode,
+                            vatKind,
                         ]);
                     }
                 } catch (e) {
                     return '';
                 }
                 return '';
-            }, [filters, saleFilters, incomeAllocFilters, incomeMonthFilters, voucherFilters, purchaseFilters, warehouseFilters, warehouseBalanceFilters, prDetailFilters, reportType, journalViewMode, vatSalesMode]);
+            }, [filters, saleFilters, incomeAllocFilters, incomeMonthFilters, voucherFilters, purchaseFilters, warehouseFilters, warehouseBalanceFilters, prDetailFilters, reportType, journalViewMode, vatSalesMode, vatKind]);
 
             const markTabApplied = (tab) => {
                 setAppliedSnapshots(p => ({ ...p, [tab]: getTabFilterSnapshot(tab) }));
@@ -6979,7 +7007,7 @@ window.showConnectionLost = function() {
                         }
                     } else if (reportType === 'BC013') {
                     const activeMode = modeArg || vatSalesMode || 'detail';
-                    const q2 = new URLSearchParams({ from_date: filters.from_date, to_date: filters.to_date, org_ids: filters.org_ids.join(','), acc_ids: filters.acc_ids.join(','), mode: activeMode, page: _page, page_size: rptPageSize });
+                    const q2 = new URLSearchParams({ from_date: filters.from_date, to_date: filters.to_date, org_ids: filters.org_ids.join(','), acc_ids: filters.acc_ids.join(','), mode: activeMode, vat_kind: vatKind, page: _page, page_size: rptPageSize });
                     const r = await fetch(`/api/vat_sales_report?${q2.toString()}`, { signal: abortRef.current.signal });
                     if (r.status === 401) { setIsLoggedIn(false); return; }
                     const res = await r.json();
@@ -6988,7 +7016,7 @@ window.showConnectionLost = function() {
                         setVatSalesTotals(res.totals || { total_amount_item: 0, taxable_amount_item: 0, total_vat_amount: 0 });
                         markTabApplied('report');
                     } else {
-                        alert('Lỗi xem bảng kê bán ra: ' + (res.message || 'không có dữ liệu'));
+                        alert(`Lỗi xem bảng kê thuế GTGT ${VAT_KINDS[vatKind].label.toLowerCase()}: ` + (res.message || 'không có dữ liệu'));
                     }
                 } else if (reportType === 'BC012') {
                         const q2 = new URLSearchParams({ from_date: filters.from_date, to_date: filters.to_date, org_ids: filters.org_ids.join(','), acc_ids: filters.acc_ids.join(','), contra_acc_ids: filters.contra_acc_ids.join(','), tran_no: filters.tran_no || '', page: filters.page, page_size: 1000 });
@@ -7017,7 +7045,24 @@ window.showConnectionLost = function() {
                 } finally { setLoading(false); }
             };
 
-            
+            // Bảng kê thuế GTGT (BC013): nút Chi tiết/Tổng hợp (mode) và Bán ra/Mua vào (kind) — đổi state rồi tải lại ở effect dưới,
+            // tức SAU lượt vẽ mới: loadReportData + markTabApplied lúc đó mới đọc đúng state mới. Trước v1.11.0 nút gọi thẳng
+            // loadReportData trong onClick → hàm còn giữ state cũ, ghi nhận bộ lọc bằng chế độ cũ → nút báo "Cập nhật báo cáo" chấm đỏ
+            // dù bảng đã đúng. Đổi loại thì bỏ chọn Tài khoản: TK bán ra (3331x) và mua vào (133x) không bao giờ trùng → chỉ ra bảng rỗng.
+            const changeVatView = (mode, kind) => {
+                if (mode) setVatSalesMode(mode);
+                if (kind) {
+                    setVatKind(kind);
+                    setFilters(p => (p.acc_ids.length ? { ...p, acc_ids: [] } : p));
+                }
+                setVatReloadTick(t => t + 1);
+            };
+            useEffect(() => {
+                if (vatReloadTick) loadReportData(1);
+            // eslint-disable-next-line react-hooks/exhaustive-deps
+            }, [vatReloadTick]);
+
+
             // LEDGER VIRTUAL SCROLL & GROUPING
             const ledgerShown = useMemo(() => gridFilter(LEDGER_GRID, data, colSearch), [data, colSearch]);
             const ledgerFoot = useMemo(() => footRowSums(LEDGER_GRID, data, ledgerShown), [data, ledgerShown]);
@@ -7126,7 +7171,17 @@ window.showConnectionLost = function() {
                         onPickTab={setActiveTab} onPickReport={pickReport} refresh={metaRefresh} onRefresh={refreshMeta} onLogout={handleLogout} />
                     <MetaToast refresh={metaRefresh} collapsed={sidebarCollapsed} onClose={() => setMetaRefresh(null)} />
                     <div className="app-main flex-1 min-w-0 flex flex-col">
-                    <AppPageHeader activeTab={activeTab} reportType={reportType} />
+                    <AppPageHeader activeTab={activeTab} reportType={reportType}>
+                        {/* Bảng kê thuế GTGT: Bán ra | Mua vào ở dòng tiêu đề (Trum 01/10) — đặt trên thanh lọc thì ở 1366px thanh lọc rớt 2 hàng.
+                            Bấm là tải lại (changeVatView đổi state rồi tải ở lượt vẽ sau). */}
+                        {activeTab === 'report' && reportType === 'BC013' && (
+                            <div className="ds-seg" title="Loại bảng kê: Bán ra = chứng từ thuế VAT_BR, Mua vào = VAT_MV">
+                                {['BR', 'MV'].map(k => (
+                                    <button key={k} disabled={loading} onClick={() => { if (vatKind === k || loading) return; changeVatView(null, k); }} className={`${vatKind === k ? 'is-on' : ''}`}>{VAT_KINDS[k].label}</button>
+                                ))}
+                            </div>
+                        )}
+                    </AppPageHeader>
 
                     {activeTab === 'ledger' && (
                         <>
@@ -8212,7 +8267,8 @@ window.showConnectionLost = function() {
                                 journalViewMode={journalViewMode}
                                 setJournalViewMode={setJournalViewMode}
                                 vatSalesMode={vatSalesMode}
-                                setVatSalesMode={setVatSalesMode}
+                                vatKind={vatKind}
+                                onVatView={changeVatView}
                                 showNotice={showNotice}
                                 isDirty={isTabDirty('report')}
                             />

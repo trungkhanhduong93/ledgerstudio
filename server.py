@@ -6584,9 +6584,13 @@ def report_export_csv():
             fname = (f"BC008_So_Chi_Tiet_{account_id.replace(',', '-')}"
                      f"_{from_dt.strftime('%d%m%Y')}-{to_dt.strftime('%d%m%Y')}.csv")
         elif report_type == "BC013":
-            # BẢNG KÊ HÓA ĐƠN BÁN RA (6.2) — cột y hệt bảng trên web, xuất TOÀN BỘ (không phân trang).
+            # BẢNG KÊ THUẾ GTGT bán ra / mua vào (vat_kind = BR | MV) — cột y hệt bảng trên web, xuất TOÀN BỘ (không phân trang).
             # Bộ lọc phải khớp /api/vat_sales_report: đơn vị dùng _org_filter_sql (không chọn ⇒ loại đơn vị
             # ngoài cây '00'), tài khoản LIKE prefix đa chọn — nếu dùng org_where thường sẽ lệch số so màn hình.
+            vat_kind = _vat_kind(request.args.get("vat_kind"))
+            if not vat_kind:
+                return jsonify({"status": "error", "message": "Loại bảng kê không hợp lệ (BR = bán ra, MV = mua vào)."}), 400
+            tran_id, item_sql, detail_order = _VAT_KINDS[vat_kind]
             acc_ids_13 = [v.strip() for v in request.args.get("acc_ids", "").split(",") if v.strip()]
             _oc, _op = _org_filter_sql(org_ids, "ORGANIZATION_ID")
             vat_org_where = (" AND " + _oc) if _oc else ""
@@ -6594,17 +6598,20 @@ def report_export_csv():
             if acc_ids_13:
                 vat_acc_where = " AND (" + " OR ".join(["ACCOUNT_ID LIKE ?"] * len(acc_ids_13)) + ")"
                 vat_acc_params = [a + "%" for a in acc_ids_13]
-            headers = ["TT", "Ký hiệu hóa đơn", "Số hóa đơn", "Ngày phát hành", "Tên người bán",
-                       "Mã số thuế người mua", "Mặt hàng", "Doanh số bán chưa có thuế",
+            buy = vat_kind == 'MV'
+            headers = ["TT", "Ký hiệu hóa đơn", "Số hóa đơn", "Ngày phát hành",
+                       "Tên người bán" if buy else "Tên người mua",
+                       "Mã số thuế người bán" if buy else "Mã số thuế người mua", "Mặt hàng",
+                       "Doanh số mua chưa có thuế" if buy else "Doanh số bán chưa có thuế",
                        "Thuế suất (%)", "Thuế GTGT", "Ghi chú"]
             if mode == "summary":
                 # Gộp mỗi số hóa đơn 1 dòng — GROUP BY y hệt nhánh summary của /api/vat_sales_report
                 sql = f"""SELECT ISNULL(VAT_TRAN_SERIE,''), ISNULL(VAT_TRAN_NO,''), VAT_TRAN_DATE,
                                  ISNULL(PR_DETAIL_NAME,''), ISNULL(TAX_FILE_NUMBER,''),
-                                 N'Bán hàng hóa, dịch vụ', ISNULL(SUM(AMOUNT_ITEM),0),
+                                 {item_sql}, ISNULL(SUM(AMOUNT_ITEM),0),
                                  ISNULL(MAX(VAT_TAX_RATE),0), ISNULL(SUM(AMOUNT),0), N''
                           FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK)
-                          WHERE DEBIT_CREDIT = 'CRD'
+                          WHERE TRAN_ID = '{tran_id}'
                             AND VAT_TRAN_DATE >= ? AND VAT_TRAN_DATE <= ?{vat_org_where}{vat_acc_where}
                           GROUP BY VAT_TRAN_SERIE, VAT_TRAN_NO, VAT_TRAN_DATE, PR_DETAIL_NAME, TAX_FILE_NUMBER, ACCOUNT_ID
                           ORDER BY VAT_TRAN_DATE, VAT_TRAN_NO"""
@@ -6613,11 +6620,11 @@ def report_export_csv():
                                  ISNULL(PR_DETAIL_NAME,''), ISNULL(TAX_FILE_NUMBER,''), ISNULL(ITEM_NAME,''),
                                  ISNULL(AMOUNT_ITEM,0), ISNULL(VAT_TAX_RATE,0), ISNULL(AMOUNT,0), ISNULL(COMMENTS,'')
                           FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK)
-                          WHERE DEBIT_CREDIT = 'CRD'
+                          WHERE TRAN_ID = '{tran_id}'
                             AND VAT_TRAN_DATE >= ? AND VAT_TRAN_DATE <= ?{vat_org_where}{vat_acc_where}
-                          ORDER BY VAT_TAX_RATE, VAT_TRAN_DATE, VAT_TRAN_NO"""
+                          ORDER BY {detail_order}"""
             params = [d_from, d_to] + list(_op) + vat_acc_params
-            fname = (f"BC013_Bang_Ke_Ban_Ra_{'TongHop' if mode == 'summary' else 'ChiTiet'}"
+            fname = (f"BC013_Bang_Ke_Thue_GTGT_{'Mua_Vao' if buy else 'Ban_Ra'}_{'TongHop' if mode == 'summary' else 'ChiTiet'}"
                      f"_{from_dt.strftime('%d%m%Y')}-{to_dt.strftime('%d%m%Y')}.csv")
         else:
             return jsonify({"status": "error", "message": "Report type không hỗ trợ xuất CSV."}), 400
@@ -6664,7 +6671,7 @@ def report_export_csv():
                                 _amt(amt if is_deb else 0), _amt(amt if not is_deb else 0),
                                 _amt(run if run > 0 else 0), _amt(-run if run < 0 else 0)]))
                         yield '\r\n'.join(lines) + '\r\n'
-                elif report_type == "BC013":  # BẢNG KÊ BÁN RA — TT tự đánh, mã giữ dạng text, chốt Tổng cộng
+                elif report_type == "BC013":  # BẢNG KÊ THUẾ GTGT — TT tự đánh, mã giữ dạng text, chốt Tổng cộng
                     cur.execute(sql, params)
                     stt = 0
                     sum_amt = sum_vat = 0.0
@@ -7446,14 +7453,35 @@ def get_cash_book_export_csv():
         return jsonify({"status": "error", "message": msg}), 401 if "đăng nhập" in msg else 500
 
 
+# Bảng kê thuế GTGT (BC013): VAT_TRANSACTION_VIEW chứa cả đầu ra lẫn đầu vào, phân biệt bằng TRAN_ID (Trum 01/10/2026):
+# VAT_BR = bán ra, VAT_MV = mua vào. Trước v1.11.0 lọc DEBIT_CREDIT = 'CRD' → chỉ có bán ra (DB demo: VAT_BR toàn CRD,
+# VAT_MV toàn DEB). Giá trị lấy từ bảng dưới, không nhận chữ người dùng → ghi thẳng vào SQL, không thêm dấu ? (Bẫy 2).
+# Dùng chung cho màn hình (/api/vat_sales_report), job xuất (_rx_plan) và CSV cũ (/api/report_export_csv) — sửa 1 chỗ.
+_VAT_KINDS = {
+    # loại: (TRAN_ID, chữ cột Mặt hàng ở chế độ Tổng hợp, ORDER BY chế độ Chi tiết)
+    'BR': ('VAT_BR', "N'Bán hàng hóa, dịch vụ'", "VAT_TAX_RATE, VAT_TRAN_DATE, VAT_TRAN_NO"),
+    'MV': ('VAT_MV', "N'Mua hàng hóa, dịch vụ'", "VAT_TRAN_DATE, VAT_TRAN_NO"),   # như báo cáo mua vào của iPOS
+}
+
+
+def _vat_kind(v):
+    """'BR' (mặc định — app cũ không gửi) | 'MV'; giá trị lạ → None (nơi gọi báo lỗi, không tự đoán)."""
+    k = str(v or 'BR').strip().upper()
+    return k if k in _VAT_KINDS else None
+
+
 @app.route("/api/vat_sales_report")
 @with_db_lock
 def get_vat_sales_report():
-    """Báo cáo 6.2 - BẢNG KÊ HÓA ĐƠN, CHỨNG TỪ HÀNG HÓA, DỊCH VỤ BÁN RA (Tổng hợp & Chi tiết)."""
+    """Bảng kê thuế GTGT bán ra / mua vào (vat_kind = BR | MV) — Tổng hợp & Chi tiết."""
     try:
         f_date = request.args.get("from_date")
         t_date = request.args.get("to_date")
         mode = request.args.get("mode", "detail")  # 'detail' | 'summary'
+        kind = _vat_kind(request.args.get("vat_kind"))
+        if not kind:
+            return jsonify({"status": "error", "message": "Loại bảng kê không hợp lệ (BR = bán ra, MV = mua vào)."}), 400
+        tran_id, item_sql, detail_order = _VAT_KINDS[kind]
         org_ids = [v for v in request.args.get("org_ids", "").split(",") if v]
         acc_ids = [v.strip() for v in request.args.get("acc_ids", "").split(",") if v.strip()]
         page = int(request.args.get("page", 1))
@@ -7487,7 +7515,7 @@ def get_vat_sales_report():
                 ISNULL(SUM(CASE WHEN VAT_TAX_RATE > 0 THEN AMOUNT_ITEM ELSE 0 END), 0),
                 ISNULL(SUM(AMOUNT), 0)
             FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK)
-            WHERE DEBIT_CREDIT = 'CRD'
+            WHERE TRAN_ID = '{tran_id}'
               AND VAT_TRAN_DATE >= ? AND VAT_TRAN_DATE <= ?{org_where}{acc_where}
         """
         cur.execute(totals_sql, params)
@@ -7502,7 +7530,7 @@ def get_vat_sales_report():
                 SELECT COUNT(*) FROM (
                     SELECT VAT_TRAN_SERIE, VAT_TRAN_NO
                     FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK)
-                    WHERE DEBIT_CREDIT = 'CRD'
+                    WHERE TRAN_ID = '{tran_id}'
                       AND VAT_TRAN_DATE >= ? AND VAT_TRAN_DATE <= ?{org_where}{acc_where}
                     GROUP BY VAT_TRAN_SERIE, VAT_TRAN_NO, VAT_TRAN_DATE, PR_DETAIL_NAME, TAX_FILE_NUMBER, ACCOUNT_ID
                 ) AS Grp
@@ -7511,7 +7539,7 @@ def get_vat_sales_report():
             count_sql = f"""
                 SELECT COUNT(*)
                 FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK)
-                WHERE DEBIT_CREDIT = 'CRD'
+                WHERE TRAN_ID = '{tran_id}'
                   AND VAT_TRAN_DATE >= ? AND VAT_TRAN_DATE <= ?{org_where}{acc_where}
             """
         cur.execute(count_sql, params)
@@ -7537,7 +7565,7 @@ def get_vat_sales_report():
                         VAT_TRAN_DATE AS date_raw,
                         ISNULL(PR_DETAIL_NAME, '') AS seller,
                         ISNULL(TAX_FILE_NUMBER, '') AS tax_code,
-                        N'Bán hàng hóa, dịch vụ' AS item,
+                        {item_sql} AS item,
                         ISNULL(SUM(AMOUNT_ITEM), 0) AS amount_item,
                         ISNULL(MAX(VAT_TAX_RATE), 0) AS tax_rate,
                         ISNULL(SUM(AMOUNT), 0) AS vat_amount,
@@ -7545,7 +7573,7 @@ def get_vat_sales_report():
                         ISNULL(ACCOUNT_ID, '') AS account_id,
                         ROW_NUMBER() OVER (ORDER BY VAT_TRAN_DATE, VAT_TRAN_NO) AS RowNum
                     FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK)
-                    WHERE DEBIT_CREDIT = 'CRD'
+                    WHERE TRAN_ID = '{tran_id}'
                       AND VAT_TRAN_DATE >= ? AND VAT_TRAN_DATE <= ?{org_where}{acc_where}
                     GROUP BY VAT_TRAN_SERIE, VAT_TRAN_NO, VAT_TRAN_DATE, PR_DETAIL_NAME, TAX_FILE_NUMBER, ACCOUNT_ID
                 ) AS Paged
@@ -7567,9 +7595,9 @@ def get_vat_sales_report():
                         ISNULL(AMOUNT, 0) AS vat_amount,
                         ISNULL(COMMENTS, '') AS comments,
                         ISNULL(ACCOUNT_ID, '') AS account_id,
-                        ROW_NUMBER() OVER (ORDER BY VAT_TAX_RATE, VAT_TRAN_DATE, VAT_TRAN_NO) AS RowNum
+                        ROW_NUMBER() OVER (ORDER BY {detail_order}) AS RowNum
                     FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK)
-                    WHERE DEBIT_CREDIT = 'CRD'
+                    WHERE TRAN_ID = '{tran_id}'
                       AND VAT_TRAN_DATE >= ? AND VAT_TRAN_DATE <= ?{org_where}{acc_where}
                 ) AS Paged
                 WHERE RowNum > ? AND RowNum <= ?
@@ -7605,7 +7633,8 @@ def get_vat_sales_report():
             "page_size": page_size
         }
 
-        return jsonify({"status": "ok", "data": rows, "totals": totals, "pagination": pagination})
+        # vat_kind trả về để app ghi tiêu đề / xuất file theo loại của DỮ LIỆU ĐANG HIỆN, không theo nút vừa bấm
+        return jsonify({"status": "ok", "data": rows, "totals": totals, "pagination": pagination, "vat_kind": kind})
     except Exception as e:
         msg = str(e)
         if "đăng nhập" not in msg:
@@ -8039,18 +8068,22 @@ def _rx_plan(rpt, variant, info, p, payload):
 
     if rpt == 'BC013':
         mode = 'summary' if variant == 'summary' else 'detail'
+        kind = _vat_kind(p.get('vat_kind'))   # app gửi loại của dữ liệu ĐANG HIỆN (bán ra / mua vào)
+        if not kind:
+            return "Loại bảng kê không hợp lệ (BR = bán ra, MV = mua vào)."
+        tran_id, item_sql, detail_order = _VAT_KINDS[kind]
         acc_ids = _rx_list(p.get('acc_ids'))
         acc_where, acc_params = "", []
         if acc_ids:
             acc_where = " AND (" + " OR ".join(["ACCOUNT_ID LIKE ?"] * len(acc_ids)) + ")"
             acc_params = [a + "%" for a in acc_ids]
         params = [d_from, d_to] + list(org_params) + acc_params
-        base_where = f"DEBIT_CREDIT = 'CRD' AND VAT_TRAN_DATE >= ? AND VAT_TRAN_DATE <= ?{org_where}{acc_where}"
+        base_where = f"TRAN_ID = '{tran_id}' AND VAT_TRAN_DATE >= ? AND VAT_TRAN_DATE <= ?{org_where}{acc_where}"
         group_by = "GROUP BY VAT_TRAN_SERIE, VAT_TRAN_NO, VAT_TRAN_DATE, PR_DETAIL_NAME, TAX_FILE_NUMBER, ACCOUNT_ID"
 
         if mode == 'summary':
             sql = f"""SELECT ISNULL(VAT_TRAN_SERIE,''), ISNULL(VAT_TRAN_NO,''), VAT_TRAN_DATE, ISNULL(PR_DETAIL_NAME,''),
-                             ISNULL(TAX_FILE_NUMBER,''), N'Bán hàng hóa, dịch vụ', ISNULL(SUM(AMOUNT_ITEM),0),
+                             ISNULL(TAX_FILE_NUMBER,''), {item_sql}, ISNULL(SUM(AMOUNT_ITEM),0),
                              ISNULL(MAX(VAT_TAX_RATE),0), ISNULL(SUM(AMOUNT),0), N''
                       FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK) WHERE {base_where} {group_by}
                       ORDER BY VAT_TRAN_DATE, VAT_TRAN_NO"""
@@ -8059,7 +8092,7 @@ def _rx_plan(rpt, variant, info, p, payload):
                              ISNULL(TAX_FILE_NUMBER,''), ISNULL(ITEM_NAME,''), ISNULL(AMOUNT_ITEM,0),
                              ISNULL(VAT_TAX_RATE,0), ISNULL(AMOUNT,0), ISNULL(COMMENTS,'')
                       FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK) WHERE {base_where}
-                      ORDER BY VAT_TAX_RATE, VAT_TRAN_DATE, VAT_TRAN_NO"""
+                      ORDER BY {detail_order}"""
 
         def prepare(db, ctx):
             # đúng 2 câu của /api/vat_sales_report: 3 số tổng dưới bảng + số dòng theo chế độ
@@ -8073,8 +8106,9 @@ def _rx_plan(rpt, variant, info, p, payload):
                                WHERE {base_where} {group_by}) AS Grp""", params, "dem dong")
             else:
                 c = db.one(f"SELECT COUNT(*) FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK) WHERE {base_where}", params, "dem dong")
-            # 1 khúc: bảng kê sắp theo thuế suất trước rồi mới tới ngày → không chia theo ngày được. Vẫn tải vào file tạm
-            # trước khi ghi (kết nối không phải sống suốt lúc ghi file), đứt mạng thì tải lại cả truy vấn.
+            # 1 khúc: bán ra sắp theo thuế suất trước rồi mới tới ngày → không chia theo ngày được (mua vào sắp theo ngày
+            # nhưng cũng để 1 khúc cho gọn). Vẫn tải vào file tạm trước khi ghi (kết nối không phải sống suốt lúc ghi file),
+            # đứt mạng thì tải lại cả truy vấn.
             ctx['fetch'] = [(sql, params)]
             return (c[0] or 0) + 1
 
@@ -8089,8 +8123,8 @@ def _rx_plan(rpt, variant, info, p, payload):
                        (r[4] or '').strip(), (r[5] or '').strip(), amt, float(r[7] or 0), vat,
                        (r[9] or '').strip()], 'data'
             yield [XR.Span('Tổng cộng', 7, 'center'), s_amt, None, s_vat, None], 'total'
-        return dict(layout=XR.layout_bc013(info), total=0, prepare=prepare, rows=rows,
-                    after=lambda ctx: XR.bc013_summary_rows(ctx['totals']), needs_db=True)
+        return dict(layout=XR.layout_bc013(info, kind), total=0, prepare=prepare, rows=rows,
+                    after=lambda ctx: XR.bc013_summary_rows(ctx['totals'], kind), needs_db=True)
 
     return "Báo cáo chưa hỗ trợ xuất."
 

@@ -32,7 +32,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Tab dữ liệu | Chứng từ tổng hợp (LEDGER), Mua hàng, Kho, Bán hàng, Chứng từ tiền, Doanh thu chờ phân bổ, **Tồn kho thực tế** + tab Báo cáo | tương tự (không có Tồn kho thực tế) |
 | **REPORT_TYPES** | BC001→BC014 | BC005→BC013 (không có BC001–BC004, BC009/BC010 có) |
 | **BC011 nghĩa là gì** | LCTT gián tiếp (Chú Long) | **Tổng hợp phát sinh công nợ** |
-| **BC013 nghĩa là gì** | Tổng hợp phát sinh công nợ (clone của Studio BC011) | **Bảng kê hóa đơn hàng hóa, dịch vụ BÁN RA (6.2-GTGT)** |
+| **BC013 nghĩa là gì** | Tổng hợp phát sinh công nợ (clone của Studio BC011) | **Bảng kê thuế GTGT bán ra / mua vào** (trước v1.11.0: chỉ bán ra 6.2-GTGT) |
 | **BC014** | Báo cáo bán hàng theo nguồn đơn | *(không có)* |
 
 > ⚠️ **Mã BC KHÔNG đồng nhất giữa 2 app.** Cùng "BC011" và cùng "BC013" nhưng khác nghĩa hoàn toàn. Khi port báo cáo qua lại phải kiểm mã trống ở app đích.
@@ -54,7 +54,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | BC011 (Studio) | Tổng hợp phát sinh công nợ | `/api/debt_summary` | BALANCE_VIEW + LEDGER theo PR_DETAIL | Studio |
 | **BC012** | **Sổ tiền mặt và tiền ngân hàng** | `/api/cash_book` (phân trang + cache) + `/api/cash_book/export_csv` | **VOUCHER_VIEW** | **cả 2** |
 | **BC013** (Report) | **Tổng hợp phát sinh công nợ** | `/api/debt_summary` | BALANCE_VIEW + LEDGER theo PR_DETAIL | **Report** |
-| **BC013** (Studio) | **6.2 — Bảng kê hóa đơn, chứng từ hàng hóa, dịch vụ bán ra** | `/api/vat_sales_report` (phân trang 1000) | **VAT_TRANSACTION_VIEW** (`DEBIT_CREDIT='CRD'`), 2 chế độ `detail`/`summary` | **Studio** |
+| **BC013** (Studio) | **Bảng kê thuế GTGT bán ra / mua vào** (từ v1.11.0; trước: 6.2 bán ra) | `/api/vat_sales_report?vat_kind=BR\|MV` (phân trang 1000) | **VAT_TRANSACTION_VIEW** (`TRAN_ID` = `VAT_BR` / `VAT_MV`; trước lọc `DEBIT_CREDIT='CRD'`), 2 chế độ `detail`/`summary` — CLAUDE.md Bẫy 30 | **Studio** |
 
 ---
 

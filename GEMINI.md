@@ -58,7 +58,7 @@
 | **BC010** | LCTT gián tiếp (B03-DN) | `/api/cash_flow` | `LEDGER` theo TK đối ứng | LedgerStudio & LedgerReport |
 | **BC011** | **TH phát sinh công nợ (Studio)** | `/api/debt_summary` | `BALANCE_VIEW` + `LEDGER` (Group by `PR_DETAIL_ID, ACCOUNT_ID`) | **LedgerStudio** *(ở Report là BC013)* |
 | **BC012** | **Sổ tiền mặt & tiền ngân hàng (Sổ quỹ)** | `/api/cash_book` | `VOUCHER_VIEW` (Định khoản kép, Cache Flat) | **LedgerStudio & LedgerReport** |
-| **BC013** | **Bảng kê bán ra (6.2-GTGT)** | `/api/vat_sales_report` | `VAT_TRANSACTION_VIEW` (`DEBIT_CREDIT='CRD'`) | **LedgerStudio** |
+| **BC013** | **Bảng kê thuế GTGT bán ra / mua vào** (từ v1.11.0) | `/api/vat_sales_report?vat_kind=BR\|MV` | `VAT_TRANSACTION_VIEW` (`TRAN_ID` = `VAT_BR` / `VAT_MV`) | **LedgerStudio** |
 
 > ⚠️ **Chú ý phân nhánh mã BC:** BC011 ở Studio là **TH phát sinh công nợ**, trong khi ở LedgerReport TH phát sinh công nợ là **BC013**. Khi làm việc ở Studio, luôn kiểm tra đúng mã `BC011` cho công nợ và `BC013` cho Bảng kê bán ra 6.2-GTGT.
 
@@ -110,8 +110,8 @@ Tất cả các báo cáo hiển thị dưới dạng tờ **A4/A4 Ngang (`.repo
 - **BC012 - Sổ Tiền Mặt & Tiền Ngân Hàng (Sổ Quỹ):**
   - Truy vấn từ `VOUCHER_VIEW`, phân trang 10.000 dòng/trang.
   - Tích hợp bộ nhớ đệm Flat Cache (`_cashbook_flat_cached`) giúp chuyển trang tức thì.
-- **BC013 - Bảng Kê Bán Ra (Mẫu 6.2-GTGT):**
-  - Nguồn `VAT_TRANSACTION_VIEW` (`DEBIT_CREDIT='CRD'`). Hỗ trợ 2 chế độ xem: **Chi tiết** và **Tổng hợp**.
+- **BC013 - Bảng kê thuế GTGT bán ra / mua vào (v1.11.0):**
+  - Nguồn `VAT_TRANSACTION_VIEW`, phân biệt bằng `TRAN_ID` (`VAT_BR` bán ra, `VAT_MV` mua vào — trước v1.11.0 lọc `DEBIT_CREDIT='CRD'`, chỉ bán ra). Nút gạt Bán ra | Mua vào + 2 chế độ xem **Chi tiết** / **Tổng hợp**. Chi tiết: CLAUDE.md mục 3.3 + Bẫy 30.
   - Áp dụng `content-visibility: auto` và `Intl.NumberFormat` giúp render mượt mà 0% CPU lag.
   - Xuất Excel 2 mẫu Chi tiết / Tổng hợp, thuế suất lưu dạng % thật (10% = 0.1), 3 dòng tổng dưới bảng là ô số.
 

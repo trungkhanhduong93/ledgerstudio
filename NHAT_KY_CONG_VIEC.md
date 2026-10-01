@@ -1468,3 +1468,47 @@ Xuất Excel + hộp Xuất báo cáo, `doExport` / `startServerExport` kiểm +
   thư mục còn 1 file, SHA = release; cửa sổ bản mới mở, `/api/metadata` 401 (phải đăng nhập lại); đóng cửa sổ → EXE + cổng tắt 2,7 s, không
   sót Chrome. Lần đầu bộ cập nhật của v1.10.8 (có canh `/api/presence`) chạy ở vai bản cũ: ổn.
 - Chưa: chọn thư mục thật trên ổ mạng / USB của máy Trum.
+
+## 38. v1.11.0 (phát hành 01/10): BC013 thành "Bảng kê thuế GTGT" bán ra / mua vào *(01/10/2026)*
+
+> Số bản: `build_exe.py` tăng 1.10.9 → **1.11.0** (số cuối 9 thì sang số giữa) — lúc làm tui ghi nhầm "1.10.10", đã sửa hết trước khi build.
+
+**Yêu cầu Trum (01/10):** "bảng kê thuế GTGT bản chất là bảng này gồm cả đầu ra và đầu vào, phân biệt bằng cột TRAN_ID; bán ra là VAT_BR,
+mua vào là VAT_MV … cho phép lựa chọn bảng kê đầu ra hoặc đầu vào tùy ý". Tui hỏi 6 câu, Trum: (1) nút gạt Bán ra | Mua vào trên thanh lọc,
+bấm là tải lại — ok; (2) tên **"Bảng kê thuế GTGT bán ra" / "Bảng kê thuế GTGT mua vào"** (KHÔNG theo đề xuất "6.1 - BẢNG KÊ HÓA ĐƠN…");
+(3) cột bên bán + 2 dòng tổng + Chi tiết mua vào sắp theo ngày như iPOS — ok; (4) chưa nhóm theo loại khấu trừ 1.–5. — ok; (5) đổi loại tự
+bỏ chọn Tài khoản — ok; (6) sửa luôn lỗi chấm đỏ của Chi tiết/Tổng hợp — ok. Góc phải tờ báo cáo giữ "Mẫu 6.2 - GTGT" (bán ra) và đặt
+"Mẫu 6.1 - GTGT" (mua vào) theo đề xuất — Trum chỉ đổi tên, chưa nói tới mẫu số.
+
+**Tra trước khi sửa (chỉ đọc):** SQL Express máy dev — `VAT_TRANSACTION_VIEW` có `TRAN_ID`; TRUNGDEMO `VAT_BR` 620 dòng (`CRD`, TK 33311,
+hàng trả lại HBTL số âm), `VAT_MV` 464 dòng (`DEB`, TK 13311); SALE_DEMO / BIMGROUP chỉ có `VAT_MV` (234 / 74, TK 13311 / 1331). iPOS gốc
+(`Ban 2740 noi bo\AccTemp.xml` + bảng `SYS_REPORT` / `SYS_REPORTFIELD` của TRUNGDEMO): `RPT_VATJOURNALPURCHASE` / `RPT_VATJOURNALSALE` cùng 10
+cột, nhóm `VAT_PURCHASE_ID`, TK mặc định 1331 / 33311 — CLAUDE.md Bẫy 30.
+
+**Đã sửa:** `server.py` `_VAT_KINDS` + `_vat_kind`, `/api/vat_sales_report` (`vat_kind`, trả `vat_kind`), `_rx_plan` BC013, `/api/report_export_csv`
+BC013; `xlsx_report.py` `layout_bc013(info, kind)`, `bc013_summary_rows(totals, kind)`; `index.html` `VAT_KINDS`, nút gạt, `vatShown` / `vk`
+trong ReportTab (tiêu đề, mẫu, TK mặc định, chữ cột, dòng tổng, hộp xuất, tên file, `params.vat_kind`), App `vatKind` + `changeVatView` +
+effect `vatReloadTick`, `getTabFilterSnapshot` thêm `vatKind`, `REPORT_TYPES` / `NAV_REPORT_META` đổi tên. Chi tiết: CLAUDE.md mục 3.3 + Bẫy 30.
+
+**Verify** (bộ kiểm ngoài repo, scratchpad phiên 9b1d408c: `t_vat.py`, `vat_ui_server.py`, `run_vat_ui.py`, `ui_vat.js`, `hdr_vat.js`,
+`measure_vat.js`; SQL Express thật TRUNGDEMO, CHỈ SELECT; cấu hình + thư mục xuất trong scratchpad):
+
+| Mức | Bài | Kết quả |
+|---|---|---|
+| M1 | `ast.parse` 2 file .py, `import server` (chặn `kill_process_on_port`), `node webbuild/build.js` (Babel dịch JSX) | qua |
+| M2 | `t_vat.py` (`test_client`, server mới vs server HEAD 1.10.9): bán ra Chi tiết / Tổng hợp × 4 bộ lọc (không gửi / `BR`) trùng HEAD từng dòng + tổng + phân trang; mua vào số dòng, 3 số tổng, từng ô = SQL `TRAN_ID='VAT_MV'`; sắp ngày → số HĐ; Tổng hợp "Mua hàng hóa, dịch vụ"; phân trang 37 dòng; lọc TK 33311 → 0 dòng; `mv` chữ thường nhận, `XX` / `VAT_MV` → 400; kỳ rỗng; xuất xlsx / csv mua vào (sheet, cột bên bán, tiêu đề, số dòng, Tổng cộng, 2 dòng tổng, thứ tự); bán ra xlsx + csv × 2 mẫu trùng file HEAD; CSV cũ mua vào / bán ra / loại lạ | **46/46** |
+| M3 giao diện | `ui_vat.js` (puppeteer, bản dịch sẵn, 1366×768): thanh bên + đầu trang tên mới; 2 nút gạt, mặc định Bán ra; chưa xem bấm Mua vào → tải ngay; tiêu đề / mẫu / TK 1331 / cột bên bán / 2 dòng tổng = số server; Trang sau giữ loại; Tổng hợp + Bán ra + Chi tiết: nút chính vẫn "Xem báo cáo"; chọn TK 33311 → "Cập nhật báo cáo" → tải → đổi Mua vào tự bỏ TK; hộp xuất + file mua vào (tên, sheet, cột, 2 dòng tổng = màn hình); tải lại LỖI giả lập → tờ + hộp xuất + file vẫn theo dữ liệu đang hiện, nút báo "Cập nhật báo cáo"; xuất bán ra Tổng hợp; 0 lỗi trang | **34/34** |
+| M3 lỗi cũ | `ui_vat.js` OLD=1 trên build v1.10.9 + server HEAD: Xem → Tổng hợp → nút chính "Cập nhật báo cáo" (lỗi có thật trước khi sửa) | tái hiện |
+| M3 hồi quy | `hdr_vat.js`: tiêu đề, mẫu, dòng phụ, đầu cột, thanh lọc, thanh bên, đầu trang của 9 báo cáo — bản cũ vs mới | BC005–BC012 giống hệt; BC013 chỉ khác đúng chỗ định sửa (sau khi dời nút: thanh lọc BC013 cũng giống hệt) |
+| M3 driver | `t_driver.py`: cùng 4 truy vấn bảng kê (bán ra / mua vào × Chi tiết / Tổng hợp) + job xuất mua vào qua driver mặc định của app "SQL Server" và ODBC Driver 17 | trùng nhau; demo không có `VAT_TRAN_DATE` mang giờ |
+
+- **Bề rộng thanh lọc** (`measure_vat.js`, thanh bên mở): nút gạt đặt trên thanh lọc thì 1366px BC013 rớt 2 hàng (thiếu 24px; bản cũ dư
+  116px). Trum chốt **dời lên dòng tiêu đề trang** (`AppPageHeader` nhận `children`, nút thấp 26px) → thanh lọc 1 hàng ở 1280 / 1366 / 1440 /
+  1920px, dòng tiêu đề cao thêm ≤ 6px; `ui_vat.js` sau khi dời: **38/38** (thêm: nút nằm ở dòng tiêu đề, không còn trên thanh lọc, giữa nút
+  thẳng giữa chữ tiêu đề ±3px; BC012 không có nút).
+- **`pre-push-qa` VÀNG:** không phát hiện lỗi; diff 7 file; quét bí mật trên dòng thêm: sạch (1 từ khoá "mật khẩu" nằm ở chữ cũ của dòng
+  "Cập nhật gần nhất"); rủi ro ghi cả commit: chưa chạy trên DB thật, "Mẫu 6.1 - GTGT" chưa xác nhận, chưa đạt M4 (chưa so 2 báo cáo gốc iPOS).
+- **Chưa:** chạy trên DB thật. Câu kiểm Trum chạy trên CHULONG (chỉ đọc) — ra tổ hợp ngoài `VAT_BR/CRD` và `VAT_MV/DEB` thì số bán ra khác
+  v1.10.9 (bản mới đúng theo `TRAN_ID` như Trum định nghĩa):
+  `SELECT TRAN_ID, DEBIT_CREDIT, COUNT(*), SUM(AMOUNT_ITEM), SUM(AMOUNT) FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK) WHERE VAT_TRAN_DATE >= '20260101' GROUP BY TRAN_ID, DEBIT_CREDIT`.
+  So 1 tháng với 2 báo cáo gốc của iPOS (bảng kê mua vào / bán ra) là đạt M4.
