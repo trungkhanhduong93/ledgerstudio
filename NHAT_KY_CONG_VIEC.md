@@ -1522,3 +1522,40 @@ effect `vatReloadTick`, `getTabFilterSnapshot` thêm `vatKind`, `REPORT_TYPES` /
   v1.10.9 (bản mới đúng theo `TRAN_ID` như Trum định nghĩa):
   `SELECT TRAN_ID, DEBIT_CREDIT, COUNT(*), SUM(AMOUNT_ITEM), SUM(AMOUNT) FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK) WHERE VAT_TRAN_DATE >= '20260101' GROUP BY TRAN_ID, DEBIT_CREDIT`.
   So 1 tháng với 2 báo cáo gốc của iPOS (bảng kê mua vào / bán ra) là đạt M4.
+
+## 39. v1.11.1 (phát hành 02/10, commit `715c68a`): cột Ghi chú ở tab Chứng từ kho *(01–02/10/2026)*
+
+**Yêu cầu Trum (01/10):** "sửa bảng danh sách chứng từ kho, bổ sung thêm cột Ghi chú COMMENTS, sau đó push phát hành luôn".
+
+**Tra trước khi sửa (chỉ đọc):** `INFORMATION_SCHEMA.COLUMNS` của `WAREHOUSE_VIEW` trên SQL Express máy dev: TRUNGDEMO, SALE_DEMO, BIMGROUP
+đều 66 cột, `COMMENTS` nvarchar(200) ở vị trí 8 (DESCRIPTION 500 / 150 → 3 DB khác bản iPOS). Vẫn dò cột lúc chạy vì DB khách mỗi nơi một
+cấu trúc (CHULONG thiếu `RECEIVE_DATE` ở INCOME_ALLOCATION).
+
+**Đã sửa:** `server.py` `_wh_has_comments` / `_wh_comments_select` / `_wh_sort_whitelist` (cache theo DB, dò lỗi thì không cache),
+`_build_warehouse_where` thêm `s_comments`, `WAREHOUSE_SORT_WHITELIST` + `WAREHOUSE_CSV_COLS` thêm COMMENTS, `/api/warehouse` và
+`/stream_csv` SELECT thêm cột; `index.html` `WAREHOUSE_GRID` thêm cột Ghi chú (ô dạng hàm như Địa chỉ bán hàng: `truncate max-w-[280px]`
++ `title`), 2 bản `sp` (`buildWarehouseQuery`, `loadWarehouseData`) gửi `s_comments`, `WAREHOUSE_EXPORT_COLS` thêm Ghi chú.
+
+**Verify** (bộ kiểm ngoài repo, scratchpad phiên ef8a798f: `test_wh_comments.py`, `wh_ui_server.py`, `run_wh_ui.py`, `ui_wh.js`,
+`upd_real.ps1`; SQL Express thật, CHỈ SELECT):
+
+| Mức | Bài | Kết quả |
+|---|---|---|
+| M1 | `ast.parse`, `import server`, `build_exe.py` (Babel dịch JSX) | qua |
+| M2 | `test_wh_comments.py` (`test_client`) × TRUNGDEMO 2018–2026 (2.555 dòng, 1.642 có ghi chú) + BIMGROUP: mọi dòng có COMMENTS, tổng = SQL, lọc `XKHOPOS` 77 = SQL (cả `/count`), sắp xếp asc/desc, `export_all`, file CSV đủ dòng + cột cuối "Ghi chú" + số dòng có ghi chú = SQL, "Như đang xem" `cols=TRAN_NO,COMMENTS,ITEM_ID`, giả DB thiếu cột (cột trống, lọc 0 dòng, sắp xếp về mặc định, xuất được); xlsx BIMGROUP có cột | **16/16** × 2 DB × 2 driver ("SQL Server" + ODBC 17) |
+| M3 giao diện | `ui_wh.js` (puppeteer, bản dịch sẵn = EXE, 1366×768): tiêu đề cột cuối, ô lọc tooltip "Truy vấn… bất kỳ đâu", dữ liệu hiện, mọi dòng cao 21px, gõ lọc trang, Truy vấn gửi `s_comments` → 77 dòng, chữ dài cắt có `title`, 1 ký tự không gửi, bấm tiêu đề `order_by=COMMENTS`, bảng "Cột" có mục Ghi chú, 0 lỗi JS / alert | **16/16** |
+| M3 bố cục cũ | `OLDLAYOUT=1`: `ds_cols_warehouse` cũ (Tên công việc kéo lên thứ 3, ẩn Tên hàng hóa) → Ghi chú đứng ngay sau Tên công việc, cột ẩn vẫn ẩn | **17/17** (lượt đầu 16/17: bộ kiểm bấm nút "Cột" bằng regex `^Cột$`, nút có cột ẩn kèm số đếm → sửa bộ kiểm) |
+
+- **`pre-push-qa` VÀNG:** P0 bắt được 1 dòng ngoài ý: công cụ sửa file nuốt dấu cách `const fmtQty2 = v` → `=v` (vô hại) → trả lại; `node
+  webbuild/build.js` từ nguồn đã sửa ra app.js / app.css / index.html trùng từng byte bản trong EXE → không build lại. Quét bí mật: sạch.
+  Lượt kiểm xlsx chạy từ stdin để `out/` (file xuất thử + `logs`) rơi vào gốc repo → đã xoá trước commit. Rủi ro: chưa chạy DB thật.
+- **Phát hành:** build 23:54 01/10 → v1.11.1, 16.706.500 byte, SHA-256 `9b4ad969…8f24`, VersionInfo 1.11.1; commit `715c68a` (push
+  `d318e3a..715c68a`), zip tạo lại từ EXE mới, release `v1.11.1` "Cột Ghi chú chứng từ kho"; ghi chú theo mẫu mục 3.4 — `_release_summary` ra
+  tiêu đề + 3 ý. API `releases/latest` không đăng nhập: tag v1.11.1, không nháp, digest EXE = `9b4ad969…8f24`; `/api/check_update` giả 1.11.0 →
+  có bản mới + 3 ý, 1.11.1 → không báo.
+- **Test cập nhật thật** (EXE release v1.11.0 `a6c6bd04…5cd2`, thư mục tạm): lần 1 lúc 00:01:56 (46 s sau khi đăng release) tải 0 byte, 30 s
+  sau "The read operation timed out", app giữ 1.11.0, thư mục còn 1 file (không hỏng gì). curl + `urllib` cùng URL lúc 00:05: 1,2–1,8 s. Lần 2 lúc
+  00:05:25: tải xong ~1,7 s, v1.11.1 lên sau 4,2 s, còn 1 file, SHA = release, `/api/metadata` 401 (đăng nhập lại), đóng cửa sổ → EXE + cổng
+  tắt 2,7 s. Ghi vào Bẫy 13.
+- **Chưa:** chạy trên DB thật của khách. Kiểm cột có không (chỉ đọc):
+  `SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'WAREHOUSE_VIEW' AND COLUMN_NAME = 'COMMENTS'`.

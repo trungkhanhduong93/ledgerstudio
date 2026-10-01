@@ -78,7 +78,7 @@
    - **Công nghệ:** Virtual Scroll cuộn mượt. Cho phép sắp xếp (Sort), tìm kiếm cột, lọc khoảng ngày, lọc đơn vị.
    - **Xuất dữ liệu:** Nút "Xuất Excel" ➔ Mode "1 file" xuất CSV stream server-side qua `/api/ledger/stream_csv` (không giới hạn dòng, lưu vào `Downloads\iPOS_Ledger_Studio\`).
 2. **Chứng từ mua hàng (Tab PURCHASE):** 40 cột, tích hợp Virtual Scroll, hỗ trợ filter & xuất CSV.
-3. **Chứng từ kho (Tab WAREHOUSE):** 41 cột, virtual scroll, filter theo kho/hàng hóa.
+3. **Chứng từ kho (Tab WAREHOUSE):** 41 cột, virtual scroll, filter theo kho/hàng hóa. Từ v1.11.1 có cột **Ghi chú** = `WAREHOUSE_VIEW.COMMENTS` (cuối bảng, lọc / sắp xếp / xuất Excel; DB thiếu cột thì cột trống). Chi tiết: CLAUDE.md mục 3.2 ý 3.
 4. **Chứng từ bán hàng (Tab SALE):**
    - 44 cột dữ liệu. Đã bổ sung cột `ACCOUNT_ID_PR` (TK công nợ, màu cyan đậm), `PAYMENT_METHOD_NAME`, `EXTRA_NAME_2`, `INCOME_AMOUNT`, `VAT_INCOME_AMOUNT`, `COMMENTS`.
    - Virtual scroll 44 cột đồng bộ hoàn hảo giữa Header, Search Row, Row Render và Footer summary.
