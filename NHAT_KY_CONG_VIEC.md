@@ -1508,6 +1508,16 @@ effect `vatReloadTick`, `getTabFilterSnapshot` thêm `vatKind`, `REPORT_TYPES` /
   thẳng giữa chữ tiêu đề ±3px; BC012 không có nút).
 - **`pre-push-qa` VÀNG:** không phát hiện lỗi; diff 7 file; quét bí mật trên dòng thêm: sạch (1 từ khoá "mật khẩu" nằm ở chữ cũ của dòng
   "Cập nhật gần nhất"); rủi ro ghi cả commit: chưa chạy trên DB thật, "Mẫu 6.1 - GTGT" chưa xác nhận, chưa đạt M4 (chưa so 2 báo cáo gốc iPOS).
+- **Phát hành 01/10** (Trum: "ok dời lên dòng tiêu đề xong push phát hành"): build 12:54 → v1.11.0, 16.704.270 byte (1.10.9: 16.704.069),
+  SHA-256 `a6c6bd04…5cd2`; `verify_exe.py`: `version.txt` 1.11.0, app.js / app.css / index.html trùng từng byte `build_web` đã chạy 38/38, server
+  có `_vat_kind` + hằng `VAT_MV`, không còn câu bảng kê lọc `DEBIT_CREDIT = 'CRD'`, xlsx_report có chữ mua vào; `smoke_exe.py`: server 2,3 s,
+  `/api/version` 1.11.0, bảng kê chưa đăng nhập 401, đóng cửa sổ → EXE + cổng tắt 4,2 s. Commit `026c6dd` (push `9d7a880..026c6dd`), zip tạo
+  lại từ EXE mới (zip cũ là 1.10.9), release `v1.11.0` "Bảng kê thuế GTGT mua vào" (25 ký tự), ghi chú theo mẫu mục 3.4 — `_release_summary`
+  rút tiêu đề "Bảng kê thuế GTGT bán ra / mua vào" + 4 ý. API `releases/latest` không đăng nhập: HTTP 200, tag v1.11.0, không nháp, digest EXE =
+  `a6c6bd04…5cd2`; `/api/check_update` giả bản 1.10.9 → có bản mới + 1 bản 4 ý, bản 1.11.0 → không báo lại.
+- **Test cập nhật thật** (`upd_real.ps1` thêm tham số `-target`): EXE release v1.10.9 (SHA `cc91fcc5…aa8e`) ở thư mục tạm → `POST /api/apply_update`
+  → tải 16.704.270 byte (~28 s) → v1.11.0 lên sau 30,6 s, thư mục còn 1 file, SHA = release; cửa sổ bản mới mở, `/api/metadata` 401 (phải đăng
+  nhập lại); đóng cửa sổ → EXE + cổng tắt 2,7 s, không sót Chrome.
 - **Chưa:** chạy trên DB thật. Câu kiểm Trum chạy trên CHULONG (chỉ đọc) — ra tổ hợp ngoài `VAT_BR/CRD` và `VAT_MV/DEB` thì số bán ra khác
   v1.10.9 (bản mới đúng theo `TRAN_ID` như Trum định nghĩa):
   `SELECT TRAN_ID, DEBIT_CREDIT, COUNT(*), SUM(AMOUNT_ITEM), SUM(AMOUNT) FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK) WHERE VAT_TRAN_DATE >= '20260101' GROUP BY TRAN_ID, DEBIT_CREDIT`.
