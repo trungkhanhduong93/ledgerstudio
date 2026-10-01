@@ -1037,8 +1037,8 @@ WAREHOUSE_SORT_WHITELIST = {col: f"W.{col}" for col in [
     "WAREHOUSE_ID","WAREHOUSE_NAME","WAREHOUSE_ID_ISSUE","ITEM_ID","ITEM_NAME",
     "UNIT_ID_WH","QUANTITY","UNIT_ID_EXTRA","QUANTITY_EXTRA","UNIT_PRICE","AMOUNT",
     "ACCOUNT_ID","ACCOUNT_ID_CONTRA","PR_DETAIL_ID","PR_DETAIL_NAME",
-    "EXPENSE_ID","EXPENSE_NAME","JOB_ID","JOB_NAME"
-]}
+    "EXPENSE_ID","EXPENSE_NAME","JOB_ID","JOB_NAME","COMMENTS"
+]}   # COMMENTS: chỉ dùng qua _wh_sort_whitelist() (DB thiếu cột thì bỏ)
 WAREHOUSE_SORT_WHITELIST["ORGANIZATION_NAME"]    = "O.ORGANIZATION_NAME"
 WAREHOUSE_SORT_WHITELIST["WAREHOUSE_NAME_ISSUE"] = "WI.WAREHOUSE_NAME"
 
@@ -1857,6 +1857,36 @@ WAREHOUSE_BASE_COLUMNS = [
     "JOB_ID", "JOB_NAME",
 ]
 
+# Ghi chú phiếu kho (W.COMMENTS, v1.11.1 — Trum 01/10). Cột chuẩn iPOS (3 DB demo đều có, nvarchar 200) nhưng DB khách mỗi
+# nơi một cấu trúc (CHULONG thiếu RECEIVE_DATE ở INCOME_ALLOCATION) → dò INFORMATION_SCHEMA 1 lần mỗi DB (Bẫy 5). Thiếu cột:
+# cột trống, lọc ô Ghi chú ra 0 dòng, sắp xếp theo cột này về thứ tự mặc định.
+_wh_comments_cache = {}
+
+
+def _wh_has_comments():
+    db = session.get('db_config', {}).get('database', 'N/A')
+    have = _wh_comments_cache.get(db)
+    if have is None:
+        try:
+            cur = get_connection().cursor()
+            cur.execute("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
+                        "WHERE TABLE_NAME = 'WAREHOUSE_VIEW' AND COLUMN_NAME = 'COMMENTS'")
+            have = bool(cur.fetchone()[0])
+            _wh_comments_cache[db] = have
+        except Exception:
+            return False   # dò không được: coi như thiếu, không cache — lần sau dò lại
+    return have
+
+
+def _wh_comments_select():
+    return "W.COMMENTS AS COMMENTS" if _wh_has_comments() else "CAST(NULL AS NVARCHAR(200)) AS COMMENTS"
+
+
+def _wh_sort_whitelist():
+    if _wh_has_comments():
+        return WAREHOUSE_SORT_WHITELIST
+    return {k: v for k, v in WAREHOUSE_SORT_WHITELIST.items() if k != "COMMENTS"}
+
 def _build_warehouse_where(request_args):
     f_date = request_args.get("from_date", "01/01/2026")
     t_date = request_args.get("to_date",  "31/12/2026")
@@ -1922,6 +1952,14 @@ def _build_warehouse_where(request_args):
             clauses.append(f"{field} LIKE ?")
             params.append(f"%{val}%")
 
+    val = request_args.get("s_comments", "").strip()
+    if val:
+        if _wh_has_comments():
+            clauses.append("W.COMMENTS LIKE ?")
+            params.append(f"%{val}%")
+        else:
+            clauses.append("1=0")
+
     n_clauses, n_params = _num_prefix_where(request_args, WAREHOUSE_NUM_SEARCH)
     clauses += n_clauses
     params += n_params
@@ -1940,11 +1978,12 @@ def get_warehouse():
         skip_count  = page > 1 and known_total is not None and known_sums is not None and not export_all
 
         where_sql, params = _build_warehouse_where(request.args)
-        order_by_sql = _resolve_order_by(request.args, WAREHOUSE_SORT_WHITELIST, "W.TRAN_DATE DESC, W.TRAN_NO")
+        order_by_sql = _resolve_order_by(request.args, _wh_sort_whitelist(), "W.TRAN_DATE DESC, W.TRAN_NO")
 
         select_parts = [f"W.{c}" for c in WAREHOUSE_BASE_COLUMNS]
         select_parts.append("O.ORGANIZATION_NAME AS ORGANIZATION_NAME")
         select_parts.append("WI.WAREHOUSE_NAME AS WAREHOUSE_NAME_ISSUE")
+        select_parts.append(_wh_comments_select())
         SELECT_LIST = ", ".join(select_parts)
 
         JOIN_SQL = """
@@ -3352,6 +3391,7 @@ WAREHOUSE_CSV_COLS = [
     ("PR_DETAIL_ID","Mã đối tượng"), ("PR_DETAIL_NAME","Tên đối tượng"),
     ("EXPENSE_ID","Mã MCP"), ("EXPENSE_NAME","Tên MCP"),
     ("JOB_ID","Mã công việc"), ("JOB_NAME","Tên công việc"),
+    ("COMMENTS","Ghi chú"),
 ]
 
 
@@ -3383,11 +3423,12 @@ def get_warehouse_stream_csv():
         args = request.args
         total_estimate = int(args.get("total", 0) or 0)
         where_sql, params = _build_warehouse_where(args)
-        order_by_sql = _resolve_order_by(args, WAREHOUSE_SORT_WHITELIST, "W.TRAN_DATE DESC, W.TRAN_NO")
+        order_by_sql = _resolve_order_by(args, _wh_sort_whitelist(), "W.TRAN_DATE DESC, W.TRAN_NO")
 
         select_parts = [f"W.{c}" for c in WAREHOUSE_BASE_COLUMNS]
         select_parts.append("O.ORGANIZATION_NAME AS ORGANIZATION_NAME")
         select_parts.append("WI.WAREHOUSE_NAME AS WAREHOUSE_NAME_ISSUE")
+        select_parts.append(_wh_comments_select())
         SELECT_LIST = ", ".join(select_parts)
         JOIN_SQL = """
             FROM dbo.WAREHOUSE_VIEW W WITH (NOLOCK)

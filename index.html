@@ -1749,6 +1749,8 @@ window.showConnectionLost = function() {
                 { id: 'EXPENSE_NAME',         label: 'Tên MCP',       sort: 'EXPENSE_NAME',         th: 'border-r w-36 px-3', align: 'left',  search: 2, td: 'border-r whitespace-nowrap px-3 italic' },
                 { id: 'JOB_ID',               label: 'Mã CV',         sort: 'JOB_ID',               th: 'border-r w-24',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'JOB_NAME',             label: 'Tên công việc', sort: 'JOB_NAME',             th: 'border-r w-36 px-3', align: 'left',  search: 2, td: 'border-r whitespace-nowrap px-3 italic' },
+                { id: 'COMMENTS',             label: 'Ghi chú',       sort: 'COMMENTS',             th: 'border-r w-56 px-3', align: 'left',  search: 2,
+                  td: (r, k) => <td key={k} className="border-r truncate max-w-[280px] px-3 text-slate-500" title={r.COMMENTS || ''}>{r.COMMENTS}</td> },
             ],
         };
 
@@ -5937,7 +5939,7 @@ window.showConnectionLost = function() {
 
             const buildWarehouseQuery = (targetPage = 1, targetPageSize = filters.page_size, searchOverride = null, extra = {}) => {
                 const cs = searchOverride !== null ? searchOverride : warehouseColSearch;
-                const LONG = new Set(['s_desc','s_org_name','s_wh_name','s_wh_name_issue','s_item_name','s_exp_name','s_job_name','s_pr_name','tran_no']);
+                const LONG = new Set(['s_desc','s_org_name','s_wh_name','s_wh_name_issue','s_item_name','s_exp_name','s_job_name','s_pr_name','tran_no','s_comments']);
                 const take = (k,v) => {
                     const x = (v||'').trim();
                     if (!x) return null;
@@ -5966,6 +5968,7 @@ window.showConnectionLost = function() {
                     s_acc_contra:     take('s_acc_contra',     cs.ACCOUNT_ID_CONTRA),
                     s_unit_id_wh:     take('s_unit_id_wh',     cs.UNIT_ID_WH),
                     s_unit_id_extra:  take('s_unit_id_extra',  cs.UNIT_ID_EXTRA),
+                    s_comments:       take('s_comments',       cs.COMMENTS),
                 };
                 if (warehouseFilters.tran_no_search?.trim()) sp.tran_no = warehouseFilters.tran_no_search.trim();
                 if (warehouseFilters.issue_receive)          sp.issue_receive = warehouseFilters.issue_receive;
@@ -6008,7 +6011,7 @@ window.showConnectionLost = function() {
                 });
 
                 // Add warehouse specific query logic
-                const LONG = new Set(['s_desc','s_org_name','s_wh_name','s_wh_name_issue','s_item_name','s_exp_name','s_job_name','s_pr_name','tran_no']);
+                const LONG = new Set(['s_desc','s_org_name','s_wh_name','s_wh_name_issue','s_item_name','s_exp_name','s_job_name','s_pr_name','tran_no','s_comments']);
                 const take = (k,v) => {
                     const x = (v||'').trim();
                     if (!x) return null;
@@ -6037,6 +6040,7 @@ window.showConnectionLost = function() {
                     s_acc_contra:     take('s_acc_contra',     cs.ACCOUNT_ID_CONTRA),
                     s_unit_id_wh:     take('s_unit_id_wh',     cs.UNIT_ID_WH),
                     s_unit_id_extra:  take('s_unit_id_extra',  cs.UNIT_ID_EXTRA),
+                    s_comments:       take('s_comments',       cs.COMMENTS),
                 };
                 if (warehouseFilters.tran_no_search?.trim()) sp.tran_no = warehouseFilters.tran_no_search.trim();
                 if (warehouseFilters.issue_receive)          sp.issue_receive = warehouseFilters.issue_receive;
@@ -6475,6 +6479,7 @@ window.showConnectionLost = function() {
                 ['PR_DETAIL_ID','Mã đối tượng'],['PR_DETAIL_NAME','Tên đối tượng'],
                 ['EXPENSE_ID','Mã MCP'],['EXPENSE_NAME','Tên MCP'],
                 ['JOB_ID','Mã công việc'],['JOB_NAME','Tên công việc'],
+                ['COMMENTS','Ghi chú'],
             ];
 
             const WAREHOUSE_BALANCE_EXPORT_COLS = [
