@@ -1559,3 +1559,37 @@ cấu trúc (CHULONG thiếu `RECEIVE_DATE` ở INCOME_ALLOCATION).
   tắt 2,7 s. Ghi vào Bẫy 13.
 - **Chưa:** chạy trên DB thật của khách. Kiểm cột có không (chỉ đọc):
   `SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'WAREHOUSE_VIEW' AND COLUMN_NAME = 'COMMENTS'`.
+
+## 40. v1.11.2 (phát hành 02/10, commit `f3607cb`): cột Mã số thuế ở tab Chứng từ xuất - bán hàng *(02/10/2026)*
+
+**Yêu cầu Trum (02/10):** "sửa bảng dữ liệu danh sách chứng từ xuất - bán hàng bổ sung thêm cột mã số thuế TAX_FILE_NUMBER".
+
+**Tra trước khi sửa (chỉ đọc):** `TAX_FILE_NUMBER` đã nằm trong `SALE_BASE_COLUMNS` (SELECT vô điều kiện từ `SALE_VIEW`), `SALE_SORT_WHITELIST`,
+`SALE_CSV_COLS` và `SALE_EXPORT_COLS` (App) từ trước → DB nào mở được tab bán hàng là có cột; file xuất đã có cột "Mã số thuế". Chỉ thiếu cột
+trên bảng + lọc SQL. Kiểu cột ở TRUNGDEMO, SALE_DEMO, BIMGROUP: nvarchar(30). Nguồn = MST ghi trên chứng từ (như Địa chỉ v1.10.3), không lấy
+`DM_PR_DETAIL` — giả định, Trum chưa chốt.
+
+**Đã sửa:** `index.html` `SALE_GRID` thêm cột sau Địa chỉ (`search: 2`, `q: 'pre'`, canh giữa như cột mã), `buildSaleQuery` gửi `s_tax`
+(không vào nhóm LONG → 1 ký tự vẫn gửi, như các ô mã); `server.py` `_build_sale_where` thêm `LTRIM(S.TAX_FILE_NUMBER) LIKE ?` +
+`_like_literal`. Công cụ sửa file lại nuốt 2 dấu cách ở dòng `Mã kho` ngay dưới chỗ chèn (lần 2, xem mục 39) → đã trả lại, diff chỉ còn 9 dòng thêm.
+
+**Verify** (bộ kiểm ngoài repo, scratchpad phiên ac10657f: `test_sale_tax.py`, `ui_server.py`, `run_ui.py`, `ui_sale.js`; SQL Express thật, CHỈ SELECT):
+
+| Mức | Bài | Kết quả |
+|---|---|---|
+| M1 | `node webbuild/build.js` (Babel dịch JSX), `import server` trong bộ kiểm, `build_exe.py` | qua |
+| M2 | `test_sale_tax.py` × TRUNGDEMO 2018–2026 (3.011 dòng, 128 có MST, có cả MST rác "." / "a"): mọi dòng có khoá, tổng = SQL, số dòng có MST = SQL, lọc `s_tax` 3 mẫu = SQL = lọc trang (cả `/count`), đoạn giữa MST không khớp, `%` / `_` ra 0 dòng, lọc kết hợp `is_return` + `s_tax` + `n_AMOUNT` = SQL (thứ tự tham số), sắp xếp desc, `export_all`, CSV Đầy đủ có cột + số dòng có MST = SQL, "Như đang xem" `cols=TRAN_NO,PR_DETAIL_NAME,ADDRESS,TAX_FILE_NUMBER` + lọc | **22/22** × 2 driver ("SQL Server" + ODBC 17); SALE_DEMO (không dòng nào có MST) 0 FAIL × 2 driver |
+| M3 giao diện | `ui_sale.js` (puppeteer, bản dịch sẵn = EXE, 1366×768): cột sau Địa chỉ, 46 cột, tooltip "bắt đầu bằng", ô = API từng dòng đang vẽ, mọi dòng cao 31px, gõ `0106` lọc trang, Truy vấn gửi `s_tax` → 75 dòng = lọc trang, `0602` → 0, `0` → 90 = trang, xoá ô → 3.011, bấm tiêu đề `order_by=TAX_FILE_NUMBER`, bảng "Cột" có mục, 0 lỗi JS / alert | **18/18** |
+| M3 bố cục cũ | `OLDLAYOUT=1`: `ds_cols_sale` cũ (Địa chỉ kéo lên thứ 3, ẩn Tên hàng hóa) → Mã số thuế đứng ngay sau Địa chỉ, cột ẩn vẫn ẩn | **19/19** |
+
+- **Build:** 16:58 02/10 → v1.11.2, 16.706.774 byte. Chưa mở thử EXE (`build_web` trong EXE dịch từ cùng nguồn đã kiểm; app.js có `s_tax`).
+- **`pre-push-qa` VÀNG** (Trum: "push phát hành"): diff 9 dòng logic, 3 nơi gọi `_build_sale_where` đã test, `s_tax` của tab Danh mục đối tượng là
+  endpoint khác; EXE 16:58 mới hơn nguồn (16:54); quét bí mật sạch. Rủi ro: chưa chạy DB thật; nguồn MST theo chứng từ là giả định, Trum không phản đối.
+- **Phát hành:** commit `f3607cb` (push `9c40768..f3607cb`), zip tạo lại từ EXE mới, release `v1.11.2` "Cột Mã số thuế bán hàng" lúc 18:39;
+  ghi chú theo mẫu mục 3.4 (soát văn: 2 ĐỎ tiêu đề in đậm + 1 VÀNG gạch ngang ở dòng `##` — giữ vì là mẫu `_release_summary` đọc).
+  API `releases/latest` không đăng nhập: tag v1.11.2, không nháp, target `f3607cb`, digest EXE = `77ab05a0…3e11` = file build;
+  `/api/check_update` giả 1.11.1 → có bản mới + 2 ý, 1.11.2 → không báo, 1.10.9 → 3 bản.
+- **Test cập nhật thật** (EXE release v1.11.1 `9b4ad969…8f24`, thư mục tạm, 18:40:31 ≈ 80 s sau khi đăng release): curl tải asset trước đó
+  14,5 s; updater tải 16,7 MB ~8 s, v1.11.2 lên sau 10,9 s, còn 1 file, SHA = release, `/api/metadata` 401 (đăng nhập lại), đóng cửa sổ →
+  EXE + cổng tắt 2,7 s. Lần này không dính lỗi tải 0 byte của Bẫy 13.
+- **Chưa:** chạy trên DB thật của khách.
