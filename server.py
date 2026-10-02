@@ -4042,6 +4042,12 @@ def _build_sale_where(request_args):
         clauses.append("S.ADDRESS LIKE ?")
         params.append(f"%{_like_literal(addr)}%")
 
+    # Ô Mã số thuế (v1.11.2): SALE_VIEW.TAX_FILE_NUMBER — cột gốc, "bắt đầu bằng"; LTRIM khớp lọc trên trang (bỏ khoảng trắng đầu)
+    tax = request_args.get("s_tax", "").strip()
+    if tax:
+        clauses.append("LTRIM(S.TAX_FILE_NUMBER) LIKE ?")
+        params.append(f"{_like_literal(tax)}%")
+
     # Ô lọc cột v1.10.1 — HTTT, nguồn đơn, ghi chú: cột phụ của SALE_VIEW, chỉ lọc khi DB có cột đó (Bẫy 5). DB không có →
     # màn hình để trống cả cột → không dòng nào khớp → 1=0. Tên HTTT/nguồn không nằm trong SALE_VIEW (map ở Python từ
     # DM_PAYMENT_METHOD / DM_EXTRA_2) → dò tên trong danh mục ra danh sách mã rồi IN, khớp đúng chữ đang hiện trên màn hình.

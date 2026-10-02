@@ -1481,6 +1481,8 @@ window.showConnectionLost = function() {
                 // v1.10.3: địa chỉ ghi trên chứng từ (SALE_VIEW.ADDRESS — cột có sẵn trong SALE_BASE_COLUMNS), dài thì cắt "…", rê chuột xem đủ
                 { id: 'ADDRESS',             label: 'Địa chỉ',       sort: 'ADDRESS',           th: 'border-r w-56 px-3', align: 'left',  search: 2,
                   td: (r, k) => <td key={k} className="border-r truncate max-w-[280px] px-3" title={r.ADDRESS || ''}>{r.ADDRESS}</td> },
+                // v1.11.2: MST ghi trên chứng từ (SALE_VIEW.TAX_FILE_NUMBER — cột có sẵn trong SALE_BASE_COLUMNS + file xuất)
+                { id: 'TAX_FILE_NUMBER',     label: 'Mã số thuế',    sort: 'TAX_FILE_NUMBER',   th: 'border-r w-32 px-2',                 search: 2, td: 'border-r text-center px-2 font-mono', q: 'pre' },
                 { id: 'WAREHOUSE_ID',        label: 'Mã kho',        sort: 'WAREHOUSE_ID',      th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'WAREHOUSE_NAME',      label: 'Tên kho',       sort: 'WAREHOUSE_NAME',    th: 'border-r w-36 px-3', align: 'left',  search: 1, td: 'border-r whitespace-nowrap px-3' },
                 { id: 'ITEM_ID',             label: 'Mã hàng',       sort: 'ITEM_ID',           th: 'border-r w-24',                      search: 2, td: 'border-r text-center font-black text-indigo-600', q: 'pre' },
@@ -5436,6 +5438,7 @@ window.showConnectionLost = function() {
                     s_pr_id:     take('s_pr_id',     cs.PR_DETAIL_ID),
                     s_pr_name:   take('s_pr_name',   cs.PR_DETAIL_NAME),
                     s_address:   take('s_address',   cs.ADDRESS),
+                    s_tax:       take('s_tax',       cs.TAX_FILE_NUMBER),
                     s_acc_id:    take('s_acc_id',    cs.ACCOUNT_ID),
                     s_unit_id:   take('s_unit_id',   cs.UNIT_ID),
                     // v1.10.1: HTTT, nguồn đơn, ghi chú, hàng trả (server dò tên HTTT/nguồn ra mã rồi lọc)
