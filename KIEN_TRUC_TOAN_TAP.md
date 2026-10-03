@@ -632,3 +632,18 @@ phải kiểm tên có trong `const icons` (Studio ~dòng 590, Report ~dòng 435
   `_acc_like_sql` Report vốn đã có từ 17/07.
 - Verify: `ast.parse` + parse JSX Report OK; test `page_size=0` bằng DB giả → BC008 lấy đủ dòng (`RowNum > 0 AND <= total_rows`,
   bộ lọc TK đa chọn ra `['111%','112%']`), BC012 trả toàn bộ flat, `total_pages=1`.
+
+### 2026-10-03 — v1.11.4: Kéo co giãn độ rộng cột tùy ý & Đóng băng cột trái/phải trên 9 bảng danh sách chứng từ (LedgerStudio)
+
+1. **Kéo độ rộng cột:**
+   - Mép kéo `.ds-col-rz` 7px ở cạnh phải mỗi ô tiêu đề first-row (`th.sortable-th` và `th` thường). Rê vào tiêu đề hiện vạch xám, rê đúng mép hoặc khi đang kéo hiện vạch xanh thương hiệu.
+   - Khi kéo chuột: tính toán và ghi thẳng vào thẻ `<style>` riêng (`table.ds-grid[data-g="..."]`) không qua React re-render, đảm bảo 60fps mượt mà. Kết thúc kéo mới gọi `lay.setWidth(id, px)` lưu vào `localStorage['ds_cols_<tab>']`.
+   - Bấm đúp vào mép kéo: gọi `setWidth(id, null)` đưa cột về độ rộng tự động.
+   - Thêm nút "Độ rộng tự động" ở chân bảng "Cột hiển thị" để reset toàn bộ cột về auto.
+2. **Đóng băng cột (Ghim trái / Ghim phải):**
+   - Trong bảng "Cột hiển thị" (`ColumnConfigurator`), mỗi dòng có 2 nút icon bảng ghim trái / ghim phải. Bấm ghim trái -> cột chuyển lên đầu danh sách; bấm ghim phải -> cột chuyển xuống cuối danh sách; bấm lần nữa để bỏ ghim.
+   - Vị trí sticky được tính tự động từ độ rộng thật đo được qua `ResizeObserver`, hoạt động trơn tru cả khi cột tự giãn hay khi kéo tay.
+   - Phân tầng z-index chuẩn: thead th (z: 4), tbody td & tfoot td (z: 2). Nền ô đóng băng đặc trắng (#fff) đặt trong `:where()` để không đè màu hover dòng và màu đánh dấu dòng đặc biệt (trả lại, phân bổ theo tháng).
+   - Hiệu ứng đổ bóng mép (`box-shadow`) phân tách rõ ràng cột đóng băng và vùng cuộn ngang.
+   - Hỗ trợ đầy đủ trên cả 9 bảng dữ liệu (chứng từ tổng hợp, bán hàng, mua hàng, kho, chứng từ tiền, DT chờ phân bổ, DT chờ phân bổ theo tháng, tồn kho thực tế, danh mục đối tượng).
+

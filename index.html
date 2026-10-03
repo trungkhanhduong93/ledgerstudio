@@ -417,6 +417,14 @@ window.showConnectionLost = function() {
         .ds-grid tr:not(.ds-search-row) > :last-child { border-right-width: 0; }
         .ds-grid thead th[data-drop="before"] { box-shadow: inset 2px 0 0 var(--ds-brand); }
         .ds-grid thead th[data-drop="after"] { box-shadow: inset -2px 0 0 var(--ds-brand); }
+        /* Kéo độ rộng cột (v1.11.4): mép 7px ở cạnh phải ô tiêu đề, rê vào tiêu đề hiện vạch xám, rê đúng mép / đang kéo vạch xanh.
+           Độ rộng + vị trí cột đóng băng nằm trong thẻ <style> sinh theo từng bảng (useGridCss), không viết ở đây. */
+        .ds-grid thead tr:first-child > th { position: relative; }
+        .ds-col-rz { position: absolute; top: 0; right: 0; bottom: 0; width: 7px; cursor: col-resize; z-index: 1; }
+        .ds-col-rz::after { content: ''; position: absolute; top: 9px; bottom: 9px; right: 2px; width: 2px; border-radius: 1px; background: transparent; transition: background-color .12s; }
+        .ds-grid thead th:hover > .ds-col-rz::after { background: var(--ds-line-strong); }
+        .ds-grid thead th > .ds-col-rz:hover::after, .ds-col-rz.is-on::after { top: 4px; bottom: 4px; background: var(--ds-brand); }
+        body.ds-col-resizing, body.ds-col-resizing * { cursor: col-resize !important; user-select: none !important; }
         .ds-groupzone { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 36px; margin: 0 0 8px; padding: 4px 8px; border: 1px dashed var(--ds-line-strong); border-radius: 8px; font-size: 12px; color: var(--ds-ink-3); }
         .ds-gchip { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 3px 0 9px; border: 1px solid var(--ds-brand-line); border-radius: 6px; background: var(--ds-brand-soft); color: var(--ds-brand); font-size: 12px; font-weight: 500; cursor: move; }
         .ds-gchip button { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 4px; color: var(--ds-brand); }
@@ -761,6 +769,15 @@ window.showConnectionLost = function() {
         /* Bảng "Cột hiển thị" (v1.10.0) dùng lại khung của Bộ lọc nâng cao; danh sách cột dài (tới 43 cột) nên cho cao hơn */
         .ds-colcfg .ds-afp-hint { padding-top: 10px; }
         .ds-colcfg .ds-afp-list { max-height: min(440px, calc(100vh - 240px)); }
+        /* Đóng băng cột (v1.11.4): mỗi dòng có 2 nút Đóng băng trái / phải trước công tắc; danh sách chia nhóm theo thứ tự vẽ */
+        .ds-colcfg .ds-afp-row > .ds-colname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .ds-colcfg .ds-switch { margin-left: 2px; }
+        .ds-pin { display: inline-flex; flex: none; gap: 2px; }
+        .ds-pin button { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 6px; color: var(--ds-ink-4); transition: background-color .12s, color .12s; }
+        .ds-pin button:hover { background: var(--ds-brand-soft); color: var(--ds-brand); }
+        .ds-pin button.is-on { background: var(--ds-brand); color: #fff; }
+        .ds-afp-grp { display: flex; align-items: center; gap: 6px; padding: 8px 8px 2px; font-size: 11px; font-weight: 600; color: var(--ds-ink-3); }
+        .ds-afp-grp::after { content: ''; flex: 1; height: 1px; background: var(--ds-line-soft); }
         /* Nút "Cột" ở chân bảng — cao 28px bằng nút phân trang để chân bảng không dày thêm */
         .ds-colbtn { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; border-radius: 7px; font-size: 12px; font-weight: 500; color: var(--ds-ink-3); white-space: nowrap; transition: background-color .12s, color .12s; }
         .ds-colbtn:hover, .ds-colbtn.is-open { background: var(--ds-tint); color: var(--ds-ink); }
@@ -1129,40 +1146,53 @@ window.showConnectionLost = function() {
             // Cột có ở bản mới mà bố cục đã lưu chưa có → chèn ngay sau cột đứng trước nó trong thứ tự mặc định
             ids.forEach((id, i) => { if (!order.includes(id)) order.splice(i ? order.indexOf(ids[i - 1]) + 1 : 0, 0, id); });
             const hidden = saved && Array.isArray(saved.hidden) ? saved.hidden.filter(id => ids.includes(id)) : [];
-            return { order, hidden: hidden.length < ids.length ? hidden : [] };
+            // v1.11.4: widths = độ rộng kéo tay { id: px } — khoá có thể là cột tháng M202601 của DT theo tháng (không nằm trong ids)
+            // nên chỉ lọc theo giá trị; pin = cột đóng băng { id: 'l' | 'r' } (trái = đầu danh sách, phải = cuối danh sách).
+            const widths = {}, pin = {};
+            if (saved && saved.widths && typeof saved.widths === 'object') Object.keys(saved.widths).forEach(id => { const w = Number(saved.widths[id]); if (w >= COL_MIN_W && w <= 2000) widths[id] = Math.round(w); });
+            if (saved && saved.pin && typeof saved.pin === 'object') Object.keys(saved.pin).forEach(id => { if (ids.includes(id) && (saved.pin[id] === 'l' || saved.pin[id] === 'r')) pin[id] = saved.pin[id]; });
+            return { order, hidden: hidden.length < ids.length ? hidden : [], widths, pin };
         };
+        const COL_MIN_W = 40;   // cột kéo hẹp nhất 40px — hẹp hơn là mất luôn mép kéo, khó kéo rộng lại
+        // Thứ tự VẼ: cột ghim trái → cột thường → cột ghim phải; trong mỗi nhóm giữ thứ tự của layout.order.
+        const pinOrder = (order, pin) => [...order.filter(id => pin[id] === 'l'), ...order.filter(id => !pin[id]), ...order.filter(id => pin[id] === 'r')];
         // onHide(id): gọi khi ẩn một cột — tab xoá ô tìm theo cột đó (không để bảng bị lọc bằng cột không nhìn thấy).
         const useColLayout = (tab, grid, onHide) => {
             const ids = useMemo(() => grid.cols.map(c => c.id), [grid]);
             const [layout, setLayout] = useState(() => readColLayout(tab, ids));
+            // list = mọi cột (cả cột ẩn) theo thứ tự vẽ; cols = cột đang hiện theo thứ tự vẽ
+            const list = useMemo(() => pinOrder(layout.order, layout.pin), [layout]);
             const cols = useMemo(() => {
                 const byId = {};
                 grid.cols.forEach(c => { byId[c.id] = c; });
-                return layout.order.filter(id => !layout.hidden.includes(id)).map(id => byId[id]);
-            }, [layout, grid]);
+                return list.filter(id => !layout.hidden.includes(id)).map(id => byId[id]);
+            }, [list, layout, grid]);
             const save = next => {
+                next = { ...next, order: pinOrder(next.order, next.pin) };   // order luôn xếp theo nhóm ghim → thứ tự lưu = thứ tự vẽ
                 setLayout(next);
                 try {
-                    if (!next.hidden.length && next.order.every((id, i) => id === ids[i])) localStorage.removeItem('ds_cols_' + tab);
+                    if (!next.hidden.length && next.order.every((id, i) => id === ids[i]) && !Object.keys(next.widths).length && !Object.keys(next.pin).length) localStorage.removeItem('ds_cols_' + tab);
                     else localStorage.setItem('ds_cols_' + tab, JSON.stringify(next));
                 } catch (e) {}
             };
-            // Thả trên tiêu đề bảng: đưa cột `from` sang trước/sau cột `to`
+            const pinWith = (pin, id, side) => { const p = { ...pin }; if (side) p[id] = side; else delete p[id]; return p; };
+            // Thả trên tiêu đề bảng: đưa cột `from` sang trước/sau cột `to`. Thả vào giữa nhóm cột đóng băng → cột theo nhóm đó
+            // (thả lên cột ghim trái = ghim trái, lên cột thường = bỏ ghim).
             const move = (from, to, after) => {
-                if (!layout.order.includes(from)) return;
-                const order = layout.order.filter(id => id !== from);
+                if (!list.includes(from)) return;
+                const order = list.filter(id => id !== from);
                 const at = order.indexOf(to);
                 if (at < 0) return;
                 order.splice(after ? at + 1 : at, 0, from);
-                save({ ...layout, order });
+                save({ ...layout, order, pin: pinWith(layout.pin, from, layout.pin[to]) });
             };
-            // Kéo trong bảng "Cột": `from` chiếm chỗ của `over` (kéo xuống → đứng sau, kéo lên → đứng trước)
+            // Kéo trong bảng "Cột": `from` chiếm chỗ của `over` (kéo xuống → đứng sau, kéo lên → đứng trước), theo nhóm ghim của `over`
             const moveOver = (from, over) => {
-                const at = layout.order.indexOf(over);
-                if (from === over || at < 0 || !layout.order.includes(from)) return;
-                const order = layout.order.filter(id => id !== from);
+                const at = list.indexOf(over);
+                if (from === over || at < 0 || !list.includes(from)) return;
+                const order = list.filter(id => id !== from);
                 order.splice(at, 0, from);
-                save({ ...layout, order });
+                save({ ...layout, order, pin: pinWith(layout.pin, from, layout.pin[over]) });
             };
             const toggle = id => {
                 if (layout.hidden.includes(id)) { save({ ...layout, hidden: layout.hidden.filter(x => x !== id) }); return; }
@@ -1171,8 +1201,17 @@ window.showConnectionLost = function() {
                 if (onHide) onHide(id);
             };
             const showAll = () => save({ ...layout, hidden: [] });
-            const reset = () => save({ order: ids.slice(), hidden: [] });
-            return { cols, layout, move, moveOver, toggle, showAll, reset };
+            const reset = () => save({ order: ids.slice(), hidden: [], widths: {}, pin: {} });
+            // w = null → bỏ độ rộng kéo tay, cột về tự co giãn theo chữ
+            const setWidth = (id, w) => {
+                const widths = { ...layout.widths };
+                if (w) widths[id] = Math.max(COL_MIN_W, Math.round(w)); else delete widths[id];
+                save({ ...layout, widths });
+            };
+            const resetWidths = () => save({ ...layout, widths: {} });
+            // side: 'l' ghim trái | 'r' ghim phải | '' bỏ ghim
+            const setPin = (id, side) => save({ ...layout, order: list, pin: pinWith(layout.pin, id, side) });
+            return { cols, list, layout, move, moveOver, toggle, showAll, reset, setWidth, resetWidths, setPin };
         };
 
         // Ô trống vẽ '\u00a0' (v1.10.3): ô có py-1.5 (Diễn giải, Ghi chú…) mà trống thì cả dòng thấp 21px thay vì 31px → dòng cao thấp lệch
@@ -1209,7 +1248,7 @@ window.showConnectionLost = function() {
                 if (gap) { sums.push(<td key={'g' + i} colSpan={gap > 1 ? gap : undefined} className="border-r border-indigo-200/30"></td>); gap = 0; }
                 const val = node.sums[s.sum];
                 sums.push(
-                    <td key={cols[i].id} className={`border-r border-indigo-200/30 text-right font-mono ${s.bold ? 'font-black ' : ''}px-2 ${lv0 ? 'text-white' : s.color}`}>
+                    <td key={cols[i].id} data-c={cols[i].id} className={`border-r border-indigo-200/30 text-right font-mono ${s.bold ? 'font-black ' : ''}px-2 ${lv0 ? 'text-white' : s.color}`}>
                         {val !== undefined && val !== 0 ? val.toLocaleString('en-US', { minimumFractionDigits: s.dec, maximumFractionDigits: s.dec }) : ''}
                     </td>
                 );
@@ -1242,15 +1281,117 @@ window.showConnectionLost = function() {
                 : c.q === 'pre' ? ' · Mã bắt đầu bằng chữ đã gõ: 511 → 511, 5111 (không ra 1511)' : ' · Tìm chữ nằm ở bất kỳ đâu')
             + (c.sh ? ' · ' + c.sh : '');
 
+        // ===== ĐỘ RỘNG CỘT KÉO TAY + CỘT ĐÓNG BĂNG (v1.11.4, 03/10/2026) =====
+        // CSS sinh ra ghi vào 2 thẻ <style> riêng của từng bảng (table[data-g]) — không qua state → kéo mép cột không vẽ lại React
+        // mỗi pixel. Ô thân bảng chọn theo VỊ TRÍ (nth-child, cột # là ô 1) để khỏi gắn thuộc tính lên hàng nghìn ô; dòng gom nhóm
+        // (ds-grp) có ô gộp cột nên loại ra — ô tổng của nó và ô dòng tổng chọn theo data-c. Bảng vẫn table-layout auto (Bẫy 16):
+        // width + min-width !important (đè min-width VirtualRows ghi thẳng lên tiêu đề) + max-width → Chrome giữ đúng độ rộng, chữ
+        // dài bị cắt. Đóng băng = position: sticky; vị trí left/right đo từ bề rộng thật của tiêu đề (ResizeObserver đo lại khi cột
+        // tự giãn theo dữ liệu). Nền ô đóng băng đặt trong :where() (độ ưu tiên 0) để nền rê chuột / ô tô màu sẵn (ds-im-*) vẫn thắng.
+        let gridSeq = 0;
+        let colResizing = false;   // đang kéo mép cột → chặn dragstart của tiêu đề (khỏi đổi chỗ / gom nhóm nhầm)
+        const colPin = (layout, c) => { const p = layout.pin || {}; return p[c.id] || (c.month ? p.MONTHS : '') || ''; };
+        const gridWidthCss = (T, cols, widths) => cols.map((c, i) => {
+            const w = widths[c.id]; if (!w) return '';
+            const k = i + 2;
+            return `${T}>thead>tr>:nth-child(${k}),${T}>tbody>tr:not(.ds-grp)>td:nth-child(${k}),${T} [data-c="${c.id}"]{width:${w}px;min-width:${w}px!important;max-width:${w}px;overflow:hidden;text-overflow:ellipsis}`;
+        }).join('');
+        const gridPinCss = (T, thead, cols, layout) => {
+            const row = thead && thead.rows[0];
+            if (!row || row.cells.length !== cols.length + 1) return '';
+            const pins = cols.map(c => colPin(layout, c));
+            let nL = 0; while (nL < pins.length && pins[nL] === 'l') nL++;
+            let nR = 0; while (nR < pins.length - nL && pins[pins.length - 1 - nR] === 'r') nR++;
+            if (!nL && !nR) return '';
+            const ws = Array.from(row.cells, th => th.getBoundingClientRect().width);
+            let css = '';
+            const one = (k, id, side, x, edge) => {
+                const head = `${T}>thead>tr>:nth-child(${k})`, body = `${T}>tbody>tr:not(.ds-grp)>td:nth-child(${k})`;
+                const foot = id ? `,${T}>tfoot [data-c="${id}"]` : '', pos = `position:sticky;${side}:${Math.round(x * 100) / 100}px;`;
+                css += `${head}{${pos}z-index:4}${body}${foot}{${pos}z-index:2}`
+                    + `:where(${body}){background-color:#fff}:where(${T}>tbody>tr.bg-red-50\\/40>td:nth-child(${k})){background-color:#FEF9F9}`;
+                if (edge) css += `${head}:not([data-drop]),${body}${foot}{box-shadow:${side === 'left' ? '6px' : '-6px'} 0 6px -4px rgba(14,26,43,.22)}`;
+            };
+            let x = 0;   // trái: cột # đóng băng cùng
+            for (let j = 0; nL && j <= nL; j++) { one(j + 1, j ? cols[j - 1].id : '', 'left', x, j === nL); x += ws[j]; }
+            x = 0;
+            for (let j = 0; j < nR; j++) { const ci = cols.length - 1 - j; one(ci + 2, cols[ci].id, 'right', x, j === nR - 1); x += ws[ci + 1]; }
+            return css;
+        };
+        const useGridCss = (theadRef, cols, lay) => {
+            const st = useRef(null);
+            if (!st.current) { const g = 'g' + (++gridSeq); st.current = { g, T: `table.ds-grid[data-g="${g}"]`, prevW: {} }; }
+            const s = st.current;
+            s.cols = cols; s.lay = lay;   // mép kéo + ResizeObserver luôn đọc bản mới nhất
+            const tag = k => { if (!s[k]) { s[k] = document.createElement('style'); document.head.appendChild(s[k]); } return s[k]; };
+            s.writeW = widths => { const css = s.lay ? gridWidthCss(s.T, s.cols, widths) : ''; if (tag('w').textContent !== css) s.w.textContent = css; };
+            s.writeP = () => { const css = s.lay ? gridPinCss(s.T, theadRef.current, s.cols, s.lay.layout) : ''; if (tag('p').textContent !== css) s.p.textContent = css; };
+            React.useLayoutEffect(() => {
+                const th = theadRef.current;
+                if (th && th.parentElement) th.parentElement.dataset.g = s.g;
+                const widths = lay ? lay.layout.widths : {};
+                // Cột vừa bỏ độ rộng kéo tay: xoá min-width VirtualRows đã ghi lúc cột còn rộng → cột co lại theo chữ (VirtualRows đo lại ngay sau)
+                if (th) Object.keys(s.prevW).forEach(id => { if (widths[id]) return; const i = cols.findIndex(c => c.id === id); if (i >= 0 && th.rows[0].cells[i + 1]) th.rows[0].cells[i + 1].style.minWidth = ''; });
+                s.prevW = widths;
+                s.writeW(widths);
+                s.writeP();
+            });
+            const key = cols.map(c => c.id).join('|');
+            useEffect(() => {
+                const th = theadRef.current;
+                if (!th || typeof ResizeObserver === 'undefined') return;
+                let raf = 0;
+                const ro = new ResizeObserver(() => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; s.writeP(); }); });
+                Array.from(th.rows[0].cells).forEach(c => ro.observe(c));
+                return () => { ro.disconnect(); cancelAnimationFrame(raf); };
+            }, [key]);
+            useEffect(() => () => { if (s.w) s.w.remove(); if (s.p) s.p.remove(); s.w = s.p = null; }, []);
+            // Kéo mép phải tiêu đề: vẽ thẳng vào thẻ style theo chuột, thả chuột mới lưu bố cục (1 lần vẽ lại React)
+            s.startResize = (e, id) => {
+                if (e.button !== 0 || !s.lay) return;
+                e.preventDefault(); e.stopPropagation();
+                const handle = e.currentTarget, x0 = e.clientX, w0 = handle.parentElement.getBoundingClientRect().width;
+                const base = { ...s.lay.layout.widths };
+                let w = null;
+                colResizing = true;
+                handle.classList.add('is-on');
+                document.body.classList.add('ds-col-resizing');
+                const onMove = ev => { w = Math.max(COL_MIN_W, Math.round(w0 + ev.clientX - x0)); s.writeW({ ...base, [id]: w }); s.writeP(); };
+                const swallow = ev => { ev.stopPropagation(); ev.preventDefault(); };   // nuốt cú click sau khi thả chuột → không sắp xếp nhầm
+                const onUp = () => {
+                    window.removeEventListener('mousemove', onMove);
+                    window.removeEventListener('mouseup', onUp, true);
+                    handle.classList.remove('is-on');
+                    document.body.classList.remove('ds-col-resizing');
+                    window.addEventListener('click', swallow, true);
+                    setTimeout(() => { window.removeEventListener('click', swallow, true); colResizing = false; }, 0);
+                    if (w != null && Math.abs(w - w0) >= 1) s.lay.setWidth(id, w);
+                };
+                window.addEventListener('mousemove', onMove);
+                window.addEventListener('mouseup', onUp, true);
+            };
+            return s;
+        };
+        // Mép kéo độ rộng ở cạnh phải ô tiêu đề (bấm đúp = về tự co giãn theo chữ)
+        const colRz = (g, id) => (
+            <span className="ds-col-rz" title="Kéo để đổi độ rộng cột · Bấm đúp để về độ rộng tự động"
+                  onMouseDown={e => g.startResize(e, id)} onClick={e => e.stopPropagation()}
+                  onDoubleClick={e => { e.stopPropagation(); if (g.lay) g.lay.setWidth(id, null); }}></span>
+        );
+
         // Tiêu đề + hàng tìm theo cột (setSearch không có → bảng không có hàng tìm). Kéo tiêu đề thả lên tiêu đề khác = đổi chỗ.
-        const GridHead =({ grid, cols, sort, onSort, onMove, search, setSearch }) => (
-            <thead className="sticky top-0 z-30">
+        // lay (useColLayout) → có mép kéo độ rộng + cột đóng băng; cols phải là lay.cols (DT theo tháng: lay.cols đã bung tháng).
+        const GridHead = ({ grid, cols, sort, onSort, onMove, search, setSearch, lay }) => {
+            const ref = useRef(null);
+            const g = useGridCss(ref, cols, lay);
+            return (
+            <thead ref={ref} className="sticky top-0 z-30">
                 <tr className="text-center">
                     <th className={grid.numTh}>#</th>
                     {cols.map(c => c.sort
-                        ? <SortableHeader key={c.id} field={c.sort} sort={sort} onSort={onSort} className={c.th} align={c.align} colId={c.id} onColMove={onMove}>{c.label}</SortableHeader>
+                        ? <SortableHeader key={c.id} field={c.sort} sort={sort} onSort={onSort} className={c.th} align={c.align} colId={c.id} onColMove={onMove} rz={lay ? colRz(g, c.id) : null}>{c.label}</SortableHeader>
                         : <th key={c.id} className={`${c.th} cursor-move`} title="Kéo sang cột khác để đổi chỗ" draggable
-                              onDragStart={e => e.dataTransfer.setData(COL_DND, c.id)} {...colDropProps(c.id, onMove)}>{c.label}</th>)}
+                              onDragStart={e => { if (colResizing) { e.preventDefault(); return; } e.dataTransfer.setData(COL_DND, c.id); }} {...colDropProps(c.id, onMove)}>{c.label}{lay ? colRz(g, c.id) : null}</th>)}
                 </tr>
                 {setSearch && (
                     <tr className="ds-search-row">
@@ -1269,7 +1410,8 @@ window.showConnectionLost = function() {
                     </tr>
                 )}
             </thead>
-        );
+            );
+        };
 
         // Dòng tổng: nhãn trải qua các cột đứng trước ô tổng đầu tiên, ô tổng nằm đúng dưới cột của nó, cột không có tổng để
         // trống (ô trống liền nhau gộp 1 ô như bản cũ). cells: { [id cột]: <td …/> }.
@@ -1296,7 +1438,7 @@ window.showConnectionLost = function() {
                     else out.push(<td key="tail" colSpan={i - s}></td>);
                     s = -1;
                 }
-                if (i < n) out.push(React.cloneElement(cells[cols[i].id], { key: cols[i].id }));
+                if (i < n) out.push(React.cloneElement(cells[cols[i].id], { key: cols[i].id, 'data-c': cols[i].id }));
             }
             return (
                 <tfoot className="sticky-footer">
@@ -1330,9 +1472,17 @@ window.showConnectionLost = function() {
         };
         const footShownLabel = (n, unit = 'dòng') => `Tổng các ${unit} đang lọc trên trang (${n.toLocaleString()} ${unit}):`;
 
-        // Nút "Cột" ở chân bảng (góc trái, cạnh phân trang): bật/tắt từng cột, kéo đổi thứ tự, khôi phục mặc định; bảng chọn mở
-        // lên trên. KHÔNG đặt trên thanh lọc: đo 28/09 thêm 1 nút ở đó là thanh lọc sổ cái ở 1366 px (thanh bên mở) rớt xuống 2 hàng.
-        // lay = kết quả useColLayout.
+        // Nút "Cột" ở chân bảng (góc trái, cạnh phân trang): bật/tắt từng cột, kéo đổi thứ tự, đóng băng trái/phải, khôi phục mặc định;
+        // bảng chọn mở lên trên. KHÔNG đặt trên thanh lọc: đo 28/09 thêm 1 nút ở đó là thanh lọc sổ cái ở 1366 px (thanh bên mở) rớt
+        // xuống 2 hàng. lay = kết quả useColLayout.
+        // Hình nút đóng băng: khung bảng tô đặc mảng bên trái / bên phải (bộ icon chung không có hình hợp — Bẫy 9)
+        const PinIcon = ({ side }) => (
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true" style={{ display: 'inline-block', verticalAlign: '-2px', flex: 'none' }}>
+                <rect x="1.5" y="2.5" width="13" height="11" rx="2"/>
+                <rect x={side === 'l' ? 3 : 9} y="4" width="4" height="8" rx="0.5" fill="currentColor" stroke="none"/>
+            </svg>
+        );
+        const PIN_GROUP = { l: 'Đóng băng bên trái', '': 'Cột cuộn ngang', r: 'Đóng băng bên phải' };
         const ColumnConfigurator = ({ grid, lay }) => {
             const [open, setOpen] = useState(false);
             const [pos, setPos] = useState(null);
@@ -1342,9 +1492,10 @@ window.showConnectionLost = function() {
             const labels = {};
             grid.cols.forEach(c => { labels[c.id] = c.label; });
             const total = lay.layout.order.length, shown = total - lay.layout.hidden.length;
+            const pin = lay.layout.pin, nPin = Object.keys(pin).length, nW = Object.keys(lay.layout.widths).length;
             const place = () => {
                 const b = btnRef.current; if (!b) return;
-                const r = b.getBoundingClientRect(), w = Math.min(340, window.innerWidth - 32);
+                const r = b.getBoundingClientRect(), w = Math.min(372, window.innerWidth - 32);
                 setPos({ bottom: window.innerHeight - r.top + 8, left: Math.max(16, Math.min(r.left, window.innerWidth - w - 16)), width: w });
             };
             useEffect(() => {
@@ -1359,11 +1510,12 @@ window.showConnectionLost = function() {
             return (
                 <>
                     <button ref={btnRef} type="button" onClick={() => { if (open) setOpen(false); else { place(); setOpen(true); } }}
-                            title="Chọn cột hiện trên bảng và thứ tự cột"
-                            className={`ds-colbtn ${shown < total ? 'is-on' : ''} ${open ? 'is-open' : ''}`}>
+                            title={'Chọn cột hiện trên bảng, thứ tự cột, đóng băng cột' + (nPin ? ` · Đang đóng băng ${nPin} cột` : '')}
+                            className={`ds-colbtn ${shown < total || nPin ? 'is-on' : ''} ${open ? 'is-open' : ''}`}>
                         <Icon name="columns" size={14} stroke={2}/>
                         <span>Cột</span>
                         {shown < total && <span className="tabular-nums">{shown}/{total}</span>}
+                        {nPin > 0 && <PinIcon side={Object.values(pin).includes('l') ? 'l' : 'r'}/>}
                         <Icon name={open ? 'chevron-down' : 'chevron-up'} size={12} stroke={2}/>
                     </button>
                     {open && pos && (
@@ -1375,28 +1527,44 @@ window.showConnectionLost = function() {
                                 <button type="button" className="ds-afp-link" disabled={shown === total} onClick={lay.showAll}>Hiện tất cả</button>
                                 <button type="button" className="ds-iconbtn" onClick={() => setOpen(false)} title="Đóng (Esc)"><Icon name="x" size={16} stroke={2}/></button>
                             </div>
-                            <div className="ds-afp-hint">Bật để hiện cột, kéo để đổi thứ tự — hoặc kéo thẳng tiêu đề cột trên bảng</div>
+                            <div className="ds-afp-hint">Bật để hiện cột, kéo để đổi thứ tự, bấm <PinIcon side="l"/> / <PinIcon side="r"/> để đóng băng cột bên trái / bên phải (cuộn ngang vẫn đứng yên). Đổi độ rộng: kéo mép phải tiêu đề cột trên bảng, bấm đúp mép để về tự động.</div>
                             <div className="ds-afp-list custom-scrollbar">
-                                {lay.layout.order.map(id => {
+                                {lay.list.map((id, i) => {
                                     const on = !lay.layout.hidden.includes(id);
                                     const lastOne = on && shown <= 1;
+                                    const side = pin[id] || '';
+                                    const head = nPin > 0 && (i === 0 || (pin[lay.list[i - 1]] || '') !== side);
                                     return (
-                                        <div key={id} draggable className={`ds-afp-row ${dragId === id ? 'is-drag' : ''}`}
-                                             onDragStart={e => { dragRef.current = id; setDragId(id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('application/x-ds-colcfg', id); }}
-                                             onDragOver={e => { if (!dragRef.current) return; e.preventDefault(); lay.moveOver(dragRef.current, id); }}
-                                             onDrop={e => e.preventDefault()}
-                                             onDragEnd={() => { dragRef.current = null; setDragId(null); }}>
-                                            <Icon name="grip" size={16} stroke={2}/>
-                                            <span className={on ? 'is-on' : ''}>{labels[id]}</span>
-                                            <button type="button" role="switch" aria-checked={on} aria-label={`Hiện cột "${labels[id]}"`} disabled={lastOne}
-                                                    title={lastOne ? 'Bảng phải còn ít nhất 1 cột' : ''}
-                                                    onClick={() => lay.toggle(id)} className={`ds-switch ${on ? 'is-on' : ''}`}><i></i></button>
-                                        </div>
+                                        <React.Fragment key={id}>
+                                            {head && <div className="ds-afp-grp">{PIN_GROUP[side]}</div>}
+                                            <div draggable className={`ds-afp-row ${dragId === id ? 'is-drag' : ''}`}
+                                                 onDragStart={e => { dragRef.current = id; setDragId(id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('application/x-ds-colcfg', id); }}
+                                                 onDragOver={e => { if (!dragRef.current) return; e.preventDefault(); lay.moveOver(dragRef.current, id); }}
+                                                 onDrop={e => e.preventDefault()}
+                                                 onDragEnd={() => { dragRef.current = null; setDragId(null); }}>
+                                                <Icon name="grip" size={16} stroke={2}/>
+                                                <span className={`ds-colname ${on ? 'is-on' : ''}`} title={labels[id]}>{labels[id]}</span>
+                                                <span className="ds-pin">
+                                                    {['l', 'r'].map(s => (
+                                                        <button key={s} type="button" aria-pressed={side === s} className={side === s ? 'is-on' : ''}
+                                                                title={side === s ? 'Bỏ đóng băng cột này' : s === 'l' ? 'Đóng băng bên trái (đầu danh sách)' : 'Đóng băng bên phải (cuối danh sách)'}
+                                                                onClick={() => lay.setPin(id, side === s ? '' : s)}><PinIcon side={s}/></button>
+                                                    ))}
+                                                </span>
+                                                <button type="button" role="switch" aria-checked={on} aria-label={`Hiện cột "${labels[id]}"`} disabled={lastOne}
+                                                        title={lastOne ? 'Bảng phải còn ít nhất 1 cột' : ''}
+                                                        onClick={() => lay.toggle(id)} className={`ds-switch ${on ? 'is-on' : ''}`}><i></i></button>
+                                            </div>
+                                        </React.Fragment>
                                     );
                                 })}
                             </div>
                             <div className="ds-afp-foot">
-                                <button type="button" className="ds-btn mr-auto" onClick={lay.reset} title="Hiện đủ cột, về thứ tự ban đầu">Khôi phục mặc định</button>
+                                <div className="flex items-center gap-1 mr-auto">
+                                    <button type="button" className="ds-btn" onClick={lay.reset} title="Hiện đủ cột, về thứ tự và độ rộng ban đầu, bỏ đóng băng">Khôi phục mặc định</button>
+                                    <button type="button" className="ds-afp-link" disabled={!nW} onClick={lay.resetWidths}
+                                            title={nW ? 'Bỏ độ rộng đã kéo tay, mọi cột tự co giãn theo chữ' : 'Chưa có cột nào kéo độ rộng'}>Độ rộng tự động{nW ? ` (${nW})` : ''}</button>
+                                </div>
                                 <button type="button" className="ds-btn ds-btn-pri" onClick={() => setOpen(false)}>Xong</button>
                             </div>
                         </div>
@@ -4339,7 +4507,7 @@ window.showConnectionLost = function() {
 
         // Header cột có thể sort. Click 1 lần: DESC. Click 2: ASC. Click 3: bỏ sort về default.
         // colId + onColMove (bảng dữ liệu có bố cục cột): kéo thả lên tiêu đề khác = đổi chỗ cột; thả vào "Gom nhóm" vẫn như cũ.
-        const SortableHeader = ({ field, sort, onSort, className = '', children, align = 'center', colId, onColMove }) => {
+        const SortableHeader = ({ field, sort, onSort, className = '', children, align = 'center', colId, onColMove, rz }) => {
             const active = sort.field === field;
             const dir = active ? sort.dir : null;
             const justify = align === 'right' ? 'justify-end' : align === 'left' ? 'justify-start' : 'justify-center';
@@ -4349,7 +4517,7 @@ window.showConnectionLost = function() {
                     onClick={() => onSort(field)}
                     title={onColMove ? 'Bấm để sắp xếp · Kéo sang cột khác để đổi chỗ · Kéo vào "Gom nhóm" để gom nhóm' : 'Bấm để sắp xếp / Nắm kéo thả để gom nhóm'}
                     draggable
-                    onDragStart={e => { e.dataTransfer.setData('text/plain', field); if (onColMove) e.dataTransfer.setData(COL_DND, colId); }}
+                    onDragStart={e => { if (colResizing) { e.preventDefault(); return; } e.dataTransfer.setData('text/plain', field); if (onColMove) e.dataTransfer.setData(COL_DND, colId); }}
                     {...(onColMove ? colDropProps(colId, onColMove) : null)}
                 >
                     <div className={`flex items-center gap-1 ${justify}`}>
@@ -4360,6 +4528,7 @@ window.showConnectionLost = function() {
                              : <Icon name="arrows-updown" size={10}/>}
                         </span>
                     </div>
+                    {rz}
                 </th>
             );
         };
@@ -7303,7 +7472,7 @@ window.showConnectionLost = function() {
                                         {/* Wrapper relative — ép scrollHeight = totalHeight để user scroll qua hết phần data ảo.
                                             Table position absolute với top = topPadding → rows luôn ở đúng vị trí logic */}
                                         <table className="ds-grid w-max border-collapse" style={{ width: 'max-content', minWidth: '100%' }}>
-                                            <GridHead grid={LEDGER_GRID} cols={ledgerLay.cols} sort={ledgerSort} onSort={f => setLedgerSort(s => cycleSort(s, f))} onMove={ledgerLay.move} search={colSearch} setSearch={setColSearch} />
+                                            <GridHead grid={LEDGER_GRID} cols={ledgerLay.cols} sort={ledgerSort} onSort={f => setLedgerSort(s => cycleSort(s, f))} onMove={ledgerLay.move} search={colSearch} setSearch={setColSearch} lay={ledgerLay} />
                                             <tbody>
                                                 <VirtualRows data={ledgerFlatData} rowHeight={ledgerRowHeight} scrollRef={ledgerScrollRef} renderRow={(row, i) => (
                                                     row.isGroup ?
@@ -7439,7 +7608,7 @@ window.showConnectionLost = function() {
                                 <div className="flex-1 min-h-0 bg-white border border-line rounded-[10px] overflow-hidden flex flex-col">
                                     <div className="flex-1 min-h-0 overflow-auto custom-scrollbar" ref={saleScrollRef}>
                                         <table className="ds-grid w-max border-collapse" style={{ width: 'max-content', minWidth: '100%' }}>
-                                            <GridHead grid={SALE_GRID} cols={saleLay.cols} sort={saleSort} onSort={f => setSaleSort(s => cycleSort(s, f))} onMove={saleLay.move} search={saleColSearch} setSearch={setSaleColSearch} />
+                                            <GridHead grid={SALE_GRID} cols={saleLay.cols} sort={saleSort} onSort={f => setSaleSort(s => cycleSort(s, f))} onMove={saleLay.move} search={saleColSearch} setSearch={setSaleColSearch} lay={saleLay} />
                                             <tbody>
                                                 <VirtualRows data={saleFlatData} rowHeight={saleRowHeight} scrollRef={saleScrollRef} renderRow={(row, i) => (
                                                     row.isGroup ?
@@ -7542,7 +7711,7 @@ window.showConnectionLost = function() {
                                 <div className="flex-1 min-h-0 bg-white border border-line rounded-[10px] overflow-hidden flex flex-col mt-1">
                                     <div className="flex-1 min-h-0 overflow-auto custom-scrollbar" ref={incomeAllocScrollRef}>
                                         <table className="ds-grid w-max border-collapse" style={{ width: 'max-content', minWidth: '100%' }}>
-                                            <GridHead grid={INCOME_ALLOC_GRID} cols={incomeAllocLay.cols} sort={incomeAllocSort} onSort={f => setIncomeAllocSort(s => cycleSort(s, f))} onMove={incomeAllocLay.move} search={incomeAllocColSearch} setSearch={setIncomeAllocColSearch} />
+                                            <GridHead grid={INCOME_ALLOC_GRID} cols={incomeAllocLay.cols} sort={incomeAllocSort} onSort={f => setIncomeAllocSort(s => cycleSort(s, f))} onMove={incomeAllocLay.move} search={incomeAllocColSearch} setSearch={setIncomeAllocColSearch} lay={incomeAllocLay} />
                                             <tbody>
                                                 <VirtualRows data={incomeAllocFlatData} rowHeight={28} scrollRef={incomeAllocScrollRef} renderRow={(row, i) => (
                                                     <GridRow key={i} grid={INCOME_ALLOC_GRID} cols={incomeAllocLay.cols} r={row} idx={i + 1} />
@@ -7622,7 +7791,7 @@ window.showConnectionLost = function() {
                                 <div className="flex-1 min-h-0 bg-white border border-line rounded-[10px] overflow-hidden flex flex-col mt-1">
                                     <div className="flex-1 min-h-0 overflow-auto custom-scrollbar" ref={incomeMonthScrollRef}>
                                         <table className="ds-grid w-max border-collapse" style={{ width: 'max-content', minWidth: '100%' }}>
-                                            <GridHead grid={incomeMonthView.grid} cols={incomeMonthCols} sort={incomeMonthSort} onSort={f => setIncomeMonthSort(s => cycleSort(s, f))} onMove={incomeMonthMove} search={incomeMonthColSearch} setSearch={setIncomeMonthColSearch} />
+                                            <GridHead grid={incomeMonthView.grid} cols={incomeMonthCols} sort={incomeMonthSort} onSort={f => setIncomeMonthSort(s => cycleSort(s, f))} onMove={incomeMonthMove} search={incomeMonthColSearch} setSearch={setIncomeMonthColSearch} lay={incomeMonthLay} />
                                             <tbody>
                                                 <VirtualRows data={incomeMonthFlatData} rowHeight={28} scrollRef={incomeMonthScrollRef} renderRow={(row, i) => (
                                                     <GridRow key={i} grid={incomeMonthView.grid} cols={incomeMonthCols} r={row} idx={i + 1} />
@@ -7737,7 +7906,7 @@ window.showConnectionLost = function() {
                                 <div className="flex-1 min-h-0 bg-white border border-line rounded-[10px] overflow-hidden flex flex-col">
                                     <div className="flex-1 min-h-0 overflow-auto custom-scrollbar" ref={voucherScrollRef}>
                                         <table className="ds-grid w-max border-collapse" style={{ width: 'max-content', minWidth: '100%' }}>
-                                            <GridHead grid={VOUCHER_GRID} cols={voucherLay.cols} sort={voucherSort} onSort={f => setVoucherSort(s => cycleSort(s, f))} onMove={voucherLay.move} search={voucherColSearch} setSearch={setVoucherColSearch} />
+                                            <GridHead grid={VOUCHER_GRID} cols={voucherLay.cols} sort={voucherSort} onSort={f => setVoucherSort(s => cycleSort(s, f))} onMove={voucherLay.move} search={voucherColSearch} setSearch={setVoucherColSearch} lay={voucherLay} />
                                             <tbody>
                                                 <VirtualRows data={voucherFlatData} rowHeight={28} scrollRef={voucherScrollRef} renderRow={(row, i) => (
                                                     row.isGroup ?
@@ -7877,7 +8046,7 @@ window.showConnectionLost = function() {
                                 <div className="flex-1 min-h-0 bg-white border border-line rounded-[10px] overflow-hidden flex flex-col">
                                     <div className="flex-1 min-h-0 overflow-auto custom-scrollbar" ref={purchaseScrollRef}>
                                         <table className="ds-grid w-max border-collapse" style={{ width: 'max-content', minWidth: '100%' }}>
-                                            <GridHead grid={PURCHASE_GRID} cols={purchaseLay.cols} sort={purchaseSort} onSort={f => setPurchaseSort(s => cycleSort(s, f))} onMove={purchaseLay.move} search={purchaseColSearch} setSearch={setPurchaseColSearch} />
+                                            <GridHead grid={PURCHASE_GRID} cols={purchaseLay.cols} sort={purchaseSort} onSort={f => setPurchaseSort(s => cycleSort(s, f))} onMove={purchaseLay.move} search={purchaseColSearch} setSearch={setPurchaseColSearch} lay={purchaseLay} />
                                             <tbody>
                                                 <VirtualRows data={purchaseFlatData} rowHeight={purchaseRowHeight} scrollRef={purchaseScrollRef} renderRow={(row, i) => (
                                                     row.isGroup ?
@@ -8021,7 +8190,7 @@ window.showConnectionLost = function() {
                                 <div className="flex-1 min-h-0 bg-white border border-line rounded-[10px] overflow-hidden flex flex-col">
                                     <div className="flex-1 min-h-0 overflow-auto custom-scrollbar" ref={warehouseScrollRef}>
                                         <table className="ds-grid w-max border-collapse" style={{ width: 'max-content', minWidth: '100%' }}>
-                                            <GridHead grid={WAREHOUSE_GRID} cols={warehouseLay.cols} sort={warehouseSort} onSort={f => setWarehouseSort(s => cycleSort(s, f))} onMove={warehouseLay.move} search={warehouseColSearch} setSearch={setWarehouseColSearch} />
+                                            <GridHead grid={WAREHOUSE_GRID} cols={warehouseLay.cols} sort={warehouseSort} onSort={f => setWarehouseSort(s => cycleSort(s, f))} onMove={warehouseLay.move} search={warehouseColSearch} setSearch={setWarehouseColSearch} lay={warehouseLay} />
                                             <tbody>
                                                 <VirtualRows data={warehouseFlatData} rowHeight={warehouseRowHeight} scrollRef={warehouseScrollRef} renderRow={(row, i) => (
                                                     row.isGroup ?
@@ -8097,7 +8266,7 @@ window.showConnectionLost = function() {
                                 <div className="flex-1 min-h-0 bg-white border border-line rounded-[10px] overflow-hidden flex flex-col">
                                     <div className="flex-1 min-h-0 overflow-auto custom-scrollbar" ref={warehouseBalanceScrollRef}>
                                         <table className="ds-grid w-max border-collapse" style={{ width: 'max-content', minWidth: '100%' }}>
-                                            <GridHead grid={WAREHOUSE_BALANCE_GRID} cols={warehouseBalanceLay.cols} sort={warehouseBalanceSort} onSort={f => setWarehouseBalanceSort(s => cycleSort(s, f))} onMove={warehouseBalanceLay.move} search={warehouseBalanceColSearch} setSearch={setWarehouseBalanceColSearch} />
+                                            <GridHead grid={WAREHOUSE_BALANCE_GRID} cols={warehouseBalanceLay.cols} sort={warehouseBalanceSort} onSort={f => setWarehouseBalanceSort(s => cycleSort(s, f))} onMove={warehouseBalanceLay.move} search={warehouseBalanceColSearch} setSearch={setWarehouseBalanceColSearch} lay={warehouseBalanceLay} />
                                             <tbody>
                                                 <VirtualRows data={warehouseBalanceFlatData} rowHeight={28} scrollRef={warehouseBalanceScrollRef} renderRow={(row, i) => (
                                                     <GridRow key={i} grid={WAREHOUSE_BALANCE_GRID} cols={warehouseBalanceLay.cols} r={row} idx={i + 1} />
@@ -8197,7 +8366,7 @@ window.showConnectionLost = function() {
                                 <div className="flex-1 min-h-0 bg-white border border-line rounded-[10px] overflow-hidden flex flex-col mt-1">
                                     <div className="flex-1 min-h-0 overflow-auto custom-scrollbar" ref={prDetailScrollRef}>
                                         <table className="ds-grid w-max border-collapse" style={{ width: 'max-content', minWidth: '100%' }}>
-                                            <GridHead grid={PR_DETAIL_GRID} cols={prDetailLay.cols} sort={prDetailSort} onSort={f => setPrDetailSort(s => cycleSort(s, f))} onMove={prDetailLay.move} search={prDetailColSearch} setSearch={setPrDetailColSearch} />
+                                            <GridHead grid={PR_DETAIL_GRID} cols={prDetailLay.cols} sort={prDetailSort} onSort={f => setPrDetailSort(s => cycleSort(s, f))} onMove={prDetailLay.move} search={prDetailColSearch} setSearch={setPrDetailColSearch} lay={prDetailLay} />
                                             <tbody>
                                                 {prDetailFlatData.length === 0 ? (
                                                     <tr>
