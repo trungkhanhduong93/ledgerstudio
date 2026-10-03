@@ -4561,7 +4561,7 @@ INCOME_ALLOC_SORT_WHITELIST.update({
     "CUM_AMT":    "ISNULL(D.CUM_AMT,0)",
     "CON_LAI":    "(A.INCOME_AMOUNT - ISNULL(D.CUM_AMT,0))",
 })
-INCOME_ALLOC_NUM_COLS  = ("QUANTITY", "INCOME_AMOUNT", "ALLOCATION_RATE", "PERIOD_AMT", "CUM_AMT", "CON_LAI")
+INCOME_ALLOC_NUM_COLS  = ("QUANTITY", "INCOME_AMOUNT", "ALLOCATION_RATE", "PERIOD_AMT", "CUM_AMT", "CON_LAI", "VAT_TAX_RATE")
 INCOME_ALLOC_DATE_COLS = ("TRAN_DATE", "USE_DATE", "RECEIVE_DATE")
 ALLOC_METHOD_MAP = {"0": "Tháng", "1": "Ngày", "2": "Quý", "3": "Năm", "4": "Tuần"}
 
@@ -4594,13 +4594,59 @@ def _income_alloc_cols():
     return cols
 
 
+_vat_rate_cache = {}
+
+
+def _vat_rate_ok():
+    """DM_ITEM.VAT_TAX_ID + DM_VAT_TAX (VAT_TAX_ID, VAT_TAX_RATE) có đủ không — dò 1 lần mỗi CSDL (Bẫy 5)."""
+    db = (session.get('db_config') or {}).get('database', '')
+    if db not in _vat_rate_cache:
+        try:
+            cur = get_connection().cursor()
+            cur.execute("SELECT UPPER(TABLE_NAME), UPPER(COLUMN_NAME) FROM INFORMATION_SCHEMA.COLUMNS "
+                        "WHERE TABLE_NAME IN ('DM_ITEM', 'DM_VAT_TAX')")
+            have = {(t, c) for t, c in cur.fetchall()}
+            _vat_rate_cache[db] = {('DM_ITEM', 'ITEM_ID'), ('DM_ITEM', 'VAT_TAX_ID'),
+                                   ('DM_VAT_TAX', 'VAT_TAX_ID'), ('DM_VAT_TAX', 'VAT_TAX_RATE')} <= have
+        except Exception:
+            _vat_rate_cache[db] = False
+    return _vat_rate_cache[db]
+
+
+def _vat_rate_sql(alias="A"):
+    """Thuế suất của hàng trên dòng phân bổ: ITEM_ID → DM_ITEM.VAT_TAX_ID → DM_VAT_TAX.VAT_TAX_RATE.
+    Subquery vô hướng (không JOIN vào FROM) → không đổi số dòng, câu đếm / cộng tổng giữ nguyên.
+    Thuế suất 0% nhưng tên 'Không chịu thuế' (mã 99, 999) quy về -1 để hiển thị 'KCT' (Trum duyệt)."""
+    if not _vat_rate_ok():
+        return "CAST(NULL AS MONEY)"
+    return (f"(SELECT MAX(CASE "
+            f"WHEN VT.VAT_TAX_RATE = 0 AND (VT.VAT_TAX_NAME LIKE N'%không chịu thuế%' OR VT.VAT_TAX_NAME LIKE N'%khong chiu thue%' OR VT.VAT_TAX_ID IN ('99', '999', 'KCT')) THEN -1 "
+            f"ELSE VT.VAT_TAX_RATE END) FROM dbo.DM_ITEM IT WITH (NOLOCK) "
+            f"JOIN dbo.DM_VAT_TAX VT WITH (NOLOCK) ON VT.VAT_TAX_ID = IT.VAT_TAX_ID "
+            f"WHERE IT.ITEM_ID = {alias}.ITEM_ID)")
+
+
+def _fmt_rate(v):
+    """Decimal('10.0000') → '10%' cho file xuất; -1 → 'KCT'; None → None (ô trống)."""
+    if v is None or v == '':
+        return None
+    try:
+        fv = float(v)
+        if fv == -1:
+            return 'KCT'
+        return f"{fv:g}%"
+    except (ValueError, TypeError):
+        return str(v) if str(v).strip() else None
+
+
 def _income_alloc_select_list():
     """SELECT list dựng theo đúng cột thực có (xem `_income_alloc_cols`)."""
-    return (", ".join(f"A.{c}" for c in _income_alloc_cols()) + """,
+    return (", ".join(f"A.{c}" for c in _income_alloc_cols()) + f""",
     ISNULL(D.PERIOD_AMT,0) AS PERIOD_AMT,
     ISNULL(D.CUM_AMT,0)    AS CUM_AMT,
     (A.INCOME_AMOUNT - ISNULL(D.CUM_AMT,0)) AS CON_LAI,
-    PD.PR_DETAIL_NAME AS PR_DETAIL_NAME""")
+    PD.PR_DETAIL_NAME AS PR_DETAIL_NAME,
+    {_vat_rate_sql('A')} AS VAT_TAX_RATE""")
 
 
 def _income_alloc_sort_whitelist():
@@ -4612,6 +4658,7 @@ def _income_alloc_sort_whitelist():
         "PERIOD_AMT": "ISNULL(D.PERIOD_AMT,0)",
         "CUM_AMT":    "ISNULL(D.CUM_AMT,0)",
         "CON_LAI":    "(A.INCOME_AMOUNT - ISNULL(D.CUM_AMT,0))",
+        "VAT_TAX_RATE": _vat_rate_sql("A"),
     })
     return wl
 
@@ -4860,7 +4907,7 @@ INCOME_ALLOC_CSV_COLS = [
     ("ORGANIZATION_ID","Đơn vị"), ("ORGANIZATION_NAME","Tên đơn vị"),
     ("TRAN_ID","Mã CT"), ("TRAN_NAME","Tên chứng từ"), ("TRAN_NO","Số CT"), ("TRAN_DATE","Ngày CT"),
     ("USE_DATE","Ngày phân bổ"), ("RECEIVE_DATE","Ngày nhận"),
-    ("DESCRIPTION","Diễn giải"), ("ITEM_ID","Hàng hóa"), ("ITEM_NAME","Tên hàng hóa"), ("QUANTITY","Số lượng"),
+    ("DESCRIPTION","Diễn giải"), ("ITEM_ID","Hàng hóa"), ("ITEM_NAME","Tên hàng hóa"), ("VAT_TAX_RATE","Thuế suất"), ("QUANTITY","Số lượng"),
     ("ALLOCATION_RATE","Tỷ lệ pb"), ("ALLOCATION_METHOD_NAME","Tiêu thức pb"),
     ("INCOME_AMOUNT","Doanh thu"), ("PERIOD_AMT","Dthu kỳ này"), ("CUM_AMT","Lũy kế"), ("CON_LAI","Còn lại"),
     ("ACCOUNT_ID_DES","Tk đích"), ("ACCOUNT_ID","TK"), ("ACCOUNT_ID_CONTRA","Tk đối ứng"),
@@ -4893,6 +4940,7 @@ def get_income_alloc_stream_csv():
             d['TRAN_NAME']         = tran_map.get((str(d.get('TRAN_ID') or '')).strip(), '')
             d['ALLOCATION_METHOD_NAME'] = ALLOC_METHOD_MAP.get(str(d.get('ALLOCATION_METHOD') or '').strip(),
                                                                str(d.get('ALLOCATION_METHOD') or ''))
+            d['VAT_TAX_RATE']      = _fmt_rate(d.get('VAT_TAX_RATE'))
             return [d.get(key) for key, _ in cols]
 
         headers = [label for _, label in cols]
@@ -5005,7 +5053,8 @@ def _income_month_select(months):
     base = [f"A.{c}" for c in INCOME_MONTH_BASE if c in have]
     nums = (["ISNULL(D.CUM_BEFORE,0) AS CUM_BEFORE"] + [f"ISNULL(D.{_month_key(m)},0) AS {_month_key(m)}" for m in months]
             + ["ISNULL(D.CUM_IN,0) AS CUM_IN", "(A.INCOME_AMOUNT - ISNULL(D.CUM_BEFORE,0) - ISNULL(D.CUM_IN,0)) AS CON_LAI",
-               "PD.PR_DETAIL_NAME AS PR_DETAIL_NAME", "AC.ACCOUNT_NAME AS ACCOUNT_NAME_DES"])
+               "PD.PR_DETAIL_NAME AS PR_DETAIL_NAME", "AC.ACCOUNT_NAME AS ACCOUNT_NAME_DES",
+               f"{_vat_rate_sql('A')} AS VAT_TAX_RATE"])
     return ", ".join(base + nums)
 
 
@@ -5067,7 +5116,7 @@ def _income_month_page_sql(months, where_sql, order_by_sql, totals, paged):
     lịch phân bổ (D — không có index FR_KEY), câu trang còn sắp xếp nguyên dòng rồi nối CTE S gom cả bảng SALE.
       • K sắp xếp + đánh số trên cột HẸP (khoá thẻ + các số của D), xong mới nối lấy đủ cột cho các dòng của trang.
       • totals → cộng tổng bằng COUNT/SUM … OVER () ngay trong câu này: D chỉ tính 1 lần (bỏ câu đếm riêng). Tổng khớp câu đếm cũ
-        từng số (đo DS_TEST_PERF 29/09). App gửi lại tổng khi chỉ đổi trang / sắp xếp → totals=False.
+         từng số (đo DS_TEST_PERF 29/09). App gửi lại tổng khi chỉ đổi trang / sắp xếp → totals=False.
       • Số HĐ / Số hợp đồng không nối ở đây — _income_month_sale_lookup tra riêng cho các dòng trả về.
     DB giả cỡ thật (125k thẻ, 1,33 triệu dòng lịch, SALE 400k), 3 tháng: đếm 0,61 s + trang 2,07 s → 0,96 s + tra SALE 0,03 s."""
     nums = ["CUM_BEFORE"] + [_month_key(m) for m in months] + ["CUM_IN"]
@@ -5084,7 +5133,7 @@ def _income_month_page_sql(months, where_sql, order_by_sql, totals, paged):
             SELECT A.PR_KEY AS K_KEY, {", ".join(k_cols)}, ROW_NUMBER() OVER (ORDER BY {order_by_sql}) AS RowNum
             {INCOME_MONTH_FROM} WHERE {where_sql})
         SELECT {", ".join(base)}, {", ".join("K." + n for n in nums)}, (A.INCOME_AMOUNT - K.CUM_BEFORE - K.CUM_IN) AS CON_LAI,
-               PD.PR_DETAIL_NAME AS PR_DETAIL_NAME, AC.ACCOUNT_NAME AS ACCOUNT_NAME_DES{out_tot}
+               PD.PR_DETAIL_NAME AS PR_DETAIL_NAME, AC.ACCOUNT_NAME AS ACCOUNT_NAME_DES, {_vat_rate_sql('A')} AS VAT_TAX_RATE{out_tot}
         FROM K JOIN dbo.INCOME_ALLOCATION A WITH (NOLOCK) ON A.PR_KEY = K.K_KEY
             LEFT JOIN dbo.DM_PR_DETAIL PD WITH (NOLOCK) ON PD.PR_DETAIL_ID = A.PR_DETAIL_ID
             LEFT JOIN dbo.DM_ACCOUNT   AC WITH (NOLOCK) ON AC.ACCOUNT_ID   = A.ACCOUNT_ID_DES
@@ -5192,7 +5241,7 @@ def _income_month_row(r, months):
         v = r.get(dk)
         if isinstance(v, (date, datetime)):
             r[dk] = v.strftime("%d/%m/%Y")
-    for nk in ["ALLOCATION_RATE", "INCOME_AMOUNT", "CUM_BEFORE", "CUM_IN", "CON_LAI"] + [_month_key(m) for m in months]:
+    for nk in ["ALLOCATION_RATE", "INCOME_AMOUNT", "CUM_BEFORE", "CUM_IN", "CON_LAI", "VAT_TAX_RATE"] + [_month_key(m) for m in months]:
         v = r.get(nk)
         if v is not None:
             try:
@@ -5318,7 +5367,7 @@ def get_income_alloc_month_count():
 def _income_month_export_cols(months, labels):
     """Bộ cột xuất = đúng thứ tự file mẫu. Khoá 'MONTHS' (App gửi khi xuất "Như đang xem") = cả dải cột tháng."""
     return ([("ORGANIZATION_ID", "Đơn vị"), ("TRAN_ID", "Mã ctừ"), ("TRAN_NO", "Số ctừ"), ("TRAN_DATE", "Ngày ctừ"),
-             ("USE_DATE", "Ngày pbổ"), ("DESCRIPTION", "Diễn giải"), ("ITEM_ID", "Hàng hóa"), ("ALLOCATION_RATE", "Tỷ lệ pb"),
+             ("USE_DATE", "Ngày pbổ"), ("DESCRIPTION", "Diễn giải"), ("ITEM_ID", "Hàng hóa"), ("VAT_TAX_RATE", "Thuế suất"), ("ALLOCATION_RATE", "Tỷ lệ pb"),
              ("INCOME_AMOUNT", "Doanh thu"), ("ACCOUNT_ID_DES", "Tk đích"), ("PR_DETAIL_ID", "Mã đối tượng"),
              ("CONTRACT_NO", "Số hợp đồng"), ("VAT_TRAN_NO", "Số Hóa đơn"), ("CUM_BEFORE", labels[0])]
             + [(_month_key(m), f"{m.month:02d}/{m.year}") for m in months]
@@ -5374,6 +5423,7 @@ def get_income_alloc_month_stream_csv():
 
         def transform(raw, sql_cols):   # ngày giữ kiểu ngày, số giữ Decimal — bộ ghi xlsx tự định dạng (Bẫy 12)
             d = dict(zip(sql_cols, raw))
+            d['VAT_TAX_RATE'] = _fmt_rate(d.get('VAT_TAX_RATE'))
             return [(d.get(key).strip() if isinstance(d.get(key), str) else d.get(key)) for key, _ in cols]
 
         headers = [label for _, label in cols]

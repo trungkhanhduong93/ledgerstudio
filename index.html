@@ -1405,7 +1405,11 @@ window.showConnectionLost = function() {
             );
         };
 
-        const fmtRate = r => r.VAT_TAX_RATE != null && r.VAT_TAX_RATE !== '' ? r.VAT_TAX_RATE + '%' : '';
+        const fmtRate = r => {
+            if (r.VAT_TAX_RATE == null || r.VAT_TAX_RATE === '') return '';
+            if (r.VAT_TAX_RATE === -1 || r.VAT_TAX_RATE === '-1' || r.VAT_TAX_RATE === 'KCT') return 'KCT';
+            return r.VAT_TAX_RATE + '%';
+        };
         const GRP_TOTAL  = { TOTAL_AMOUNT: { sum: 'TOTAL_AMOUNT', dec: 0, bold: true, color: 'text-emerald-600' } };
         const GRP_AMOUNT = { AMOUNT: { sum: 'AMOUNT', dec: 0, bold: true, color: 'text-emerald-600' } };
 
@@ -1536,6 +1540,7 @@ window.showConnectionLost = function() {
                 { id: 'DESCRIPTION',            label: 'Diễn giải',     sort: 'DESCRIPTION',       th: 'border-r w-56 px-3', align: 'left', search: 1, td: 'border-r whitespace-nowrap truncate max-w-[250px] px-3 py-1.5' },
                 { id: 'ITEM_ID',                label: 'Hàng hóa',      sort: 'ITEM_ID',           th: 'border-r w-20',          search: 1, td: 'border-r text-center font-black text-indigo-600', q: 'pre' },
                 { id: 'ITEM_NAME',              label: 'Tên hàng hóa',                             th: 'border-r w-40 px-3',     search: 1, td: 'border-r whitespace-nowrap px-3' },
+                { id: 'VAT_TAX_RATE',           label: 'Thuế suất',     sort: 'VAT_TAX_RATE',      th: 'border-r w-16',          search: 1, td: 'border-r text-center', v: fmtRate },
                 { id: 'ALLOCATION_RATE',        label: 'Tỷ lệ pb',      sort: 'ALLOCATION_RATE',   th: 'border-r w-16 px-2', align: 'right', search: 1, td: 'border-r text-right font-mono px-2', v: r => fmtNum(r.ALLOCATION_RATE), q: 'num' },
                 { id: 'INCOME_AMOUNT',          label: 'Doanh thu',     sort: 'INCOME_AMOUNT',     th: 'border-r w-32 px-2', align: 'right', search: 1, td: 'border-r text-right font-mono px-2 font-black', v: r => fmtInt(r.INCOME_AMOUNT), q: 'num' },
                 { id: 'PERIOD_AMT',             label: 'Dthu kỳ này',   sort: 'PERIOD_AMT',        th: 'border-r w-32 px-2', align: 'right', search: 1, td: 'border-r text-right font-mono px-2 text-emerald-600', v: r => fmtInt(r.PERIOD_AMT), q: 'num' },
@@ -1582,6 +1587,7 @@ window.showConnectionLost = function() {
                 { id: 'USE_DATE',         label: 'Ngày pbổ',      sort: 'USE_DATE',        th: 'border-r w-24',          search: 1, td: 'border-r text-center' },
                 { id: 'DESCRIPTION',      label: 'Diễn giải',     sort: 'DESCRIPTION',     th: 'border-r w-56 px-3', align: 'left', search: 1, td: 'border-r truncate max-w-[260px] px-3', v: r => <span title={r.DESCRIPTION || ''}>{r.DESCRIPTION}</span> },
                 { id: 'ITEM_ID',          label: 'Hàng hóa',      sort: 'ITEM_ID',         th: 'border-r w-24',          search: 1, td: 'border-r text-center font-black text-indigo-600', q: 'pre' },
+                { id: 'VAT_TAX_RATE',     label: 'Thuế suất',     sort: 'VAT_TAX_RATE',    th: 'border-r w-16',          search: 1, td: 'border-r text-center', v: fmtRate },
                 { id: 'ALLOCATION_RATE',  label: 'Tỷ lệ pb',      sort: 'ALLOCATION_RATE', th: 'border-r w-16 px-2', align: 'right', search: 1, td: IM_NUM, v: r => fmtInt(r.ALLOCATION_RATE), q: 'num' },
                 { id: 'INCOME_AMOUNT',    label: 'Doanh thu',     sort: 'INCOME_AMOUNT',   th: 'border-r w-28 px-2', align: 'right', search: 1, td: IM_NUM + ' font-black', v: r => fmtInt(r.INCOME_AMOUNT), q: 'num' },
                 { id: 'ACCOUNT_ID_DES',   label: 'Tk đích',       sort: 'ACCOUNT_ID_DES',  th: 'border-r w-20',          search: 1, td: 'border-r text-center font-black text-indigo-600', q: 'pre' },
@@ -6552,7 +6558,7 @@ window.showConnectionLost = function() {
                 ['ORGANIZATION_ID','Đơn vị'],['ORGANIZATION_NAME','Tên đơn vị'],
                 ['TRAN_ID','Mã CT'],['TRAN_NAME','Tên chứng từ'],['TRAN_NO','Số CT'],['TRAN_DATE','Ngày CT'],
                 ['USE_DATE','Ngày phân bổ'],['RECEIVE_DATE','Ngày nhận'],
-                ['DESCRIPTION','Diễn giải'],['ITEM_ID','Hàng hóa'],['ITEM_NAME','Tên hàng hóa'],['QUANTITY','Số lượng'],
+                ['DESCRIPTION','Diễn giải'],['ITEM_ID','Hàng hóa'],['ITEM_NAME','Tên hàng hóa'],['VAT_TAX_RATE','Thuế suất'],['QUANTITY','Số lượng'],
                 ['ALLOCATION_RATE','Tỷ lệ pb'],['ALLOCATION_METHOD_NAME','Tiêu thức pb'],
                 ['INCOME_AMOUNT','Doanh thu'],['PERIOD_AMT','Dthu kỳ này'],['CUM_AMT','Lũy kế'],['CON_LAI','Còn lại'],
                 ['ACCOUNT_ID_DES','Tk đích'],['ACCOUNT_ID','TK'],['ACCOUNT_ID_CONTRA','Tk đối ứng'],

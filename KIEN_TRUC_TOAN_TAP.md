@@ -289,6 +289,15 @@ Một công cụ/script "thêm NOLOCK" chạy lên `server.py` đã **làm hỏn
 
 ## 13. Changelog & bàn giao chi tiết
 
+### 2026-10-03 — v1.11.3: Thêm cột "Thuế suất" vào 2 bảng Doanh thu chờ phân bổ *(chỉ LedgerStudio)*
+
+Thêm cột Thuế suất vào 2 tab: Danh sách doanh thu chờ phân bổ (`income_alloc`) và Doanh thu chờ phân bổ theo tháng (`income_alloc_month`).
+- **Nguồn dữ liệu:** `INCOME_ALLOCATION.ITEM_ID` → `DM_ITEM.ITEM_ID` → `DM_ITEM.VAT_TAX_ID` → `DM_VAT_TAX.VAT_TAX_RATE`. Subquery vô hướng không làm đổi số dòng, câu đếm và cộng tổng giữ nguyên.
+- **Đặc tả hiển thị (Trum duyệt):** Tỷ lệ % (10%, 8%, 5%, 0%); riêng mã thuế có tỷ lệ 0% nhưng tên "Không chịu thuế" (mã 99, 999) hiển thị `KCT`. Trống hàng/mã thuế hiển thị ô trống.
+- **Dò schema:** Dò `INFORMATION_SCHEMA` 1 lần mỗi CSDL (`_vat_rate_ok`), thiếu cột trả NULL an toàn.
+- **Xuất Excel:** Cột "Thuế suất" đứng ngay sau "Tên hàng hóa" (tab danh sách) và ngay sau "Hàng hóa" (tab theo tháng). Công thức Lũy kế trong kỳ và Còn lại của tab theo tháng tự dịch đúng cột.
+- **Build EXE:** Đã pre-compile JSX sang `build_web/app.js` và đóng gói thành công `dist/iPOS_Ledger_Studio.exe` v1.11.3 (15.94 MB).
+
 ### 2026-09-27 — v1.9.5: đăng nhập báo bật VPN + chờ tối đa 8 s + bỏ tên Thông tư 200 *(chỉ LedgerStudio)*
 
 Đăng nhập lỗi 08001/HYT00 (máy không tới được máy chủ — thường do chưa bật VPN công ty) → câu tiếng Việt yêu cầu bật VPN (`_login_error_message`); lỗi khác giữ nguyên văn. `_make_conn_capped` chặn chờ 8 s (driver "SQL Server" bỏ qua `timeout=5`: IP không tới được 47,7 s → 8 s). Màn đăng nhập ghi "theo thông tư mới nhất" thay "Thông tư 200". **Đã phát hành** GitHub Release `v1.9.5` (commit `8235ccd`); cập nhật thật từ EXE release v1.9.4 đạt. Chi tiết: `NHAT_KY_CONG_VIEC.md` mục 23; CLAUDE.md mục 3.1.
