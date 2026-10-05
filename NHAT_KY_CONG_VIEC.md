@@ -1594,7 +1594,7 @@ trên bảng + lọc SQL. Kiểu cột ở TRUNGDEMO, SALE_DEMO, BIMGROUP: nvarc
   EXE + cổng tắt 2,7 s. Lần này không dính lỗi tải 0 byte của Bẫy 13.
 - **Chưa:** chạy trên DB thật của khách.
 
-## 41. v1.12.1 (build 05/10, CHƯA phát hành): hộp Xuất danh sách giống hộp Xuất báo cáo *(05/10/2026)*
+## 41. v1.12.1 (phát hành 05/10, commit `e5a58d6`): hộp Xuất danh sách giống hộp Xuất báo cáo *(05/10/2026)*
 
 **Yêu cầu Trum (05/10):** "sửa cho cơ chế xuất excel bên dữ liệu danh sách cho giống với như xuất bên báo cáo đi" (kèm ảnh hộp Xuất báo cáo
 BC005). Tui hỏi 7 điểm, Trum trả lời "ok làm theo mặc định":
@@ -1636,5 +1636,15 @@ chủ `/api/<kind>/stream_csv` (hộp tiến trình nhỏ + hộp "Đã xuất x
 | M3 EXE | `smoke_exe.py`: EXE thật lên sau 2,5 s, `/api/version` 1.12.1, `app.js` trong EXE có hộp mới (3 chỗ "Xuất danh sách", có `startRef.current()`, không còn chữ menu cũ), `/api/export/status` job lạ 404, `check_update` 1.12.1 vs release v1.12.0 → không báo, đóng cửa sổ → EXE + cổng 5050 tắt 4,2 s | qua |
 
 - Chữ giao diện mới soát bằng `kiem_van.py --loai giao-dien`: 0 ĐỎ, 0 VÀNG sau khi rút câu nhắc dữ liệu lớn của Tách sheet (26 → 23 chữ).
-- Build lúc 16:53 05/10 ra v1.12.1, 16.723.550 byte (v1.12.0: 16.722.610), SHA-256 `55987f91…db3b`. Chưa commit, chưa push, chưa phát hành.
+- Build lúc 16:53 05/10 ra v1.12.1, 16.723.550 byte (v1.12.0: 16.722.610), SHA-256 `55987f91…db3b`.
+- `pre-push-qa` VÀNG (Trum: "push phát hành"): diff 7 file; mọi nơi gọi tới hộp Xuất, `_rx_reserve_path`, poll trạng thái đều có trong bộ kiểm;
+  quét bí mật sạch; dịch lại giao diện từ nguồn ra app.js / app.css / index.html trùng từng byte bản trong EXE. Rủi ro: chưa chạy DB thật;
+  bộ kiểm giao diện dùng ODBC 17 (diff không đụng SQL); hằng `PER_SHEET_WARN` thừa sau khi gỡ code cũ.
+- Phát hành: commit `e5a58d6` (push `7c5b3db..e5a58d6`), zip tạo lại từ EXE mới (zip trong `dist` là bản 03/10), release `v1.12.1`
+  "Hộp xuất danh sách giống báo cáo" lúc 17:28:51. API `releases/latest` không đăng nhập: tag v1.12.1, không nháp, target `e5a58d6`, digest
+  EXE = `55987f91…db3b`. `/api/check_update` giả 1.12.0 → có bản mới + 6 ý, 1.11.5 → 2 bản, 1.12.1 → không báo. Ghi chú release soát văn
+  6 ĐỎ + 3 VÀNG, giữ vì đúng mẫu `_release_summary` đọc (nhãn in đậm đầu dòng, dấu gạch ở dòng `##`).
+- Test cập nhật thật (EXE release v1.12.0 `f9c3bdc8…`, thư mục tạm, 17:30:26 ≈ 95 s sau khi đăng release; curl tải asset ngay trước đó
+  3,7 s). Updater tải 16,7 MB ~18 s, v1.12.1 lên sau 20,8 s, còn 1 file, SHA = release. `/api/metadata` 401 (đăng nhập lại).
+  Đóng cửa sổ → EXE + cổng tắt 2,7 s.
 - Chưa làm: chạy trên DB thật của khách; sửa CSV danh sách mất số 0 đầu ở cột mã (điểm 7); chuyển Tách sheet lên máy chủ (CLAUDE.md mục 6 ý 2).
