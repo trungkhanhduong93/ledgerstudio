@@ -462,6 +462,7 @@ window.showConnectionLost = function() {
         .ds-scrim { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(14,26,43,.42); animation: dsFade .12s ease-out; }
         .ds-dialog { width: 100%; max-width: 440px; max-height: calc(100vh - 32px); display: flex; flex-direction: column; overflow: hidden; background: #fff; border: 1px solid var(--ds-line); border-radius: 14px; box-shadow: 0 24px 64px rgba(14,26,43,.22); color: var(--ds-ink); font-size: 13px; text-align: left; animation: dsDlg .16s cubic-bezier(.2, 0, 0, 1); }
         .ds-dialog.is-wide { max-width: 580px; }
+        .ds-dialog.is-wide3 { max-width: 620px; }   /* hộp Xuất danh sách 3 thẻ định dạng: 580px thì tên thẻ xuống 2 dòng */
         @keyframes dsFade { from { opacity: 0; } }
         @keyframes dsDlg { from { opacity: 0; transform: translateY(6px) scale(.985); } }
         .ds-dlg-head { display: flex; align-items: flex-start; gap: 12px; flex: none; padding: 20px 24px 0; }
@@ -533,32 +534,15 @@ window.showConnectionLost = function() {
         .ds-stat .ds-k { font-size: 11.5px; color: var(--ds-ink-3); }
         .ds-stat .ds-v { margin-top: 1px; overflow: hidden; font-size: 13px; font-weight: 500; color: var(--ds-ink); font-variant-numeric: tabular-nums; white-space: nowrap; text-overflow: ellipsis; }
         .ds-kbd { display: inline-block; padding: 0 5px; border: 1px solid var(--ds-line); border-radius: 4px; background: #fff; font-size: 11px; line-height: 17px; color: var(--ds-ink-3); }
-        .ds-menuitem { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 12px; text-align: left; transition: background-color .12s; }
-        .ds-menuitem:hover { background: var(--ds-tint); }
-        .ds-menuitem b { display: block; font-size: 12.5px; font-weight: 500; color: var(--ds-ink); }
-        .ds-menuitem small { display: block; margin-top: 1px; font-size: 11.5px; color: var(--ds-ink-3); }
-        .ds-fmt { flex: none; display: grid; place-items: center; width: 38px; height: 24px; border-radius: 6px; background: var(--ds-tint); font-size: 10.5px; font-weight: 600; letter-spacing: .02em; color: var(--ds-ink-2); }
-        .ds-fmt.is-ok { background: var(--ds-ok-soft); color: var(--ds-ok-ink); }
-        /* Menu Xuất Excel tab dữ liệu — chọn bộ cột xuất (v1.10.0) */
-        .ds-expcols { padding: 0 12px 10px; border-bottom: 1px solid var(--ds-line-soft); }
-        .ds-expcols .ds-seg { display: flex; width: 100%; }
-        .ds-expcols .ds-seg button { flex: 1; }
-        .ds-expcols small { display: block; margin-top: 6px; font-size: 11.5px; color: var(--ds-ink-3); }
-        /* Thư mục lưu file theo màn hình (v1.10.9): dòng "Lưu vào … Đổi" (menu Xuất Excel, hộp Xuất báo cáo) + hộp "Thư mục lưu file" */
+        /* Thư mục lưu file theo màn hình (v1.10.9): dòng "Lưu vào … Đổi" (hộp Xuất báo cáo / danh sách) + hộp "Thư mục lưu file" */
         .ds-savedir { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; color: var(--ds-ink-3); }
         .ds-savedir > svg { flex: none; }
         .ds-savedir .ds-sd-path { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--ds-ink-2); }
         .ds-savedir.is-bad .ds-sd-path { color: var(--ds-bad-ink); }
-        .ds-savedir .ds-tag, .ds-expdir .ds-tag { flex: none; height: 18px; padding: 0 6px; font-size: 11px; }
+        .ds-savedir .ds-tag { flex: none; height: 18px; padding: 0 6px; font-size: 11px; }
         .ds-sd-btn { flex: none; margin-left: auto; height: 24px; padding: 0 8px; border-radius: 6px; font-size: 12px; font-weight: 500; color: var(--ds-brand); white-space: nowrap; transition: background-color .12s; }
         .ds-sd-btn:hover:not(:disabled) { background: var(--ds-brand-soft); }
         .ds-sd-btn:disabled { opacity: .45; cursor: not-allowed; }
-        .ds-expdir { padding: 7px 12px 9px; border-top: 1px solid var(--ds-line-soft); background: var(--ds-wash); }
-        .ds-expdir .ds-poplabel { margin: 0; }
-        .ds-expdir .ds-sd-line { display: flex; align-items: center; gap: 6px; margin-top: 2px; font: 11.5px/1.5 ui-monospace, Consolas, monospace; color: var(--ds-ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .ds-expdir .ds-sd-line svg { flex: none; color: var(--ds-ink-3); }
-        .ds-expdir.is-bad .ds-sd-line { color: var(--ds-bad-ink); }
-        .ds-expdir .ds-sd-warn { margin-top: 3px; font-size: 11.5px; line-height: 1.4; color: var(--ds-bad-ink); }
         .ds-dirinput { display: flex; gap: 8px; }
         .ds-dirinput .ds-filename { flex: 1; min-width: 0; }
         .ds-dirinput .ds-filename input { font: 12px/1 ui-monospace, Consolas, monospace; }
@@ -3197,6 +3181,17 @@ window.showConnectionLost = function() {
             return <ExportDirDialog key={req.id} req={req} onClose={(res) => { cur.current = null; req.resolve(res || null); setReq(null); }} />;
         };
 
+        // Hộp Xuất file — DÙNG CHUNG cho báo cáo (ReportTab, cfg dựng từ bản chụp bộ lọc) và 8 tab dữ liệu (App → listExportCfg, v1.12.1).
+        // cfg chung: title, fileBase(mẫu, định dạng), estimate(mẫu), periodText, unitText, serverQuery, staleNote, variants, defaultVariant.
+        // Báo cáo: code + buildBody → POST /api/report_export/start. Danh sách thêm (đều tuỳ chọn, báo cáo không truyền = như cũ):
+        // screen (khoá thư mục lưu, mặc định = code), kicker, noun, formats, variantLabel, onVariant, checks(định dạng, số dòng, số sheet),
+        // formatNote (undefined = lời nhắc dữ liệu lớn mặc định), counting (đang đếm dòng), blocked (lý do khoá nút Xuất),
+        // start({ variant, format, name, track, signal }) → { status: 'ok', job_id } (job server — hộp tự poll)
+        // | { status: 'done' | 'cancelled' | 'error', … } (job chạy ngay trong trình duyệt, báo tiến trình qua track) | { code: 'export_dir', … }.
+        const REPORT_EXPORT_FORMATS = [
+            { id: 'xlsx', icon: 'file-spreadsheet', title: 'Excel chuẩn form', ext: '.xlsx', desc: 'Y như trên app: tiêu đề, in đậm, màu nền, chữ ký. Số vẫn cộng trừ được.', badge: 'Khuyên dùng' },
+            { id: 'csv', icon: 'zap', title: 'CSV dữ liệu thô', ext: '.csv', desc: 'Chỉ bảng dữ liệu, không định dạng. Nhẹ và ghi nhanh nhất.' },
+        ];
         const ReportExportDialog = ({ open, onClose, cfg }) => {
             const [step, setStep] = React.useState('options');   // options | running | done | error | cancelled
             const [format, setFormat] = React.useState('xlsx');
@@ -3215,10 +3210,13 @@ window.showConnectionLost = function() {
             const samplesRef = React.useRef([]);
             const phaseRef = React.useRef('');
             const aliveRef = React.useRef(true);
+            const abortRef = React.useRef(null);     // lượt xuất đang chạy — Hủy job chạy trong trình duyệt = abort()
+            const retryDirRef = React.useRef(null);  // poll (memo 1 lần) gọi bản retryDir của lượt vẽ mới nhất
+            const startRef = React.useRef(null);     // retryDir chạy lại bằng start của lượt vẽ mới nhất (bản cũ còn giữ step 'running' → bỏ qua)
 
             React.useEffect(() => {
                 aliveRef.current = true;
-                return () => { aliveRef.current = false; clearTimeout(timerRef.current); };
+                return () => { aliveRef.current = false; clearTimeout(timerRef.current); if (abortRef.current) abortRef.current.abort(); };
             }, []);
 
             React.useEffect(() => {
@@ -3227,13 +3225,25 @@ window.showConnectionLost = function() {
                 jobIdRef.current = null;
                 const v = cfg.defaultVariant || '';
                 setStep('options'); setFormat('xlsx'); setVariant(v);
-                setFileBase(cfg.fileBase(v)); setNameEdited(false);
+                setFileBase(cfg.fileBase(v, 'xlsx')); setNameEdited(false);
                 setJob(null); setSpeed(0); setErrorMsg(''); setCancelling(false); setActionMsg(''); setDirInfo(null);
-                fetch(`/api/export/dir?screen=${cfg.code}&quick=1`).then(r => r.json()).then(j => {
+                fetch(`/api/export/dir?screen=${cfg.screen || cfg.code}&quick=1`).then(r => r.json()).then(j => {
                     if (aliveRef.current && j.status === 'ok') { setExportDir(j.dir); setDirInfo(j); }
                 }).catch(() => {});
             // eslint-disable-next-line react-hooks/exhaustive-deps
             }, [open]);
+
+            // 1 bản tin tiến trình (job server qua poll, hoặc job chạy ngay trong trình duyệt qua track) → tốc độ + state
+            const track = React.useCallback((s) => {
+                const now = Date.now();
+                if (s.phase !== phaseRef.current) { phaseRef.current = s.phase; samplesRef.current = []; setSpeed(0); }   // tải → ghi: bộ đếm về 0, đo tốc độ lại
+                const arr = samplesRef.current;
+                arr.push({ t: now, n: s.current || 0 });
+                while (arr.length > 2 && now - arr[0].t > 5000) arr.shift();
+                const dt = (arr[arr.length - 1].t - arr[0].t) / 1000;
+                if (dt >= 0.8) setSpeed(Math.max(0, (arr[arr.length - 1].n - arr[0].n) / dt));
+                setJob(s);
+            }, []);
 
             const poll = React.useCallback(async () => {
                 const id = jobIdRef.current;
@@ -3251,62 +3261,80 @@ window.showConnectionLost = function() {
                 }
                 if (id !== jobIdRef.current || !aliveRef.current) return;   // dialog đã đóng hoặc đã xuất lượt khác
                 if (s) {
-                    const now = Date.now();
-                    if (s.phase !== phaseRef.current) { phaseRef.current = s.phase; samplesRef.current = []; setSpeed(0); }   // tải → ghi: bộ đếm về 0, đo tốc độ lại
-                    const arr = samplesRef.current;
-                    arr.push({ t: now, n: s.current || 0 });
-                    while (arr.length > 2 && now - arr[0].t > 5000) arr.shift();
-                    const dt = (arr[arr.length - 1].t - arr[0].t) / 1000;
-                    if (dt >= 0.8) setSpeed(Math.max(0, (arr[arr.length - 1].n - arr[0].n) / dt));
-                    setJob(s);
+                    track(s);
                     if (s.status === 'done') { setStep('done'); return; }
+                    // job danh sách: thư mục lưu hỏng lúc tạo job → job lỗi ngay kèm code (báo cáo nhận 409 ngay ở start)
+                    if (s.status === 'error' && s.code === 'export_dir') { jobIdRef.current = null; retryDirRef.current(s); return; }
                     if (s.status === 'error') { setErrorMsg(s.error || 'Lỗi không xác định khi ghi file.'); setStep('error'); return; }
                     if (s.status === 'cancelled') { setStep('cancelled'); return; }
                 }
                 timerRef.current = setTimeout(poll, 400);
             }, []);
 
+            const screenKey = () => cfg.screen || cfg.code;
+            const fmtList = () => cfg.formats || REPORT_EXPORT_FORMATS;
+            const extOf = (f) => { const l = fmtList(); return (l.find(x => x.id === f) || l[0]).ext.slice(1); };   // 'Tách sheet theo đơn vị' → xlsx
             const applyDir = (d) => { if (d && d.dir) { setExportDir(d.dir); setDirInfo(d); } };
-            const changeDir = async () => applyDir(await askExportDir(cfg.code));
+            const changeDir = async () => applyDir(await askExportDir(screenKey()));
             const checkingRef = React.useRef(false);
+            // Thư mục lưu vừa hỏng sau lần kiểm trước khi xuất → hỏi chọn lại rồi xuất tiếp
+            const retryDir = async (j) => {
+                setStep('options');
+                const d2 = await askExportDir(screenKey(), { dir: j.dir, reason: j.reason, canCreate: j.can_create });
+                if (d2 && aliveRef.current) { applyDir(d2); startRef.current(); }
+            };
+            retryDirRef.current = retryDir;
+            // Báo cáo (mặc định): server dựng plan + chạy job nền
+            const startReport = async ({ variant, format, name }) => {
+                const body = { ...cfg.buildBody(variant, format), filename: name };
+                const r = await fetch('/api/report_export/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                const j = await r.json().catch(() => ({}));
+                if (j.status !== 'ok' && !j.message) j.message = `Máy chủ báo lỗi (HTTP ${r.status}).`;
+                return j;
+            };
             const start = async () => {
-                if (step === 'running' || checkingRef.current) return;
+                if (step === 'running' || checkingRef.current || cfg.blocked) return;
                 const name = fileBase.trim();
                 if (!name) { setActionMsg('Hãy nhập tên file trước khi xuất.'); return; }
                 // Thư mục lưu đã khai mà hỏng → cảnh báo + bắt chọn lại TRƯỚC khi xuất (v1.10.9); Hủy chọn = thôi xuất
                 checkingRef.current = true;
-                const d = await ensureExportDir(cfg.code);
+                const d = await ensureExportDir(screenKey());
                 checkingRef.current = false;
                 if (!aliveRef.current || !d) return;
                 applyDir(d);
                 setActionMsg(''); setErrorMsg(''); setCancelling(false); setSpeed(0); samplesRef.current = []; phaseRef.current = '';
-                setJob({ status: 'running', phase: 'prepare', current: 0, total: cfg.estimate(variant) || 0, filename: `${name}.${format}` });
+                const ctl = new AbortController();
+                abortRef.current = ctl;
+                setJob({ status: 'running', phase: 'prepare', current: 0, total: cfg.estimate(variant) || 0, filename: `${name}.${extOf(format)}` });
                 setStep('running');
                 try {
-                    const body = { ...cfg.buildBody(variant, format), filename: name };
-                    const r = await fetch('/api/report_export/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-                    const j = await r.json().catch(() => ({}));
+                    const j = await (cfg.start || startReport)({ variant, format, name, signal: ctl.signal,
+                        track: (s) => { if (aliveRef.current && abortRef.current === ctl) track(s); } });
                     if (!aliveRef.current) return;
-                    if (j.code === 'export_dir') {   // thư mục vừa hỏng sau lần kiểm ở trên → hỏi lại rồi xuất tiếp
-                        setStep('options');
-                        const d2 = await askExportDir(cfg.code, { dir: j.dir, reason: j.reason, canCreate: j.can_create });
-                        if (d2 && aliveRef.current) { applyDir(d2); start(); }
-                        return;
-                    }
-                    if (!r.ok || j.status !== 'ok') { setErrorMsg(j.message || `Máy chủ báo lỗi (HTTP ${r.status}).`); setStep('error'); return; }
+                    if (j.code === 'export_dir') { retryDir(j); return; }
+                    if (j.status === 'done') { setJob(prev => ({ ...prev, ...j })); setStep('done'); return; }   // job chạy ngay trong trình duyệt
+                    if (j.status === 'cancelled') { setStep('cancelled'); return; }
+                    if (j.status !== 'ok' || !j.job_id) { setErrorMsg(j.message || 'Máy chủ không bắt đầu xuất được.'); setStep('error'); return; }
                     jobIdRef.current = j.job_id;
-                    setJob(prev => ({ ...prev, filename: j.filename }));
+                    if (j.filename) setJob(prev => ({ ...prev, filename: j.filename }));
                     if (j.dir) setExportDir(j.dir);
                     poll();
                 } catch (e) {
+                    if (!aliveRef.current) return;
+                    if (e && e.name === 'AbortError') { setStep('cancelled'); return; }   // Hủy job chạy trong trình duyệt
                     if (window.isNetworkError && window.isNetworkError(e)) { window.showConnectionLost(); return; }
                     setErrorMsg(viErr(e)); setStep('error');
                 }
             };
+            startRef.current = start;
 
             const cancel = async () => {
                 const id = jobIdRef.current;
-                if (!id || cancelling) return;
+                if (cancelling) return;
+                if (!id) {   // job chạy ngay trong trình duyệt (Tách sheet theo đơn vị): ngắt lượt tải / dựng file, job tự dừng ở bước kế
+                    if (job && job.local && abortRef.current) { setCancelling(true); abortRef.current.abort(); }
+                    return;
+                }
                 setCancelling(true);
                 try { await fetch('/api/export/cancel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ job_id: id }) }); } catch (e) { /* poll sẽ báo lỗi mạng */ }
             };
@@ -3340,10 +3368,13 @@ window.showConnectionLost = function() {
 
             if (!open) return null;
 
-            const isXlsx = format === 'xlsx';
+            const ext = extOf(format);
+            const isXlsx = ext === 'xlsx';
             const est = cfg.estimate(variant);
             const sheetsEst = est ? Math.max(1, Math.ceil(est / 1000000)) : 1;
             const heavy = isXlsx && est > 200000;
+            const fmtNote = cfg.formatNote ? cfg.formatNote(format, est) : undefined;   // undefined = lời nhắc dữ liệu lớn mặc định
+            const fmts = fmtList();
             const phase = job ? job.phase : 'prepare';
             const current = job ? (job.current || 0) : 0;
             const total = job ? (job.total || 0) : 0;
@@ -3370,18 +3401,19 @@ window.showConnectionLost = function() {
 
             return (
                 <div className="ds-scrim z-[99999]" onMouseDown={e => { if (e.target === e.currentTarget) close(); }}>
-                    <div className="ds-dialog is-wide" role="dialog" aria-modal="true">
+                    <div className={`ds-dialog is-wide${fmts.length > 2 ? ' is-wide3' : ''}`} role="dialog" aria-modal="true">
                         {/* ── Đầu hộp thoại ── */}
                         <div className="ds-dlg-head pb-4 border-b border-line-soft">
                             <div className="ds-dlg-ic is-ok"><Icon name="file-spreadsheet" size={18} stroke={2} /></div>
                             <div className="flex-1 min-w-0">
-                                <div className="text-[12px] text-ink-3">Xuất báo cáo</div>
+                                <div className="text-[12px] text-ink-3">{cfg.kicker || 'Xuất báo cáo'}</div>
                                 <h3>{cfg.title}</h3>
                                 <div className="flex flex-wrap gap-1.5 mt-2">
-                                    <span className="ds-tag is-brand">{cfg.code}</span>
-                                    <span className="ds-tag"><Icon name="calendar" size={12} stroke={2} /> {cfg.periodText}</span>
-                                    <span className="ds-tag">{cfg.unitText}</span>
-                                    {est ? <span className="ds-tag"><Icon name="rows" size={12} stroke={2} /> {est >= 1000 ? '≈ ' : ''}{fmtCount(est)} dòng</span> : null}
+                                    {cfg.code && <span className="ds-tag is-brand">{cfg.code}</span>}
+                                    {cfg.periodText && <span className="ds-tag"><Icon name="calendar" size={12} stroke={2} /> {cfg.periodText}</span>}
+                                    {cfg.unitText && <span className="ds-tag">{cfg.unitText}</span>}
+                                    {cfg.counting ? <span className="ds-tag"><Icon name="loader" size={12} stroke={2} className="animate-spin" /> Đang đếm dòng…</span>
+                                        : est ? <span className="ds-tag"><Icon name="rows" size={12} stroke={2} /> {est >= 1000 ? '≈ ' : ''}{fmtCount(est)} dòng</span> : null}
                                 </div>
                             </div>
                             {step !== 'running' && (
@@ -3393,14 +3425,25 @@ window.showConnectionLost = function() {
                         {step === 'options' && (
                             <>
                                 <div className="ds-dlg-body space-y-4 max-h-[64vh] custom-scrollbar">
+                                    {/* lời nhắc đặt ĐẦU phần cuộn — để cuối thì màn 768px phải cuộn mới thấy */}
+                                    {cfg.blocked && (
+                                        <div className="ds-note is-warn">
+                                            <Icon name="alert-circle" size={14} stroke={2} />
+                                            <span>{cfg.blocked}</span>
+                                        </div>
+                                    )}
+                                    {cfg.staleNote && (
+                                        <div className="ds-note is-info">
+                                            <Icon name="alert-circle" size={14} stroke={2} />
+                                            <span>{cfg.staleNote}</span>
+                                        </div>
+                                    )}
                                     <div>
                                         <div className="ds-field-label">Định dạng file</div>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            {[
-                                                { id: 'xlsx', icon: 'file-spreadsheet', title: 'Excel chuẩn form', ext: '.xlsx', desc: 'Y như trên app: tiêu đề, in đậm, màu nền, chữ ký. Số vẫn cộng trừ được.', badge: 'Khuyên dùng' },
-                                                { id: 'csv', icon: 'zap', title: 'CSV dữ liệu thô', ext: '.csv', desc: 'Chỉ bảng dữ liệu, không định dạng. Nhẹ và ghi nhanh nhất.' },
-                                            ].map(o => (
-                                                <button key={o.id} type="button" onClick={() => setFormat(o.id)} className={`ds-choice ${format === o.id ? 'is-on' : ''}`}>
+                                        <div className={`grid gap-2 ${fmts.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                                            {fmts.map(o => (
+                                                <button key={o.id} type="button" className={`ds-choice ${format === o.id ? 'is-on' : ''}`}
+                                                    onClick={() => { setFormat(o.id); if (!nameEdited) setFileBase(cfg.fileBase(variant, o.id)); }}>
                                                     <div className="flex items-center gap-2">
                                                         <Icon name={o.icon} size={15} stroke={2} className={o.id === 'xlsx' ? 'text-ok-ink' : 'text-ink-3'} />
                                                         <span className="ds-ct">{o.title}</span>
@@ -3416,11 +3459,11 @@ window.showConnectionLost = function() {
 
                                     {cfg.variants && (
                                         <div>
-                                            <div className="ds-field-label">Mẫu dữ liệu</div>
+                                            <div className="ds-field-label">{cfg.variantLabel || 'Mẫu dữ liệu'}</div>
                                             <div className={`grid gap-2 ${cfg.variants.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
                                                 {cfg.variants.map(v => (
                                                     <button key={v.id} type="button"
-                                                        onClick={() => { setVariant(v.id); if (!nameEdited) setFileBase(cfg.fileBase(v.id)); }}
+                                                        onClick={() => { setVariant(v.id); if (cfg.onVariant) cfg.onVariant(v.id); if (!nameEdited) setFileBase(cfg.fileBase(v.id, format)); }}
                                                         className={`ds-choice ${variant === v.id ? 'is-on' : ''}`}>
                                                         <div className="flex items-center gap-2"><span className="ds-radio"></span><span className="ds-ct">{v.label}</span></div>
                                                         <div className="ds-cd">{v.desc}</div>
@@ -3435,21 +3478,21 @@ window.showConnectionLost = function() {
                                         <div className="ds-field-label">Tên file</div>
                                         <div className="ds-filename">
                                             <input value={fileBase} onChange={e => { setFileBase(e.target.value); setNameEdited(true); setActionMsg(''); }} spellCheck={false} />
-                                            <span>.{format}</span>
+                                            <span>.{ext}</span>
                                         </div>
                                         <div className={`ds-savedir mt-1.5 ${dirInfo && !dirInfo.ok ? 'is-bad' : ''}`}>
                                             <Icon name="folder-open" size={13} stroke={2} />
                                             <span className="shrink-0">Lưu vào</span>
                                             <span className="ds-sd-path" title={exportDir}>{exportDir ? shortPath(exportDir, 58) : 'Downloads\\iPOS_Ledger_Studio'}</span>
                                             {dirInfo && !dirInfo.custom && <span className="ds-tag">mặc định</span>}
-                                            <button type="button" className="ds-sd-btn" onClick={changeDir} title="Chọn thư mục lưu riêng cho báo cáo này — nhớ trên máy này">Đổi thư mục</button>
+                                            <button type="button" className="ds-sd-btn" onClick={changeDir} title={`Chọn thư mục lưu riêng cho ${cfg.noun || 'báo cáo'} này — nhớ trên máy này`}>Đổi thư mục</button>
                                         </div>
                                         {dirInfo && !dirInfo.ok && <div className="ds-err mt-0.5">{dirInfo.reason} Bấm "Đổi thư mục" để chọn lại.</div>}
                                         <div className="text-[12px] text-ink-4 mt-0.5">Trùng tên file cũ sẽ tự thêm (2), (3)… — không ghi đè file đang mở.</div>
                                     </div>
 
                                     <div className="ds-checks">
-                                        {(isXlsx ? [
+                                        {(cfg.checks ? cfg.checks(format, est, sheetsEst) : isXlsx ? [
                                             'Giữ nguyên form như trên app: khối tiêu đề, in đậm/nghiêng, màu nền, viền, chữ ký',
                                             'Số lưu giá trị thật 1000000, hiển thị 1,000,000 · tỷ lệ 15.52% lưu 0.1552',
                                             sheetsEst > 1
@@ -3464,16 +3507,15 @@ window.showConnectionLost = function() {
                                         ))}
                                     </div>
 
-                                    {heavy && (
+                                    {fmtNote !== undefined ? fmtNote && (
+                                        <div className="ds-note is-warn">
+                                            <Icon name="clock" size={14} stroke={2} />
+                                            <span>{fmtNote}</span>
+                                        </div>
+                                    ) : heavy && (
                                         <div className="ds-note is-warn">
                                             <Icon name="clock" size={14} stroke={2} />
                                             <span>Dữ liệu lớn (≈ {fmtCount(est)} dòng): cần khoảng {Math.max(1, Math.round(est / 7000 / 60))} phút để tải về và ghi file Excel. Mạng chập chờn thì ứng dụng tự kết nối lại, không phải xuất lại từ đầu. Cần nhanh thì chọn <b>CSV</b>.</span>
-                                        </div>
-                                    )}
-                                    {cfg.staleNote && (
-                                        <div className="ds-note is-info">
-                                            <Icon name="alert-circle" size={14} stroke={2} />
-                                            <span>{cfg.staleNote}</span>
                                         </div>
                                     )}
                                     {actionMsg && <div className="ds-err">{actionMsg}</div>}
@@ -3483,7 +3525,7 @@ window.showConnectionLost = function() {
                                         <span className="ds-kbd">Enter</span> xuất <span className="ds-kbd ml-2">Esc</span> đóng
                                     </div>
                                     <button onClick={close} className="ds-btn">Hủy</button>
-                                    <button onClick={start} className="ds-btn ds-btn-pri"><Icon name="download" size={14} stroke={2} /> {isXlsx ? 'Xuất file Excel' : 'Xuất file CSV'}</button>
+                                    <button onClick={start} disabled={!!cfg.blocked} className="ds-btn ds-btn-pri"><Icon name="download" size={14} stroke={2} /> {isXlsx ? 'Xuất file Excel' : 'Xuất file CSV'}</button>
                                 </div>
                             </>
                         )}
@@ -3543,7 +3585,7 @@ window.showConnectionLost = function() {
                                         : 'Đang ghi file trên máy này, không cần giữ nguyên cửa sổ. Đừng tắt ứng dụng cho tới khi xong.'}</div>
                                 </div>
                                 <div className="ds-dlg-foot">
-                                    <button onClick={cancel} disabled={cancelling || !jobIdRef.current} className="ds-btn ds-btn-danger">
+                                    <button onClick={cancel} disabled={cancelling || !(jobIdRef.current || (job && job.local))} className="ds-btn ds-btn-danger">
                                         {cancelling ? <><Icon name="loader" size={14} className="animate-spin" /> Đang hủy…</> : <><Icon name="x" size={14} stroke={2} /> Hủy xuất</>}
                                     </button>
                                 </div>
@@ -5153,73 +5195,20 @@ window.showConnectionLost = function() {
             );
         };
 
-        // Nút + menu "Xuất Excel" của 8 tab dữ liệu. PHẢI khai báo ngoài App (v1.10.5): trước đây nằm trong App → mỗi lần App vẽ
-        // lại là 1 component MỚI → React gỡ rồi lắp lại cả nút lẫn menu, hiệu ứng hiện menu (ds-pop-in) chạy lại → bấm
-        // "Đầy đủ" / "Như đang xem" thấy menu chớp nháy (Trum báo 28/09). App truyền state qua props (exportBtn).
-        const ExportButton = ({ kind, open, setOpen, exporting, cols, onCols, gridLays, viewCounts, onExport }) => {
-            const ref = useRef(null);
-            const isOpen = open === kind;
-            const [dir, setDir] = useState(null);   // thư mục lưu của tab (v1.10.9) — hỏi lại mỗi lần mở menu (có thể vừa đổi ở tab khác / "mọi màn hình")
-            useEffect(() => {
-                const onDown = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(null); };
-                if (isOpen) document.addEventListener('mousedown', onDown);
-                return () => document.removeEventListener('mousedown', onDown);
-            }, [isOpen]);
-            useEffect(() => {
-                if (!isOpen) return;
-                let alive = true;
-                fetch(`/api/export/dir?screen=${kind}&quick=1`).then(r => r.json()).then(j => { if (alive && j.status === 'ok') setDir(j); }).catch(() => {});
-                return () => { alive = false; };
-            }, [isOpen, kind]);
-            const changeDir = () => { setOpen(null); askExportDir(kind); };
-            return (
-                <div className="relative shrink-0" ref={ref}>
-                    <button
-                        type="button"
-                        disabled={exporting}
-                        onClick={() => setOpen(isOpen ? null : kind)}
-                        className="ds-btn"
-                    >
-                        {exporting ? <Icon name="loader" className="animate-spin" size={14}/> : <Icon name="file-spreadsheet" size={14} stroke={2} className="ds-ic-ok"/>}
-                        <span>{exporting ? 'Đang xuất...' : 'Xuất Excel'}</span>
-                        <Icon name="chevron-down" size={12} stroke={2} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-                    </button>
-                    {isOpen && (
-                        <div className="ds-pop ds-pop-in absolute top-full right-0 mt-1.5 w-72 z-[600] overflow-hidden">
-                            <div className="px-3 pt-2.5 pb-1.5 ds-poplabel">Cột xuất</div>
-                            <div className="ds-expcols">
-                                <div className="ds-seg">
-                                    <button type="button" className={cols === 'all' ? 'is-on' : ''} onClick={() => onCols('all')}>Đầy đủ</button>
-                                    <button type="button" className={cols === 'view' ? 'is-on' : ''} onClick={() => onCols('view')}>Như đang xem</button>
-                                </div>
-                                <small>{cols === 'view' ? `${(viewCounts && viewCounts[kind]) || gridLays[kind].cols.length} cột đang hiện, đúng thứ tự trên màn hình` : 'Bộ cột xuất chuẩn của danh sách'}</small>
-                            </div>
-                            <div className="px-3 pt-2.5 pb-1.5 ds-poplabel">Chọn kiểu và định dạng xuất</div>
-                            <button onClick={() => onExport(kind, 'single', 'xlsx')} className="ds-menuitem">
-                                <span className="ds-fmt is-ok">XLSX</span>
-                                <span><b>Xuất Excel (.xlsx)</b><small>Định dạng Excel chuẩn đẹp · Hiện tiến trình & Mở file</small></span>
-                            </button>
-                            <button onClick={() => onExport(kind, 'single', 'csv')} className="ds-menuitem">
-                                <span className="ds-fmt">CSV</span>
-                                <span><b>Xuất CSV (.csv)</b><small>Định dạng CSV nhẹ · Tải siêu tốc</small></span>
-                            </button>
-                            <button onClick={() => onExport(kind, 'by_org')} className="ds-menuitem mb-1">
-                                <span className="ds-fmt">ORG</span>
-                                <span><b>Tách sheet theo đơn vị (.xlsx)</b><small>Mỗi đơn vị 1 sheet trong 1 file Excel</small></span>
-                            </button>
-                            <div className={`ds-expdir ${dir && !dir.ok ? 'is-bad' : ''}`}>
-                                <div className="flex items-center gap-1.5">
-                                    <span className="ds-poplabel">Lưu vào</span>
-                                    {dir && !dir.custom && <span className="ds-tag">mặc định</span>}
-                                    <button type="button" className="ds-sd-btn" onClick={changeDir} title="Chọn thư mục lưu riêng cho danh sách này — nhớ trên máy này">Đổi thư mục</button>
-                                </div>
-                                <div className="ds-sd-line" title={dir ? dir.dir : ''}><Icon name="folder-open" size={13} stroke={2} />{dir ? shortPath(dir.dir, 36) : '…'}</div>
-                                {dir && !dir.ok && <div className="ds-sd-warn">{dir.reason} Bấm "Đổi thư mục" để chọn lại.</div>}
-                            </div>
-                        </div>
-                    )}
-                </div>
-            );
+        // Nút "Xuất Excel" của 8 tab dữ liệu → mở hộp Xuất danh sách (v1.12.1, Trum 05/10: "giống như xuất bên báo cáo") — chọn định
+        // dạng, cột, tên file, thư mục ngay trong hộp (ReportExportDialog, cfg dựng ở App: listExportCfg). Trước đây là menu thả xuống.
+        // Khai báo ngoài App: component khai trong thân App bị gỡ-lắp lại mỗi lần App vẽ (từng làm menu cũ chớp nháy — v1.10.5).
+        const ExportButton = ({ kind, onOpen }) => (
+            <button type="button" onClick={() => onOpen(kind)} className="ds-btn shrink-0" title="Xuất Excel hoặc CSV: chọn cột, tên file, thư mục lưu">
+                <Icon name="file-spreadsheet" size={14} stroke={2} className="ds-ic-ok"/>
+                <span>Xuất Excel</span>
+            </button>
+        );
+        // Tên file mặc định của từng danh sách — giữ đúng tên máy chủ vẫn đặt trước v1.12.1 (…_<từ ngày>-<đến ngày>)
+        const LIST_FILE_PREFIX = {
+            ledger: 'ChungTuTongHop', sale: 'ChungTuBanHang', voucher: 'ChungTuTien', purchase: 'PhieuNhapKho', warehouse: 'ChungTuKho',
+            income_alloc: 'DoanhThuChoPhanBo', income_alloc_month: 'DoanhThuChoPhanBoTheoThang', warehouse_balance: 'TonKhoThucTe',
+            pr_detail: 'DanhMucDoiTuong',
         };
 
         // children: nút nằm cùng dòng tiêu đề (hiện chỉ có Bán ra | Mua vào của BC013)
@@ -6270,11 +6259,8 @@ window.showConnectionLost = function() {
             };
             const debouncedPurchaseColSearch = useDebounce(purchaseColSearch, 400);
             const [purchaseLoading, setPurchaseLoading] = useState(false);
-            const [exportOpen, setExportOpen] = useState(null); // 'ledger' | 'purchase' | null
-            const [exporting, setExporting] = useState(false);
-            const [exportProgress, setExportProgress] = useState(null); // {phase, current, total}
-            // Sau khi tải xong: { file_path, filename, total } | null — hiện modal "Mở file / Mở folder"
-            const [exportDone, setExportDone] = useState(null);
+            // Hộp Xuất danh sách (v1.12.1): { kind, id, total: null = đang đếm | -1 = đếm lỗi | số dòng } | null
+            const [listExport, setListExport] = useState(null);
 
             const buildPurchaseQuery = (targetPage = 1, targetPageSize = filters.page_size, searchOverride = null, extra = {}) => {
                 const cs = searchOverride !== null ? searchOverride : purchaseColSearch;
@@ -7205,227 +7191,187 @@ window.showConnectionLost = function() {
                 setTimeout(() => document.body.removeChild(a), 200);
             };
 
-            // Kick off server-side export job → poll status → khi done set exportDone modal
-            // viewKeys: khoá cột khi xuất "Như đang xem" (server chỉ nhận khoá có trong bộ cột xuất của tab); null = xuất đủ như cũ
-            // v1.10.6: job tải hết dòng về file tạm trước (phase fetch — đứt mạng tự nối lại, sj.retry), rồi mới ghi file (write).
-            const exportCancelRef = React.useRef(false);
-            const cancelServerExport = async (jobId) => {
-                exportCancelRef.current = true;
-                setExportProgress(p => p ? { ...p, cancelling: true } : p);
-                try { await fetch('/api/export/cancel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ job_id: jobId }) }); } catch (e) { /* vòng poll tự báo */ }
+            // ===== HỘP XUẤT DANH SÁCH (v1.12.1, Trum 05/10: "giống như xuất bên báo cáo") =====
+            // Nút "Xuất Excel" của 8 tab mở hộp Xuất của báo cáo (ReportExportDialog) với listExportCfg dưới đây. Excel / CSV: job nền ở
+            // máy chủ như trước (/api/<kind>/stream_csv: tải theo khúc vào file tạm rồi mới ghi, đứt mạng tự nối lại), hộp tự poll tiến
+            // trình. "Tách sheet theo đơn vị": dựng ngay trong trình duyệt (runOrgExport) rồi gửi về máy chủ lưu. Mở hộp là đếm dòng ngay.
+            // File xuất theo bộ lọc ĐANG CHỌN trên thanh lọc (không theo bảng đang xem như báo cáo) — đổi mà chưa Truy vấn thì hộp nhắc.
+            // Trước v1.12.1: menu thả xuống + hộp tiến trình nhỏ + hộp "Đã xuất xong" riêng, không sửa được tên file.
+            const openListExport = (kind) => {
+                const id = Date.now() + Math.random();
+                setListExport({ kind, id, total: null });
+                fetch(`/api/${kind}/count?${buildExportQuery(kind).toString()}`).then(r => r.json()).catch(() => null).then(j => {
+                    const total = j && j.status === 'ok' ? Number(j.total) || 0 : -1;
+                    setListExport(p => (p && p.id === id ? { ...p, total } : p));
+                });
             };
-            const startServerExport = async (kind, total, format = 'csv', viewKeys = null) => {
-                setExporting(true);
-                exportCancelRef.current = false;
-                setExportProgress({ phase: 'job', sub: 'prepare', current: 0, total, format });
-                let dirIssue = null;   // thư mục lưu hỏng lúc tạo job (v1.10.9) → hỏi chọn lại rồi xuất lại
-                try {
-                    const q = buildExportQuery(kind);
-                    q.set('total', String(total));
-                    q.set('format', format);
-                    if (viewKeys) q.set('cols', viewKeys.join(','));
-                    const r = await fetch(`/api/${kind}/stream_csv?${q.toString()}`, { method: 'POST' });
-                    const res = await r.json();
-                    if (res.status !== 'ok' || !res.job_id) {
-                        alert('Không bắt đầu xuất được.\n\n' + (res.message || 'Máy chủ không trả lý do.'));
-                        return;
-                    }
-                    const jobId = res.job_id;
-                    // Poll status mỗi 500ms cho đến khi done/error
-                    while (true) {
-                        await new Promise(r => setTimeout(r, 500));
-                        const sr = await fetch(`/api/export/status?job_id=${jobId}`);
-                        if (sr.status === 404) { alert('Job đã bị xóa.'); break; }
-                        const sj = await sr.json();
-                        setExportProgress(p => ({ phase: 'job', sub: sj.phase || 'fetch', current: sj.current || 0, total: sj.total || total, format,
-                            jobId, retry: sj.retry || null, retries: sj.retries || 0, chunk: sj.chunk || 0, chunks: sj.chunks || 0, elapsed: sj.elapsed || 0,
-                            cancelling: !!(p && p.cancelling) }));
-                        if (sj.status === 'done') {
-                            setExporting(false);
-                            setExportProgress(null);
-                            setExportDone({ file_path: sj.file_path, filename: sj.filename, total: sj.current, retries: sj.retries || 0 });
-                            break;
-                        }
-                        if (sj.status === 'cancelled' || (sj.status === 'error' && exportCancelRef.current)) break;   // tự bấm Hủy → đóng êm
-                        if (sj.status === 'error' && sj.code === 'export_dir') { dirIssue = { dir: sj.dir, reason: sj.reason, canCreate: sj.can_create }; break; }
-                        if (sj.status === 'error') {
-                            alert('Xuất file không thành công.\n\n' + (sj.error || ''));
-                            break;
-                        }
-                    }
-                } catch (err) {
-                    alert(viErr(err));
-                } finally {
-                    setExporting(false);
-                    setExportProgress(null);
+
+            const listFileBase = (kind, format) => {
+                let base = LIST_FILE_PREFIX[kind] || 'DanhSach';
+                if (kind === 'income_alloc_month') {
+                    const ms = incomeMonthRangeMeta(incomeMonthFilters.range).months, ym = m => String(m.month).padStart(2, '0') + m.year;
+                    base += `_${ym(ms[0])}-${ym(ms[ms.length - 1])}`;
+                } else if (kind !== 'pr_detail') {
+                    base += `_${filters.from_date.replace(/\//g, '')}-${filters.to_date.replace(/\//g, '')}`;
                 }
-                if (dirIssue && await askExportDir(kind, dirIssue)) await startServerExport(kind, total, format, viewKeys);
+                return format === 'org' ? base + '_TheoDonVi' : base;
             };
 
-            const openExportedFile = async (path) => {
-                try {
-                    const r = await fetch('/api/open_file', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ path })
-                    });
-                    const j = await r.json();
-                    if (j.status !== 'ok') alert('Không mở được file: ' + (j.message || ''));
-                } catch (e) { alert(viErr(e)); }
-            };
-            const openExportedFolder = async (path) => {
-                try {
-                    const r = await fetch('/api/open_folder', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ path })
-                    });
-                    const j = await r.json();
-                    if (j.status !== 'ok') alert('Không mở được folder: ' + (j.message || ''));
-                } catch (e) { alert(viErr(e)); }
-            };
+            // "Tách sheet theo đơn vị": dựng file trong trình duyệt (SheetJS, 1 sheet / đơn vị) rồi gửi về máy chủ lưu vào thư mục của tab.
+            // Chạy trong hộp Xuất: track() báo tiến trình như job máy chủ, signal = nút Hủy. Trả { status: 'done' | 'error' | 'cancelled', … }.
+            const runOrgExport = async (kind, viewKeys, name, track, signal) => {
+                if (typeof XLSX === 'undefined') return { status: 'error', message: 'Chưa nạp được thư viện Excel của ứng dụng.\nCách khắc phục: tắt ứng dụng, mở lại rồi xuất lại.' };
+                const t0 = Date.now();
+                const step = (phase, current, total) => {
+                    if (signal.aborted) throw new DOMException('Đã hủy', 'AbortError');
+                    track({ status: 'running', local: true, phase, current, total, elapsed: (Date.now() - t0) / 1000, filename: `${name}.xlsx` });
+                };
+                step('fetch', 0, 0);
+                let url;
+                if (kind === 'ledger') {
+                    url = `/api/ledger/export?${buildExportQuery(kind).toString()}`;
+                } else if (kind === 'purchase') {
+                    url = `/api/purchase?${buildPurchaseQuery(1, 1, null, { export_all: '1' }).toString()}`;
+                } else if (kind === 'sale') {
+                    url = `/api/sale?${buildSaleQuery(1, 1, null, { export_all: '1' }).toString()}`;
+                } else if (kind === 'voucher') {
+                    url = `/api/voucher?${buildVoucherQuery(1, 1, null, { export_all: '1' }).toString()}`;
+                } else if (kind === 'income_alloc') {
+                    url = `/api/income_alloc?${buildIncomeAllocQuery(1, 1, { export_all: '1' }).toString()}`;
+                } else if (kind === 'income_alloc_month') {
+                    url = `/api/income_alloc_month?${buildIncomeMonthQuery(1, 1, { export_all: '1' }).toString()}`;
+                } else if (kind === 'warehouse_balance') {
+                    url = `/api/warehouse_balance?${buildWarehouseBalanceQuery(1, 1, null, { export_all: '1' }).toString()}`;
+                } else if (kind === 'pr_detail') {
+                    url = `/api/pr_detail?${buildPrDetailQuery(1, 1, null, { export_all: '1' }).toString()}`;
+                } else {
+                    url = `/api/warehouse?${buildWarehouseQuery(1, 1, null, { export_all: '1' }).toString()}`;
+                }
+                const r = await fetch(url, { signal });
+                if (r.status === 401) { setIsLoggedIn(false); return { status: 'cancelled' }; }
+                const res = await r.json();
+                if (res.status !== 'ok') return { status: 'error', message: res.message || `Máy chủ báo lỗi (HTTP ${r.status}).` };
+                const rows = res.data || [];
+                if (!rows.length) return { status: 'error', message: 'Không có dòng nào khớp bộ lọc đang chọn.' };
 
-            const doExport = async (kind, mode, format = 'xlsx') => {
-                // kind: 'ledger' | 'purchase' | 'warehouse' | 'sale' | 'voucher' | 'income_alloc' | 'pr_detail' ; mode: 'single' | 'by_org' ; format: 'xlsx' | 'csv'
-                if (typeof XLSX === 'undefined' && mode === 'by_org') { alert('Thư viện XLSX chưa tải được. Vui lòng kiểm tra kết nối.'); return; }
-                const viewKeys = exportCols === 'view' ? viewExportKeys(kind) : null;   // chụp bố cục lúc bấm xuất
-                setExportOpen(null);
-                // Thư mục lưu đã khai mà hỏng → cảnh báo + bắt chọn lại TRƯỚC khi đếm / tải (v1.10.9); Hủy chọn = thôi xuất
-                if (!(await ensureExportDir(kind))) return;
-                setExporting(true);
-                setExportProgress({ phase: 'fetch', current: 0, total: 0 });
-                try {
-                    // ===== BƯỚC 1: Lấy số dòng trước =====
-                    const countQuery = buildExportQuery(kind);
-                    const countRes = await fetch(`/api/${kind}/count?${countQuery.toString()}`).then(r => r.json()).catch(() => null);
-                    const totalRows = countRes && countRes.status === 'ok' ? countRes.total : 0;
+                const fullCols = EXPORT_COLS_BY_KIND[kind] || WAREHOUSE_EXPORT_COLS;
+                // khối 'MONTHS' (bố cục DT chờ phân bổ theo tháng) → bung ra các khoá tháng
+                const keys = viewKeys && viewKeys.flatMap(k => (k === 'MONTHS' ? incomeMonthView.months.map(m => m.key) : [k]));
+                const cols = keys ? pickExportCols(fullCols, keys) : fullCols;
+                const extractor = kind === 'ledger' ? (row) => extractLedgerRow(row, cols) : (row) => extractRowGeneric(cols, row);
 
-                    if (!totalRows) {
-                        alert('Không có dữ liệu để xuất.');
-                        setExporting(false);
-                        setExportProgress(null);
-                        return;
-                    }
-
-                    // ===== BƯỚC 2: SERVER-SIDE STREAM EXPORT CHO MỌI ĐƠN FILE (xlsx hoặc csv) =====
-                    // Luôn chạy ngầm server background job → có tiến trình 0-100% + modal Mở file / Mở folder khi xong
-                    if (mode === 'single') {
-                        await startServerExport(kind, totalRows, format, viewKeys);
-                        return;
-                    }
-
-                    // ===== BƯỚC 3: client-side xlsx multi-sheet (by_org) =====
-                    let url;
-                    if (kind === 'ledger') {
-                        url = `/api/ledger/export?${countQuery.toString()}`;
-                    } else if (kind === 'purchase') {
-                        url = `/api/purchase?${buildPurchaseQuery(1, 1, null, { export_all: '1' }).toString()}`;
-                    } else if (kind === 'sale') {
-                        url = `/api/sale?${buildSaleQuery(1, 1, null, { export_all: '1' }).toString()}`;
-                    } else if (kind === 'voucher') {
-                        url = `/api/voucher?${buildVoucherQuery(1, 1, null, { export_all: '1' }).toString()}`;
-                    } else if (kind === 'income_alloc') {
-                        url = `/api/income_alloc?${buildIncomeAllocQuery(1, 1, { export_all: '1' }).toString()}`;
-                    } else if (kind === 'income_alloc_month') {
-                        url = `/api/income_alloc_month?${buildIncomeMonthQuery(1, 1, { export_all: '1' }).toString()}`;
-                    } else if (kind === 'warehouse_balance') {
-                        url = `/api/warehouse_balance?${buildWarehouseBalanceQuery(1, 1, null, { export_all: '1' }).toString()}`;
-                    } else if (kind === 'pr_detail') {
-                        url = `/api/pr_detail?${buildPrDetailQuery(1, 1, null, { export_all: '1' }).toString()}`;
-                    } else {
-                        url = `/api/warehouse?${buildWarehouseQuery(1, 1, null, { export_all: '1' }).toString()}`;
-                    }
-
-                    setExportProgress({ phase: 'fetch', current: 0, total: totalRows });
-                    const r = await fetch(url);
-                    if (r.status === 401) { setIsLoggedIn(false); return; }
-                    const res = await r.json();
-                    if (res.status !== 'ok') { alert('Lỗi xuất Excel: ' + (res.message || '')); return; }
-                    const rows = res.data || [];
-                    if (!rows.length) { alert('Không có dữ liệu để xuất.'); return; }
-
-                    const fullCols = EXPORT_COLS_BY_KIND[kind] || WAREHOUSE_EXPORT_COLS;
-                    // khối 'MONTHS' (bố cục DT chờ phân bổ theo tháng) → bung ra các khoá tháng
-                    const keys = viewKeys && viewKeys.flatMap(k => (k === 'MONTHS' ? incomeMonthView.months.map(m => m.key) : [k]));
-                    const cols = keys ? pickExportCols(fullCols, keys) : fullCols;
-                    const extractor = kind === 'ledger' ? (r) => extractLedgerRow(r, cols) : (r) => extractRowGeneric(cols, r);
-
-                    const prefix = kind === 'ledger' ? 'ChungTuTongHop_' : (kind === 'purchase' ? 'PhieuNhapKho_' : (kind === 'sale' ? 'ChungTuBanHang_' : (kind === 'voucher' ? 'ChungTuTien_' : (kind === 'income_alloc' ? 'DoanhThuChoPhanBo_' : kind === 'income_alloc_month' ? 'DoanhThuChoPhanBoTheoThang_' : (kind === 'warehouse_balance' ? 'TonKhoThucTe_' : (kind === 'pr_detail' ? 'DanhMucDoiTuong' : 'ChungTuKho_'))))));
-                    const fname = prefix + (kind === 'pr_detail' ? '.' : kind === 'income_alloc_month'
-                        ? `${ymStr(incomeMonthFilters.range.from).replace('/', '')}-${ymStr(incomeMonthFilters.range.to).replace('/', '')}.`
-                        : (filters.from_date.replace(/\//g,'') + '-' + filters.to_date.replace(/\//g,'') + '.')) + 'xlsx';
-
-                    setExportProgress({ phase: 'build', current: 0, total: rows.length });
+                // Group theo ORGANIZATION_ID
+                const groups = new Map();
+                for (let i = 0; i < rows.length; i++) {
+                    const id = (rows[i].ORGANIZATION_ID || '').toString().trim() || '__NONE__';
+                    let g = groups.get(id);
+                    if (!g) { g = []; groups.set(id, g); }
+                    g.push(rows[i]);
+                }
+                const ids = [...groups.keys()].sort();
+                // 1 sheet Excel tối đa 1.048.576 dòng — trước v1.12.1 đơn vị vượt mốc bị cắt bớt dòng mà không báo
+                const big = ids.find(id => groups.get(id).length > EXCEL_MAX_ROWS);
+                if (big) return { status: 'error', message: `Đơn vị ${big === '__NONE__' ? '(không có mã)' : big} có ${fmtCount(groups.get(big).length)} dòng, quá ${fmtCount(EXCEL_MAX_ROWS)} dòng của 1 sheet Excel.\nCách khắc phục: thu hẹp khoảng ngày, hoặc chọn Excel (tự tách sheet khi vượt 1.000.000 dòng).` };
+                const onm = orgNameMap();
+                const wb = XLSX.utils.book_new();
+                let done = 0;
+                step('write', 0, rows.length);
+                for (const id of ids) {
+                    const grp = groups.get(id);
+                    const { ws } = await buildSheetManual(cols, grp, extractor, (c) => step('write', done + c, rows.length));
+                    const orgName = id === '__NONE__' ? 'Khac' : (onm[id] || id);
+                    XLSX.utils.book_append_sheet(wb, ws, sanitizeSheetName(`${id}-${orgName}`));
+                    done += grp.length;
+                    step('write', done, rows.length);
                     await yieldToUI();
-
-                    const wb = XLSX.utils.book_new();
-
-                    // Group theo ORGANIZATION_ID
-                    const groups = new Map();
-                    for (let i = 0; i < rows.length; i++) {
-                        const id = (rows[i].ORGANIZATION_ID || '').toString().trim() || '__NONE__';
-                        let g = groups.get(id);
-                        if (!g) { g = []; groups.set(id, g); }
-                        g.push(rows[i]);
-                    }
-                    const onm = orgNameMap();
-                    const ids = [...groups.keys()].sort();
-                    if (!ids.length) { alert('Không có dữ liệu để xuất.'); return; }
-
-                    // Cảnh báo nếu có sheet con vượt PER_SHEET_WARN
-                    const oversize = ids.filter(id => groups.get(id).length > PER_SHEET_WARN);
-                    if (oversize.length) {
-                        alert(
-                            `Cảnh báo: ${oversize.length} đơn vị có dữ liệu vượt ${PER_SHEET_WARN.toLocaleString()} dòng — có thể gây nặng khi mở.\n\n` +
-                            `Tiếp tục xuất bình thường, nhưng nên thu hẹp khoảng ngày.`
-                        );
-                    }
-
-                    let done = 0;
-                    for (const id of ids) {
-                        const grp = groups.get(id);
-                        const { ws } = await buildSheetManual(cols, grp, extractor, (c) => {
-                            setExportProgress({ phase: 'build', current: done + c, total: rows.length });
-                        });
-                        const orgName = id === '__NONE__' ? 'Khac' : (onm[id] || id);
-                        XLSX.utils.book_append_sheet(wb, ws, sanitizeSheetName(`${id}-${orgName}`));
-                        done += grp.length;
-                        setExportProgress({ phase: 'build', current: done, total: rows.length });
-                        await yieldToUI();
-                    }
-
-                    setExportProgress({ phase: 'write', current: rows.length, total: rows.length });
-                    await yieldToUI();
-
-                    // Dùng XLSX.write (mảng byte) → tránh writeFile internal heavy enumeration
-                    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array', compression: true });
-                    // v1.10.9: server ghi file vào thư mục lưu của tab (trước đây trình duyệt tự tải về Downloads của Chrome) → cùng hộp
-                    // "Đã xuất xong" Mở file / Mở folder như 2 kiểu kia. Thư mục vừa hỏng → hỏi chọn lại rồi ghi lại, file dựng sẵn giữ nguyên.
-                    while (true) {
-                        const sr = await fetch(`/api/export/save_file?screen=${kind}&filename=${encodeURIComponent(fname)}`,
-                            { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: wbout });
-                        const sj = await sr.json().catch(() => ({}));
-                        if (sj.status === 'ok') { setExportDone({ file_path: sj.path, filename: sj.filename, total: rows.length, retries: 0 }); break; }
-                        if (sj.code === 'export_dir') {
-                            setExportProgress(null);
-                            if (!(await askExportDir(kind, { dir: sj.dir, reason: sj.reason, canCreate: sj.can_create }))) break;
-                            setExportProgress({ phase: 'write', current: rows.length, total: rows.length });
-                            continue;
-                        }
-                        alert('Xuất file không thành công.\n\n' + (sj.message || `Máy chủ báo lỗi (HTTP ${sr.status}).`));
-                        break;
-                    }
-                } catch (err) {
-                    alert('Lỗi xuất Excel.\n\n' + viErr(err));
-                } finally {
-                    setExporting(false);
-                    setExportProgress(null);
+                }
+                step('finalize', rows.length, rows.length);
+                await yieldToUI();
+                // Dùng XLSX.write (mảng byte) → tránh writeFile internal heavy enumeration
+                const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array', compression: true });
+                // Máy chủ ghi file vào thư mục lưu của tab (v1.10.9). Thư mục vừa hỏng → hỏi chọn lại rồi ghi lại, file dựng sẵn giữ nguyên.
+                while (true) {
+                    if (signal.aborted) return { status: 'cancelled' };
+                    const sr = await fetch(`/api/export/save_file?screen=${kind}&filename=${encodeURIComponent(name)}`,
+                        { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: wbout, signal });
+                    const sj = await sr.json().catch(() => ({}));
+                    if (sj.status === 'ok') return { status: 'done', phase: 'done', file_path: sj.path, filename: sj.filename, size: sj.size,
+                        rows: rows.length, current: rows.length, total: rows.length, sheets: ids.length, retries: 0, elapsed: (Date.now() - t0) / 1000 };
+                    if (sj.code !== 'export_dir') return { status: 'error', message: sj.message || `Máy chủ báo lỗi (HTTP ${sr.status}).` };
+                    if (!(await askExportDir(kind, { dir: sj.dir, reason: sj.reason, canCreate: sj.can_create }))) return { status: 'cancelled' };
                 }
             };
 
             // Props chung cho <ExportButton kind=… {...exportBtn} /> — component nằm NGOÀI App (xem định nghĩa trên App).
-            const exportBtn = { open: exportOpen, setOpen: setExportOpen, exporting, cols: exportCols, onCols: chooseExportCols, gridLays,
-                                viewCounts: { income_alloc_month: incomeMonthCols.length }, onExport: doExport };   // khối tháng = N cột thật
+            const exportBtn = { onOpen: openListExport };
+
+            const listExportCfg = listExport ? (() => {
+                const { kind, total } = listExport;
+                const ids = filters.org_ids || [];
+                const org = ids.length === 1 ? (meta.orgs || []).find(o => (o.id || '').trim() === ids[0]) : null;
+                const ms = kind === 'income_alloc_month' ? incomeMonthRangeMeta(incomeMonthFilters.range).months : null;
+                const p = period;
+                const viewN = kind === 'income_alloc_month' ? incomeMonthCols.length : gridLays[kind].cols.length;   // khối tháng = N cột thật
+                return {
+                    screen: kind,
+                    kicker: 'Xuất danh sách',
+                    noun: 'danh sách',
+                    title: (NAV_DOC_META[kind] || [kind])[0],
+                    periodText: kind === 'pr_detail' ? '' : ms ? `T${ms[0].month}/${ms[0].year} – T${ms[ms.length - 1].month}/${ms[ms.length - 1].year}`
+                        : p.type === 'month' ? `Tháng ${p.value} Năm ${p.year}` : p.type === 'quarter' ? `Quý ${p.value} Năm ${p.year}`
+                        : p.type === 'year' ? `Năm ${p.year}` : `${filters.from_date} – ${filters.to_date}`,
+                    unitText: kind === 'pr_detail' ? '' : `Đơn vị: ${!ids.length ? 'Tất cả' : ids.length > 1 ? `${ids.length} đơn vị` : org ? `${ids[0]} - ${org.name}` : ids[0]}`,
+                    serverQuery: true,
+                    counting: total === null,
+                    estimate: () => (total > 0 ? total : 0),
+                    blocked: total === 0 ? 'Không có dòng nào khớp bộ lọc đang chọn. Đổi bộ lọc rồi xuất lại.' : '',
+                    staleNote: isTabDirty(kind) ? 'Bộ lọc đã đổi nhưng chưa bấm Truy vấn. File xuất theo bộ lọc đang chọn, có thể khác bảng đang xem.' : '',
+                    formats: [
+                        { id: 'xlsx', icon: 'file-spreadsheet', title: 'Excel', ext: '.xlsx', desc: 'Một bảng, có nút lọc, dòng tên cột đứng yên khi cuộn.', badge: 'Khuyên dùng' },
+                        { id: 'csv', icon: 'zap', title: 'CSV', ext: '.csv', desc: 'Dữ liệu thô, không định dạng. Nhẹ và ghi nhanh nhất.' },
+                        ...(kind === 'pr_detail' ? [] : [{ id: 'org', icon: 'layers', title: 'Tách sheet', ext: '.xlsx', desc: 'Mỗi đơn vị một sheet trong cùng một file Excel.' }]),
+                    ],
+                    variantLabel: 'Cột xuất',
+                    variants: [
+                        { id: 'all', label: 'Đầy đủ', desc: 'Bộ cột xuất chuẩn của danh sách' },
+                        { id: 'view', label: 'Như đang xem', desc: `${viewN} cột đang hiện, đúng thứ tự trên màn hình` },
+                    ],
+                    defaultVariant: exportCols,
+                    onVariant: chooseExportCols,
+                    fileBase: (v, format) => listFileBase(kind, format),
+                    checks: (format, est, sheetsEst) => (format === 'csv' ? [
+                        'Không giới hạn số dòng, ghi nhanh nhất',
+                        'Mở bằng Excel vẫn đúng tiếng Việt',
+                        'Không định dạng, không nút lọc, chỉ bảng dữ liệu',
+                    ] : format === 'org' ? [
+                        'Mỗi đơn vị một sheet, tên sheet là mã và tên đơn vị',
+                        'Dòng 1 là tên cột, không tô màu, không nút lọc',
+                        'Tải hết dữ liệu về ứng dụng rồi mới dựng file. Mạng đứt giữa chừng thì phải xuất lại',
+                    ] : [
+                        'Dòng 1 là tên cột, đứng yên khi cuộn, có sẵn nút lọc',
+                        'Số lưu giá trị thật 1000000, hiển thị 1,000,000 · ngày dạng dd/mm/yyyy',
+                        ...(kind === 'income_alloc_month' ? ['Lũy kế trong kỳ, Giá trị còn lại ghi công thức; cuối bảng có dòng Tổng cộng'] : []),
+                        sheetsEst > 1 ? `≈ ${fmtCount(est)} dòng → tự tách ${sheetsEst} sheet (tối đa 1.000.000 dòng/sheet)` : 'Tự tách sheet khi vượt 1.000.000 dòng',
+                    ]),
+                    // Tách sheet theo đơn vị dựng file ngay trong trình duyệt → nhắc riêng; Excel / CSV dùng lời nhắc dữ liệu lớn chung của hộp
+                    formatNote: (format, est) => (format !== 'org' ? undefined : est > 200000
+                        ? `Dữ liệu lớn (≈ ${fmtCount(est)} dòng): Tách sheet dựng file ngay trong ứng dụng, có thể rất chậm hoặc báo thiếu bộ nhớ. Nên chọn Excel, hoặc thu hẹp khoảng ngày.`
+                        : null),
+                    start: async ({ variant, format, name, track, signal }) => {
+                        const viewKeys = variant === 'view' ? viewExportKeys(kind) : null;   // chụp bố cục lúc bấm xuất
+                        if (format === 'org') return runOrgExport(kind, viewKeys, name, track, signal);
+                        const q = buildExportQuery(kind);
+                        q.set('total', String(total > 0 ? total : 0));
+                        q.set('format', format);
+                        q.set('filename', name);
+                        if (viewKeys) q.set('cols', viewKeys.join(','));
+                        const r = await fetch(`/api/${kind}/stream_csv?${q.toString()}`, { method: 'POST', signal });
+                        const j = await r.json().catch(() => ({}));
+                        if (j.status !== 'ok' && !j.message) j.message = `Máy chủ báo lỗi (HTTP ${r.status}).`;
+                        return { ...j, filename: undefined };   // tên thật (đã thêm (2), (3)… nếu trùng) đến từ /api/export/status
+                    },
+                };
+            })() : null;
 
             const loadReportData = async (pageArg, modeArg) => {
                 // pageArg là số -> nhảy thẳng tới trang đó (dùng cho pager). Không phải số (vd event) -> dùng filters.page.
@@ -8787,82 +8733,9 @@ window.showConnectionLost = function() {
                     )}
                     {/* Hộp "Thư mục lưu file" (v1.10.9) — mở qua askExportDir() từ menu Xuất Excel / hộp Xuất báo cáo, nằm trên mọi hộp khác */}
                     <ExportDirHost />
-                    {/* MODAL: Tải xong → Mở file / Mở folder */}
-                    {exportDone && (
-                        <div className="ds-scrim z-[9999]">
-                            <div className="ds-dialog" role="dialog" aria-modal="true">
-                                <div className="ds-dlg-head">
-                                    <div className="ds-dlg-ic is-ok"><Icon name="check" size={18} stroke={2.5} /></div>
-                                    <div className="min-w-0">
-                                        <h2>Đã xuất xong</h2>
-                                        <div className="ds-dlg-sub break-all">{(exportDone.total || 0).toLocaleString()} dòng · {exportDone.filename}{exportDone.retries > 0 ? ` · tự kết nối lại ${exportDone.retries} lần` : ''}</div>
-                                    </div>
-                                </div>
-                                <div className="ds-dlg-body">
-                                    <div className="ds-field-label">Đường dẫn</div>
-                                    <div className="ds-path">{exportDone.file_path}</div>
-                                </div>
-                                <div className="ds-dlg-foot">
-                                    <button onClick={() => setExportDone(null)} className="ds-btn ds-btn-ghost mr-auto">Đóng</button>
-                                    <button onClick={() => openExportedFolder(exportDone.file_path)} className="ds-btn"><Icon name="folder-open" size={14} stroke={2} /> Mở folder</button>
-                                    <button onClick={() => openExportedFile(exportDone.file_path)} className="ds-btn ds-btn-pri"><Icon name="file-spreadsheet" size={14} stroke={2} /> Mở file</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
+                    {/* Hộp Xuất danh sách (8 tab dữ liệu, v1.12.1) — cùng hộp với Xuất báo cáo */}
+                    <ReportExportDialog open={!!listExport} onClose={() => setListExport(null)} cfg={listExportCfg} />
 
-                    {exporting && exportProgress && (
-                        <div className="ds-scrim z-[9999]">
-                            <div className="ds-dialog" role="dialog" aria-modal="true" aria-busy="true">
-                                <div className="ds-dlg-head">
-                                    <div className="ds-dlg-ic is-ok"><Icon name="loader" size={18} stroke={2} className="animate-spin" /></div>
-                                    <div className="min-w-0">
-                                        <h3>{exportProgress.phase === 'job' && exportProgress.format === 'csv' ? 'Đang xuất CSV' : 'Đang xuất Excel'}</h3>
-                                        <div className="ds-dlg-sub">
-                                            {exportProgress.phase === 'fetch'  && 'Đang tải dữ liệu từ server...'}
-                                            {exportProgress.phase === 'build'  && `Đang dựng file: ${exportProgress.current.toLocaleString()} / ${exportProgress.total.toLocaleString()} dòng`}
-                                            {exportProgress.phase === 'write'  && 'Đang ghi file xlsx...'}
-                                            {exportProgress.phase === 'job' && (exportProgress.retry ? 'Mất kết nối tới máy chủ — đang tự kết nối lại…'
-                                                : exportProgress.sub === 'query' ? 'Đang đếm dữ liệu trên máy chủ…'
-                                                : exportProgress.sub === 'write' ? `Đang ghi file: ${fmtCount(exportProgress.current)} / ${fmtCount(exportProgress.total)} dòng`
-                                                : exportProgress.sub === 'prepare' ? 'Đang chuẩn bị…'
-                                                : `Đang tải dữ liệu: ${fmtCount(exportProgress.current)} / ${fmtCount(exportProgress.total)} dòng`)}
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="ds-dlg-body space-y-3">
-                                    {exportProgress.total > 0 && (
-                                        <div className="ds-progress"><i style={{ width: `${Math.min(100, Math.round((exportProgress.current / Math.max(1, exportProgress.total)) * 100))}%` }}></i></div>
-                                    )}
-                                    {exportProgress.phase === 'job' && exportProgress.retry && (
-                                        <div className="ds-note is-warn">
-                                            <Icon name="refresh-cw" size={14} stroke={2} />
-                                            <span>
-                                                {Math.ceil(exportProgress.retry.until - Date.now() / 1000) > 0 ? `Mạng tới máy chủ bị ngắt — tự kết nối lại sau ${Math.ceil(exportProgress.retry.until - Date.now() / 1000)} giây` : 'Đang kết nối lại máy chủ…'} (lần {exportProgress.retry.n}/{exportProgress.retry.max}).
-                                                {' '}Phần đã tải được giữ nguyên. Kiểm tra VPN nếu chờ lâu.
-                                            </span>
-                                        </div>
-                                    )}
-                                    {exportProgress.phase === 'job' && !exportProgress.retry && exportProgress.retries > 0 && (
-                                        <div className="flex items-center gap-1.5 text-[12px] text-ink-2"><Icon name="refresh-cw" size={13} stroke={2} /> Đã tự kết nối lại {exportProgress.retries} lần — dữ liệu không thiếu, không trùng.</div>
-                                    )}
-                                    {exportProgress.phase === 'job' && exportProgress.sub === 'fetch' && exportProgress.chunks > 1 && !exportProgress.retry && (
-                                        <div className="flex items-center gap-1.5 text-[12px] text-ink-2"><Icon name="layers" size={13} stroke={2} /> Tải theo từng khúc ngày: xong {exportProgress.chunk}/{exportProgress.chunks} khúc</div>
-                                    )}
-                                    <div className="text-[12px] text-ink-3">{exportProgress.phase === 'job'
-                                        ? 'Tải hết dữ liệu về máy rồi mới ghi file — mạng chập chờn thì tự kết nối lại. Đừng tắt ứng dụng cho tới khi xong.'
-                                        : 'Vui lòng không tắt cửa sổ. Dữ liệu lớn có thể mất vài phút.'}</div>
-                                </div>
-                                {exportProgress.phase === 'job' && exportProgress.jobId && (
-                                    <div className="ds-dlg-foot">
-                                        <button onClick={() => cancelServerExport(exportProgress.jobId)} disabled={exportProgress.cancelling} className="ds-btn ds-btn-danger">
-                                            {exportProgress.cancelling ? <><Icon name="loader" size={14} className="animate-spin" /> Đang hủy…</> : <><Icon name="x" size={14} stroke={2} /> Hủy xuất</>}
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
                     {showClearModal && (
                         <div className="ds-scrim z-[9999]">
                             <div className="ds-dialog" role="dialog" aria-modal="true">

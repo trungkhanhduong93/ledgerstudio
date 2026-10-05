@@ -2778,9 +2778,28 @@ def _finish_part_file(out_path):
     return out_path
 
 
+def _list_job_done(job_id, final_path, count, sheets, t_write, t_close):
+    """Job danh sách ghi xong → số liệu cho màn "Xuất file thành công" của hộp Xuất (v1.12.1, cùng hộp với báo cáo): số dòng,
+    số sheet, dung lượng, thời gian ghi / đóng gói (đếm + tải do _start_export_job ghi sẵn trong timing)."""
+    try:
+        size = os.path.getsize(final_path)
+    except OSError:
+        size = 0
+    now = time.time()
+    with _export_jobs_lock:
+        job = _export_jobs.get(job_id)
+        if job is not None:
+            job.update(status='done', current=count, total=count, rows=count, sheet=sheets, sheets=sheets, size=size,
+                       file_path=final_path, filename=os.path.basename(final_path),
+                       timing=dict(job.get('timing') or {}, write=round(t_close - t_write, 1), finalize=round(now - t_close, 1)))
+            if job.get('started'):
+                job['elapsed'] = round(now - job['started'], 1)
+
+
 def _write_csv_to_disk(job_id, headers, row_iter, filename, total_estimate, out_path=None):
     """Ghi CSV vào disk theo job_id, update progress vào _export_jobs."""
     out_path = out_path or os.path.join(_export_dir(), filename)
+    t_write = time.time()
     try:
         with open(out_path, 'w', encoding='utf-8-sig', newline='') as f:
             f.write(','.join(_csv_escape(h) for h in headers) + '\r\n')
@@ -2803,15 +2822,9 @@ def _write_csv_to_disk(job_id, headers, row_iter, filename, total_estimate, out_
                 f.write('\r\n'.join(buf) + '\r\n')
                 count += len(buf)
 
+        t_close = time.time()
         final_path = _finish_part_file(out_path)
-        with _export_jobs_lock:
-            job = _export_jobs.get(job_id)
-            if job is not None:
-                job['status']    = 'done'
-                job['current']   = count
-                job['total']     = count
-                job['file_path'] = final_path
-                job['filename']  = os.path.basename(final_path)
+        _list_job_done(job_id, final_path, count, 1, t_write, t_close)
     except Exception as e:
         # Xoá file dở dang
         try: os.remove(out_path)
@@ -2840,6 +2853,8 @@ def _write_xlsx_to_disk(job_id, headers, row_iter, filename, total_estimate, out
     import xlsxwriter
     from decimal import Decimal as _Dec
     out_path = out_path or os.path.join(_export_dir(), filename)
+    t_write = time.time()
+    sheets_est = max(1, -(-int(total_estimate or 0) // LIST_XLSX_SHEET_ROWS))   # hộp Xuất hiện "Đang ghi sheet i/n"
     try:
         workbook = xlsxwriter.Workbook(out_path, {'constant_memory': True, 'strings_to_numbers': False,
                                                   'strings_to_formulas': False, 'strings_to_urls': False})
@@ -2920,6 +2935,7 @@ def _write_xlsx_to_disk(job_id, headers, row_iter, filename, total_estimate, out
                     job = _export_jobs.get(job_id)
                     if job is not None:
                         job['current'] = count
+                        job['sheet'], job['sheets'] = len(sheets), max(len(sheets), sheets_est)
                         if job.get('cancelled'):
                             raise RuntimeError("Cancelled by user")
 
@@ -2944,16 +2960,17 @@ def _write_xlsx_to_disk(job_id, headers, row_iter, filename, total_estimate, out
             for col_num, w in enumerate(widths):
                 ws.set_column(col_num, col_num, w)
             ws.ignore_errors({'number_stored_as_text': 'A1:XFD1048576'})
-        workbook.close()
-        final_path = _finish_part_file(out_path)
+        # close() gom các sheet tạm + nén zip — file triệu dòng mất cả phút → báo pha "đóng gói" thay vì đứng ở 100% dòng
+        t_close = time.time()
         with _export_jobs_lock:
             job = _export_jobs.get(job_id)
             if job is not None:
-                job['status'] = 'done'
-                job['current'] = count
-                job['total'] = count
-                job['file_path'] = final_path
-                job['filename'] = os.path.basename(final_path)
+                if job.get('cancelled'):   # Hủy sau mốc 2.000 dòng cuối cùng — trước đây vẫn ghi xong file
+                    raise RuntimeError("Cancelled by user")
+                job.update(phase='finalize', current=count)
+        workbook.close()
+        final_path = _finish_part_file(out_path)
+        _list_job_done(job_id, final_path, count, len(sheets), t_write, t_close)
     except Exception as e:
         try:
             # chưa close() thì xlsxwriter chưa tạo file đích — chỉ còn file tạm từng sheet trong %TEMP%
@@ -2981,7 +2998,11 @@ def get_export_status():
         job = _export_jobs.get(job_id)
         if not job:
             return jsonify({"status": "not_found"}), 404
-        return jsonify({k: v for k, v in job.items() if k != 'cancelled'})
+        out = {k: v for k, v in job.items() if k != 'cancelled'}
+    # đồng hồ chạy cả lúc 1 khâu dài không báo tiến trình (đếm theo ngày, ghi xlsx của danh sách, đóng gói file)
+    if out.get('status') == 'running' and out.get('started'):
+        out['elapsed'] = round(time.time() - out['started'], 1)
+    return jsonify(out)
 
 
 @app.route("/api/export/cancel", methods=["POST"])
@@ -3084,6 +3105,9 @@ def _start_export_job(filename, headers, sql, params, transform_row, total_estim
     job_id = uuid.uuid4().hex
     started = time.time()
     ext = 'xlsx' if filename.lower().endswith('.xlsx') else 'csv'
+    # Tên file người dùng gõ ở hộp Xuất (v1.12.1): thay phần tên, đuôi vẫn theo định dạng — _rx_reserve_path bỏ đuôi gõ kèm,
+    # thay ký tự cấm. Không gửi → tên mặc định của từng danh sách như trước.
+    filename = (request.args.get('filename') or '').strip() or filename
     # Thư mục lưu theo màn hình (v1.10.9): màn hình = đoạn giữa /api/<màn>/stream_csv — trùng khoá kind của App. Thư mục đã khai
     # mà hỏng → job lỗi ngay, code 'export_dir' (app cảnh báo + bắt chọn lại rồi xuất lại). App đã kiểm trước khi gọi; đây là lưới
     # an toàn khi thư mục mất trong lúc app còn đang đếm dòng.
@@ -3106,7 +3130,7 @@ def _start_export_job(filename, headers, sql, params, transform_row, total_estim
             'status': 'running', 'phase': 'prepare', 'current': 0, 'total': total_estimate,
             'file_path': None, 'filename': filename, 'error': None,
             'cancelled': False, 'started': started, 'elapsed': 0, 'retries': 0, 'retry': None,
-            'format': ext,
+            'format': ext, 'sheet': 0, 'sheets': 0, 'size': 0, 'rows': 0, 'timing': {},
         }
     db_cfg = session.get('db_config')
     ctl = _ExportCtl(job_id, started, f"danh sach {filename}")
@@ -3119,6 +3143,7 @@ def _start_export_job(filename, headers, sql, params, transform_row, total_estim
             ctl.log("bat dau: CSDL %s, uoc tinh %d dong, %s", db_cfg.get('database'), total_estimate, ext)
             db = _ExportDb(db_cfg, ctl)
             chunks, total = [(sql.replace(_CHUNK_MARK, ""), list(params))], total_estimate
+            timing = {'query': 0}   # giây từng khâu → tooltip màn "xong" của hộp Xuất (ghi + đóng gói: _list_job_done)
             if day_split:
                 col, desc, count_sql, count_params = day_split
                 ctl.upd(phase='query')
@@ -3127,11 +3152,13 @@ def _start_export_job(filename, headers, sql, params, transform_row, total_estim
                 total = sum(int(r[1] or 0) for r in days)
                 chunks = _day_chunks(sql, params, [(r[0], r[1]) for r in days], col, desc)
                 ctl.upd(total=total)
+                timing['query'] = round(time.time() - t, 1)
                 ctl.log("dem: %d dong, %d ngay -> %d khuc, %.1fs", total, len(days), len(chunks), time.time() - t)
             t = time.time()
             ctl.upd(phase='fetch', current=0, chunk=0, chunks=len(chunks))
             spool = _ExportSpool()
             sql_cols = db.fetch(chunks, spool)
+            timing['fetch'] = round(time.time() - t, 1)
             db.close()   # tải xong → nhả kết nối TRƯỚC khi ghi file
             ctl.log("tai xong: %d dong, %.1fs, file tam %.1f MB, noi lai %d lan", spool.count, time.time() - t,
                     spool.size() / 1048576, db.reconnects)
@@ -3139,7 +3166,7 @@ def _start_export_job(filename, headers, sql, params, transform_row, total_estim
             if ctl.cancelled():
                 raise XR.ExportCancelled()
             t = time.time()
-            ctl.upd(phase='write', current=0, total=spool.count)
+            ctl.upd(phase='write', current=0, total=spool.count, timing=dict(timing))
             rows = (transform_row(raw, sql_cols) for raw in spool.iter_rows())
             if ext == 'xlsx':
                 _write_xlsx_to_disk(job_id, headers, rows, filename, spool.count, out_path=final_path + '.part', spec=xlsx_spec)
@@ -8165,7 +8192,8 @@ def _rx_list(v):
 def _rx_reserve_path(filename, ext, folder=None):
     """Tên file sạch + không đè file đã có (file cũ có thể đang mở trong Excel → ghi đè sẽ lỗi quyền).
     folder: thư mục lưu của màn hình (_export_dir_for) — không truyền = thư mục mặc định."""
-    base = os.path.basename(str(filename or '')).strip()
+    # KHÔNG lấy basename: tên gõ "Thang 01/2026" từng chỉ còn "2026". Dấu / \ thành "_" ở dòng dưới — vẫn không thoát ra ngoài thư mục.
+    base = str(filename or '').strip()
     if base.lower().endswith('.' + ext):
         base = base[:-(len(ext) + 1)]
     base = _re.sub(r'[<>:"/\\|?*\x00-\x1f]+', '_', base).strip(' ._')[:150] or 'BaoCao'

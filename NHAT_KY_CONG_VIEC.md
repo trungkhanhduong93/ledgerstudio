@@ -1593,3 +1593,48 @@ trên bảng + lọc SQL. Kiểu cột ở TRUNGDEMO, SALE_DEMO, BIMGROUP: nvarc
   14,5 s; updater tải 16,7 MB ~8 s, v1.11.2 lên sau 10,9 s, còn 1 file, SHA = release, `/api/metadata` 401 (đăng nhập lại), đóng cửa sổ →
   EXE + cổng tắt 2,7 s. Lần này không dính lỗi tải 0 byte của Bẫy 13.
 - **Chưa:** chạy trên DB thật của khách.
+
+## 41. v1.12.1 (build 05/10, CHƯA phát hành): hộp Xuất danh sách giống hộp Xuất báo cáo *(05/10/2026)*
+
+**Yêu cầu Trum (05/10):** "sửa cho cơ chế xuất excel bên dữ liệu danh sách cho giống với như xuất bên báo cáo đi" (kèm ảnh hộp Xuất báo cáo
+BC005). Tui hỏi 7 điểm, Trum trả lời "ok làm theo mặc định":
+1. Chỉ đổi hộp xuất, nội dung file xlsx / csv giữ nguyên (không thêm khối tiêu đề công ty / kỳ: tên cột bị đẩy xuống, lọc và pivot khó dùng).
+2. Tách sheet theo đơn vị thành thẻ thứ 3 cạnh Excel / CSV, vẫn dựng trong trình duyệt; ẩn ở Danh mục đối tượng (không có cột đơn vị).
+3. Cột xuất Đầy đủ / Như đang xem chuyển vào hộp, vẫn nhớ lựa chọn (`ds_export_cols`).
+4. Đếm dòng ngay khi mở hộp; 0 dòng thì khoá nút Xuất.
+5. File vẫn theo bộ lọc đang chọn trên thanh lọc (không theo bảng đang xem như báo cáo), thêm 1 dòng nhắc khi bộ lọc đã đổi mà chưa Truy vấn.
+6. Tên file mặc định giữ như cũ (`ChungTuTongHop_01012026-31012026`…), sửa được; Tách sheet thêm đuôi `_TheoDonVi`.
+7. CSV danh sách mở bằng Excel mất số 0 đầu ở cột mã (CSV báo cáo dùng `_csv_text_cell` nên giữ được): đợt này CHƯA sửa, hộp không ghi câu hứa đó.
+
+**Tra trước khi sửa (chỉ đọc):** menu cũ = `ExportButton` (3 mục XLSX / CSV / ORG + Cột xuất + Lưu vào) → `doExport` đếm `/count` → job máy
+chủ `/api/<kind>/stream_csv` (hộp tiến trình nhỏ + hộp "Đã xuất xong") hoặc SheetJS trong trình duyệt (Tách sheet). Tên file do 9 endpoint tự
+đặt, không nhận tên người dùng. Job danh sách không báo `rows` / `size` / `sheets` / `timing` như job báo cáo.
+
+**Đã sửa:**
+- `index.html`: `ReportExportDialog` nhận thêm cfg tuỳ chọn (`screen`, `kicker`, `noun`, `formats`, `variantLabel`, `onVariant`, `checks`,
+  `formatNote`, `counting`, `blocked`, `start`), báo cáo không truyền = như cũ. Tách `track()` (tốc độ + tiến trình) khỏi `poll` để job chạy
+  trong trình duyệt dùng chung; Hủy job trong trình duyệt = `AbortController`; job danh sách báo `code: 'export_dir'` qua poll cũng hỏi chọn
+  lại thư mục. Lời nhắc khoá nút / bộ lọc đã đổi lên đầu phần cuộn. 3 thẻ định dạng → hộp 620px (`is-wide3`).
+- App: `listExport` + `openListExport` (đếm dòng) + `listExportCfg` + `runOrgExport` (Tách sheet, chuyển từ `doExport`, thêm báo lỗi khi 1 đơn
+  vị quá 1.048.575 dòng, trước đây bị cắt im lặng). Gỡ `doExport`, `startServerExport`, `cancelServerExport`, `openExportedFile/Folder`, 4 state
+  cũ, 2 hộp cũ, CSS `ds-menuitem` / `ds-fmt` / `ds-expcols` / `ds-expdir`. `ExportButton` còn 1 nút, `exportBtn = { onOpen }` (9 chỗ gọi giữ nguyên).
+- `server.py`: `_start_export_job` nhận `filename`; `_list_job_done` ghi `rows` / `size` / `sheets` / `timing` / `elapsed`; `_write_xlsx_to_disk`
+  báo `sheet i/n`, pha `finalize` trước `workbook.close()`, kiểm cờ huỷ trước close; `/api/export/status` tính `elapsed` trực tiếp cho job đang
+  chạy; `_rx_reserve_path` bỏ `basename` ("Thang 01/2026" từng chỉ còn "2026").
+
+**Verify** (bộ kiểm ngoài repo, scratchpad phiên b128fc09: `test_list_export.py`, `ui_server.py`, `run_ui.py`, `ui_common.js`, `ui_export.js`,
+`ui_report_snap.js`, `ui_mut.js`, `smoke_exe.py`; SQL Express TRUNGDEMO thật, CHỈ SELECT; thư mục xuất + cấu hình ở scratchpad):
+
+| Mức | Bài | Kết quả |
+|---|---|---|
+| M1 | `node webbuild/build.js` (Babel dịch JSX), `import server` trong bộ kiểm, `build_exe.py` | qua |
+| M2 | `test_list_export.py` lượt 1, khoảng 2018–2026: 9 danh sách × xlsx + csv, 2 "Như đang xem", BC007 / BC008 × 2 định dạng: file bản HEAD (v1.12.0) và bản mới trùng từng ô (giá trị, định dạng số, in đậm, sheet, cố định dòng, lọc, độ rộng cột), cùng tên, cùng số dòng | trùng hết |
+| M2 | lượt 2, khoảng 2024–2026 (máy dev còn 706 MB RAM trống, SQL Express co còn 77 MB, lượt 2018–2026 thứ hai hết giờ 120 s ngay ở bản CŨ): tên tự đặt / ký tự cấm / gõ kèm đuôi / trùng tên (2) / toàn khoảng trắng / "Thang 01/2026" → "Thang 01_2026" / "..\..\thoat" → "thoat" trong thư mục xuất; nhiều sheet (mốc hạ còn 500 dòng: 7 sheet, lúc ghi báo 4/7, 7/7); pha `finalize` + `timing.finalize` 1,5 s (close làm chậm 1,5 s); Hủy sau mốc 2.000 dòng cuối → `cancelled`, không còn file; thư mục hỏng → job lỗi `export_dir` | 149 PASS, 3 FAIL không do code mới: ledger.csv và BC007.csv chỉ khác thứ tự các dòng trùng ngày + số CT (tập dòng trùng, Bẫy 20); 1 ca bộ kiểm lấy mẫu pha 20 ms nên không bắt được pha `write` quá ngắn |
+| M3 giao diện | `ui_export.js` (puppeteer, bản dịch sẵn = EXE, 1366×768): nút 1 icon; hộp mở thẳng, thẻ kỳ / đơn vị / "Đang đếm dòng…" → 176 dòng; 3 thẻ định dạng 1 dòng tên; đổi CSV / Tách sheet đổi đuôi + `_TheoDonVi`, tên đã sửa thì giữ; Enter xuất, gửi `filename`; màn xong 176 dòng · 1 sheet · dung lượng · thời gian; Mở file đúng đường dẫn; Như đang xem nhớ qua lần mở sau, gửi `cols`; Tách sheet 2 sheet = 2 đơn vị, tổng 176 dòng; Hủy lúc đang tải (Tách sheet) < 2 s; Hủy job máy chủ lúc ghi; Xuất lại giữ tên; thư mục hỏng (kiểm trước, poll, 409 báo cáo) → hỏi chọn lại → xuất tiếp; 0 dòng khoá nút + Enter không xuất; đếm lỗi vẫn xuất; nhắc bộ lọc đã đổi (thấy ngay không cuộn) + tên file theo bộ lọc mới; Danh mục đối tượng 2 thẻ, không kỳ / đơn vị; DT theo tháng kỳ T1–T10/2026 + gửi khối MONTHS; 0 alert, 0 lỗi JS | **62/62** |
+| M3 kiểm ngược | `ui_mut.js`: gài lại `start()` cũ trong `retryDir` → chọn xong thư mục không xuất lại (2/2 hỏng); trả bản đúng → 3/3 xuất lại. Lượt đầu bộ kiểm chập chờn do tự gõ đường dẫn trước khi hộp thư mục đưa con trỏ về cuối ô (`bad_dir` 400) → đợi 400 ms | qua |
+| M3 hồi quy báo cáo | `ui_report_snap.js` trên bản cũ (build_web v1.12.0 + server HEAD) và bản mới: DOM bước tuỳ chọn hộp Xuất BC005 / BC007 / BC013 (lớp CSS sắp lại) trùng từng phần tử, cùng cỡ hộp 580×560 / 580×658, xuất xong cùng số dòng + sheet | trùng |
+| M3 EXE | `smoke_exe.py`: EXE thật lên sau 2,5 s, `/api/version` 1.12.1, `app.js` trong EXE có hộp mới (3 chỗ "Xuất danh sách", có `startRef.current()`, không còn chữ menu cũ), `/api/export/status` job lạ 404, `check_update` 1.12.1 vs release v1.12.0 → không báo, đóng cửa sổ → EXE + cổng 5050 tắt 4,2 s | qua |
+
+- Chữ giao diện mới soát bằng `kiem_van.py --loai giao-dien`: 0 ĐỎ, 0 VÀNG sau khi rút câu nhắc dữ liệu lớn của Tách sheet (26 → 23 chữ).
+- Build lúc 16:53 05/10 ra v1.12.1, 16.723.550 byte (v1.12.0: 16.722.610), SHA-256 `55987f91…db3b`. Chưa commit, chưa push, chưa phát hành.
+- Chưa làm: chạy trên DB thật của khách; sửa CSV danh sách mất số 0 đầu ở cột mã (điểm 7); chuyển Tách sheet lên máy chủ (CLAUDE.md mục 6 ý 2).
