@@ -1779,6 +1779,8 @@ window.showConnectionLost = function() {
                 { id: 'BANK_NAME',             label: 'Ngân hàng',      sort: 'BANK_ID',             th: 'border-r w-44 px-4', align: 'left', search: 1, td: 'border-r px-4 whitespace-nowrap italic text-indigo-700' },
                 { id: 'BANK_ID_CONTRA',        label: 'Mã NH ĐƯ',       sort: 'BANK_ID_CONTRA',      th: 'border-r w-24',                     search: 1, td: 'border-r text-center font-bold text-teal-700', q: 'pre' },
                 { id: 'BANK_NAME_CONTRA',      label: 'NH đối ứng',     sort: 'BANK_ID_CONTRA',      th: 'border-r w-44 px-4', align: 'left', search: 1, td: 'border-r px-4 whitespace-nowrap italic text-teal-700' },
+                { id: 'COMMENTS',              label: 'Ghi chú',        sort: 'COMMENTS',            th: 'border-r w-56 px-3', align: 'left', search: 2,
+                  td: (r, k) => <td key={k} className="border-r truncate max-w-[280px] px-3 text-slate-500" title={r.COMMENTS || ''}>{r.COMMENTS}</td> },
             ],
         };
 
@@ -1999,6 +2001,8 @@ window.showConnectionLost = function() {
                 { id: 'EMPLOYEE_ID',           label: 'Mã NV',             sort: 'EMPLOYEE_ID',           th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'CURRENCY_ID',           label: 'Tiền',              sort: 'CURRENCY_ID',           th: 'border-r w-16',                      search: 2, td: 'border-r text-center', q: 'pre' },
                 { id: 'STATUS',                label: 'Trạng thái',        sort: 'STATUS',                th: 'border-r w-20',                      search: 1, td: 'border-r text-center' },
+                { id: 'COMMENTS',              label: 'Ghi chú',           sort: 'COMMENTS',              th: 'border-r w-56 px-3', align: 'left',  search: 2,
+                  td: (r, k) => <td key={k} className="border-r truncate max-w-[280px] px-3 text-slate-500" title={r.COMMENTS || ''}>{r.COMMENTS}</td> },
             ],
         };
 
@@ -2043,6 +2047,8 @@ window.showConnectionLost = function() {
                 { id: 'EXPENSE_NAME',      label: 'Tên MCP',       sort: 'EXPENSE_NAME',      th: 'border-r w-36 px-3', align: 'left',  search: 2, td: 'border-r whitespace-nowrap px-3 italic' },
                 { id: 'JOB_ID',            label: 'Mã CV',         sort: 'JOB_ID',            th: 'border-r w-24',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'JOB_NAME',          label: 'Tên công việc', sort: 'JOB_NAME',          th: 'border-r w-36 px-3', align: 'left',  search: 2, td: 'border-r whitespace-nowrap px-3 italic' },
+                { id: 'COMMENTS',          label: 'Ghi chú',       sort: 'COMMENTS',          th: 'border-r w-56 px-3', align: 'left',  search: 2,
+                  td: (r, k) => <td key={k} className="border-r truncate max-w-[280px] px-3 text-slate-500" title={r.COMMENTS || ''}>{r.COMMENTS}</td> },
             ],
         };
 
@@ -2741,6 +2747,7 @@ window.showConnectionLost = function() {
             { id: 'BC006', name: 'BẢNG CÂN ĐỐI PHÁT SINH' },
             { id: 'BC007', name: 'SỔ NHẬT KÝ CHUNG (S03a-DN)' },
             { id: 'BC008', name: 'SỔ CHI TIẾT TÀI KHOẢN' },
+            { id: 'BC014', name: 'SỔ CHI TIẾT TÀI KHOẢN CÔNG NỢ' },
             { id: 'BC011', name: 'TỔNG HỢP PHÁT SINH CÔNG NỢ' },
             { id: 'BC009', name: 'LƯU CHUYỂN TIỀN TỆ - TRỰC TIẾP (B03-DN)' },
             { id: 'BC010', name: 'LƯU CHUYỂN TIỀN TỆ - GIÁN TIẾP (B03-DN)' },
@@ -2752,11 +2759,11 @@ window.showConnectionLost = function() {
         // Bảng cân đối phát sinh (bảng cân đối tài khoản) theo TT200 là Mẫu F01 - DN; BC011 không có mẫu nhà nước.
         const REPORT_FORM_CODE = {
             BC005: 'Mẫu B01 - DN', BC006: 'Mẫu F01 - DN', BC007: 'Mẫu S03a - DN', BC008: 'Mẫu S38 - DN',
-            BC009: 'Mẫu B03 - DN', BC010: 'Mẫu B03 - DN', BC011: '', BC012: 'Mẫu S07 - DN',   // BC013: theo loại — VAT_KINDS
+            BC009: 'Mẫu B03 - DN', BC010: 'Mẫu B03 - DN', BC011: '', BC012: 'Mẫu S07 - DN', BC014: 'Mẫu S38 - DN',   // BC013: theo loại — VAT_KINDS
         };
         const REPORT_TITLE = {
             BC005: 'BẢNG CÂN ĐỐI KẾ TOÁN', BC006: 'BẢNG CÂN ĐỐI PHÁT SINH', BC007: 'SỔ NHẬT KÝ CHUNG',
-            BC008: 'SỔ CHI TIẾT TÀI KHOẢN', BC009: 'BÁO CÁO LƯU CHUYỂN TIỀN TỆ (Trực tiếp)',
+            BC008: 'SỔ CHI TIẾT TÀI KHOẢN', BC014: '2.3 - SỔ CHI TIẾT TÀI KHOẢN CÔNG NỢ', BC009: 'BÁO CÁO LƯU CHUYỂN TIỀN TỆ (Trực tiếp)',
             BC010: 'BÁO CÁO LƯU CHUYỂN TIỀN TỆ (Gián tiếp)', BC011: 'BẢNG TỔNG HỢP PHÁT SINH CÔNG NỢ',
             BC012: 'SỔ TIỀN MẶT VÀ TIỀN NGÂN HÀNG',   // BC013: theo loại — VAT_KINDS
         };
@@ -3647,7 +3654,7 @@ window.showConnectionLost = function() {
         const ReportTab = ({ filters, setFilters, period, timeMode, setTimeMode, meta, onToggleFilter, activeDropdown, setActiveDropdown, reportData: initialReportData, loadReportData, loading, monthList, monthlyData: initialMonthlyData, jobList, jobData: initialJobData, reportType, setReportType, setPendingReportType, setShowClearModal, trialBalanceData, trialBalanceTotal, cashBookData, vatSalesTotals, vatSalesMode, vatKind, onVatView, journalViewMode, setJournalViewMode, showNotice, isDirty }) => {
             const paperScrollRef = React.useRef(null);
             const paperRef = React.useRef(null), sizerRef = React.useRef(null);   // ReportBar đặt zoom vào tờ này
-            const isLandscape = ['BC001', 'BC002', 'BC003', 'BC004', 'BC006', 'BC007', 'BC011', 'BC012', 'BC013'].includes(reportType);
+            const isLandscape = ['BC001', 'BC002', 'BC003', 'BC004', 'BC006', 'BC007', 'BC011', 'BC012', 'BC013', 'BC014'].includes(reportType);
             // BC012 — server trả sẵn các dòng hiển thị của TRANG hiện tại (phân trang 10000 dòng/trang, giống Nhật ký chung).
             const cbRows = (cashBookData && cashBookData.rows) || [];
             const cbPag = (cashBookData && cashBookData.pagination) || { total_rows: 0, total_pages: 1, page: 1 };
@@ -3861,11 +3868,11 @@ window.showConnectionLost = function() {
             // phải nạp hết dòng vào DOM), CSV tải về rồi đọc lại toàn bộ thành text POST ngược lên server, tiến trình giả.
             const REPORT_FILE = {
                 BC005: 'BC005_Bang_Can_Doi_Ke_Toan', BC006: 'BC006_Bang_Can_Doi_Phat_Sinh', BC007: 'BC007_So_Nhat_Ky_Chung',
-                BC008: 'BC008_So_Chi_Tiet_Tai_Khoan', BC009: 'BC009_LCTT_Truc_Tiep', BC010: 'BC010_LCTT_Gian_Tiep',
+                BC008: 'BC008_So_Chi_Tiet_Tai_Khoan', BC014: 'BC014_So_Chi_Tiet_Tai_Khoan_Cong_No', BC009: 'BC009_LCTT_Truc_Tiep', BC010: 'BC010_LCTT_Gian_Tiep',
                 BC011: 'BC011_Tong_Hop_Phat_Sinh_Cong_No', BC012: 'BC012_So_Tien_Mat_Va_Tien_Ngan_Hang',
                 // BC013: theo loại bán ra / mua vào — VAT_KINDS[…].file
             };
-            const isServerExport = ['BC007', 'BC008', 'BC012', 'BC013'].includes(reportType);
+            const isServerExport = ['BC007', 'BC008', 'BC012', 'BC013', 'BC014'].includes(reportType);
             const [showExport, setShowExport] = React.useState(false);
 
             // Chụp bộ lọc + kỳ ở lần NẠP DỮ LIỆU gần nhất. File phải khớp bảng đang hiển thị kể cả khi người dùng đã đổi
@@ -3889,12 +3896,15 @@ window.showConnectionLost = function() {
             const buildReportHeader = (f, p) => {
                 const orgs = meta.orgs || [];
                 const subLines = [];
-                if (['BC008', 'BC011', 'BC012', 'BC013'].includes(reportType)) {
+                if (['BC008', 'BC011', 'BC012', 'BC013', 'BC014'].includes(reportType)) {
                     const def = reportType === 'BC012' ? '111, 112, 113' : vk ? accLabel([vk.acc]) : '—';
                     subLines.push(`Tài khoản: ${f.acc_ids.length > 0 ? accLabel(f.acc_ids) : def}`);
                 }
-                if (reportType === 'BC011') {
+                if (reportType === 'BC011' || reportType === 'BC014') {
                     subLines.push(`Đối tượng: ${f.pr_detail_ids.length > 0 ? f.pr_detail_ids.map(id => { const x = (meta.pr_details || []).find(z => z.id === id); return x ? `${id} - ${x.name}` : id; }).join(', ') : 'Tất cả'}`);
+                }
+                if (reportType === 'BC014' && f.contra_acc_ids && f.contra_acc_ids.length > 0) {
+                    subLines.push(`TK đối ứng: ${accLabel(f.contra_acc_ids)}`);
                 }
                 subLines.push(`Đơn vị: ${f.org_ids.length > 0 ? f.org_ids.map(id => { const o = orgs.find(z => z.id === id); return o ? `${id} - ${o.name}` : id; }).join(', ') : 'Tất cả'}`);
                 const company = meta.company || {};
@@ -3945,7 +3955,7 @@ window.showConnectionLost = function() {
                         if (reportType === 'BC006' || reportType === 'BC011') return trialBalanceData.length + (trialBalanceTotal ? 1 : 0);
                         if (reportType === 'BC009' || reportType === 'BC010') return cfIndicators.length;
                         if (reportType === 'BC007') return (pag.total_rows || 0) + 1;
-                        if (reportType === 'BC008') return (pag.total_rows || 0) + 3;
+                        if (reportType === 'BC008' || reportType === 'BC014') return (pag.total_rows || 0) + 3;
                         if (reportType === 'BC012') return cbPag.total_rows || 0;
                         if (reportType === 'BC013') return v === (vatSalesMode || 'detail') ? (pag.total_rows || 0) + 1 : 0;
                         return 0;
@@ -3955,8 +3965,10 @@ window.showConnectionLost = function() {
                         const parts = [vk ? vk.file : REPORT_FILE[reportType] || reportType];
                         if (reportType === 'BC007') parts.push({ detail: 'ChiTiet', summary: 'TongHop', full: 'DayDuCot' }[v] || 'ChiTiet');
                         if (reportType === 'BC013') parts.push(v === 'summary' ? 'TongHop' : 'ChiTiet');
-                        if (['BC008', 'BC011', 'BC012', 'BC013'].includes(reportType) && f.acc_ids.length > 0)
+                        if (['BC008', 'BC011', 'BC012', 'BC013', 'BC014'].includes(reportType) && f.acc_ids.length > 0)
                             parts.push('TK' + f.acc_ids.slice(0, 3).join('-') + (f.acc_ids.length > 3 ? `+${f.acc_ids.length - 3}` : ''));
+                        if (reportType === 'BC014' && f.pr_detail_ids.length > 0)
+                            parts.push('DT' + f.pr_detail_ids.slice(0, 2).join('-'));
                         if (f.org_ids.length === 1) parts.push('DV' + f.org_ids[0]);
                         else if (f.org_ids.length > 1) parts.push(`${f.org_ids.length}DonVi`);
                         parts.push(p.type === 'month' ? `Thang${String(p.value).padStart(2, '0')}-${p.year}`
@@ -3968,9 +3980,9 @@ window.showConnectionLost = function() {
                     buildBody: (v, format) => {
                         const body = { report_type: reportType, variant: v, format, header: hdr };
                         if (isServerExport) {
-                            // BC007/BC008/BC012/BC013: server tự truy vấn toàn bộ (không phụ thuộc trang đang xem)
+                            // BC007/BC008/BC012/BC013/BC014: server tự truy vấn toàn bộ (không phụ thuộc trang đang xem)
                             body.params = { from_date: f.from_date, to_date: f.to_date, org_ids: f.org_ids, acc_ids: f.acc_ids,
-                                contra_acc_ids: f.contra_acc_ids, tran_no: f.tran_no || '' };
+                                contra_acc_ids: f.contra_acc_ids, pr_detail_ids: f.pr_detail_ids, tran_no: f.tran_no || '' };
                             if (vatShown) body.params.vat_kind = vatShown;   // BC013: loại của dữ liệu đang hiện
                         } else if (reportType === 'BC005') {
                             body.payload = { rows: CDKT_INDICATORS.map(row => ({ id: row.id, name: row.name, type: row.type,
@@ -4000,7 +4012,7 @@ window.showConnectionLost = function() {
                                 onChange={(f, t, md) => { setFilters(p => ({ ...p, from_date: fmtDMY(f), to_date: fmtDMY(t) })); setTimeMode(md); }}
                                 isActive={activeDropdown === 'time'} onToggle={setActiveDropdown} /></div>
                             <div className="ds-slot"><PremiumDropdown label="Đơn vị" items={meta.orgs} selectedItems={filters.org_ids} onSelect={id => onToggleFilter('org_ids', id)} isActive={activeDropdown === 'Đơn vị'} onToggle={setActiveDropdown} /></div>
-                            {(reportType === 'BC008' || reportType === 'BC011' || reportType === 'BC012' || reportType === 'BC013') ? (
+                            {(reportType === 'BC008' || reportType === 'BC011' || reportType === 'BC012' || reportType === 'BC013' || reportType === 'BC014') ? (
                                 <div className="ds-slot"><PremiumDropdown label="Tài khoản" items={meta.accounts} codePrefix selectedItems={filters.acc_ids} onSelect={id => onToggleFilter('acc_ids', id)} isActive={activeDropdown === 'Tài khoản'} onToggle={setActiveDropdown} /></div>
                             ) : null}
                             {reportType === 'BC007' && (
@@ -4017,12 +4029,14 @@ window.showConnectionLost = function() {
                                     <button disabled={loading} onClick={() => { if (vatSalesMode === 'summary' || loading) return; onVatView('summary'); }} className={`${vatSalesMode === 'summary' ? 'is-on' : ''}`}>Tổng hợp</button>
                                 </div>
                             )}
-                            {reportType === 'BC011' ? (
+                            {(reportType === 'BC011' || reportType === 'BC014') ? (
                                 <div className="ds-slot"><PremiumDropdown label="Đối tượng" items={meta.pr_details} selectedItems={filters.pr_detail_ids} onSelect={id => onToggleFilter('pr_detail_ids', id)} isActive={activeDropdown === 'Đối tượng'} onToggle={setActiveDropdown} /></div>
+                            ) : null}
+                            {(reportType === 'BC012' || reportType === 'BC014') ? (
+                                <div className="ds-slot"><PremiumDropdown label="TK đối ứng" items={meta.accounts} codePrefix selectedItems={filters.contra_acc_ids} onSelect={id => onToggleFilter('contra_acc_ids', id)} isActive={activeDropdown === 'TK đối ứng'} onToggle={setActiveDropdown} /></div>
                             ) : null}
                             {reportType === 'BC012' ? (
                                 <>
-                                <div className="ds-slot"><PremiumDropdown label="TK đối ứng" items={meta.accounts} codePrefix selectedItems={filters.contra_acc_ids} onSelect={id => onToggleFilter('contra_acc_ids', id)} isActive={activeDropdown === 'TK đối ứng'} onToggle={setActiveDropdown} /></div>
                                 {/* tran_no là CHUỖI (server lọc TRAN_NO LIKE %...%). Trước 27/09/2026 gọi nhầm onToggleFilter — hàm bật/tắt
                                     phần tử MẢNG — gõ "PC1" thành ['P','PC','P,PC1'] → gửi tran_no=P,PC,P,PC1. */}
                                 <input value={filters.tran_no || ''} onChange={e => { const v = e.target.value; setFilters(p => ({ ...p, tran_no: v })); }} placeholder="Số chứng từ" className="ds-input w-36" />
@@ -4050,7 +4064,7 @@ window.showConnectionLost = function() {
                     {loading && <div className="ds-loading"><div className="ds-loadbar"></div><div className="ds-loadpill"><Icon name="loader" size={14} className="animate-spin"/>Đang kết xuất báo cáo...</div></div>}
                     <div className="flex-1 overflow-auto custom-scrollbar ds-desk px-4 relative" ref={paperScrollRef}>
                         <div ref={sizerRef} className="ds-papersizer">
-                        <div ref={paperRef} className={`report-paper ${isLandscape ? 'paper-landscape' : 'paper-portrait'}`}>
+                        <div ref={paperRef} className={`report-paper ${isLandscape ? 'paper-landscape' : 'paper-portrait'} ${reportType === 'BC014' ? 'bc014-paper' : ''}`}>
                             {/* Khối tiêu đề — screenHeader dùng chung với file Excel xuất ra (buildReportHeader) */}
                             <div className="flex justify-between items-start mb-6">
                                 <div>
@@ -4070,7 +4084,7 @@ window.showConnectionLost = function() {
                                 <div className="text-[9px] text-slate-500 italic">{screenHeader.uom_text}</div>
                             </div>
 
-                            <div className={reportType === 'BC013' ? 'overflow-hidden' : 'overflow-x-auto'}>
+                            <div className={(reportType === 'BC013' || reportType === 'BC014') ? 'overflow-hidden' : 'overflow-x-auto'}>
                                 {(reportType === 'BC006' || reportType === 'BC011' || reportType === 'BC013') && (
                                     <style>{`
                                         .bc006-table { width: 100% !important; min-width: 100% !important; table-layout: fixed; }
@@ -4108,6 +4122,21 @@ window.showConnectionLost = function() {
                                         @media print { @page { size: A4 ${reportType === 'BC007' ? 'landscape' : 'portrait'}; margin: 10mm; } }
                                     `}</style>
                                 )}
+                                {reportType === 'BC014' && (
+                                    <style>{`
+                                        .bc014-paper { width: 297mm !important; min-width: 297mm !important; max-width: 297mm !important; padding: 10mm 12mm !important; box-sizing: border-box !important; }
+                                        .bc014-table { width: 100% !important; min-width: 100% !important; max-width: 100% !important; table-layout: fixed !important; border-collapse: collapse !important; margin: 0 !important; }
+                                        .bc014-table th, .bc014-table td { border: 1px solid #cbd5e1 !important; padding: 4px 3px !important; font-size: 9px !important; line-height: 1.35 !important; box-sizing: border-box !important; word-break: break-word !important; overflow-wrap: anywhere !important; white-space: normal !important; }
+                                        .bc014-table .nowrap-cell { white-space: nowrap !important; word-break: normal !important; overflow-wrap: normal !important; }
+                                        .bc014-table th { background: #f1f5f9 !important; font-weight: 800 !important; text-align: center !important; text-transform: uppercase !important; vertical-align: middle !important; }
+                                        .bc014-table th:last-child, .bc014-table td:last-child { border-right: 1px solid #cbd5e1 !important; }
+                                        .bc014-table tbody tr { content-visibility: auto !important; contain-intrinsic-size: 0 24px !important; }
+                                        @media print {
+                                            @page { size: A4 landscape; margin: 6mm; }
+                                            .report-paper.bc014-paper { padding: 0 !important; margin: 0 !important; box-shadow: none !important; border: none !important; width: 100% !important; max-width: 100% !important; min-width: 100% !important; }
+                                        }
+                                    `}</style>
+                                )}
                                 {reportType === 'BC012' && (
                                     <style>{`
                                         .cashbook-table { width: 100% !important; min-width: 100% !important; table-layout: fixed; }
@@ -4135,7 +4164,7 @@ window.showConnectionLost = function() {
                                         .kqkd-table { border-left: 1px solid #000 !important; border-top: 1px solid #000 !important; }
                                     `}</style>
                                 )}
-                                <table className={`report-table min-w-full ${(reportType === 'BC006' || reportType === 'BC011') ? 'bc006-table' : ''} ${(reportType === 'BC007' || reportType === 'BC008') ? 'nklist-table' : ''} ${reportType === 'BC012' ? 'cashbook-table' : ''} ${['BC001', 'BC002', 'BC003', 'BC004'].includes(reportType) ? 'kqkd-table' : ''} ${reportType === 'BC013' ? 'bc013-table' : ''}`}>
+                                <table className={`report-table min-w-full ${(reportType === 'BC006' || reportType === 'BC011') ? 'bc006-table' : ''} ${(reportType === 'BC007' || reportType === 'BC008') ? 'nklist-table' : ''} ${reportType === 'BC012' ? 'cashbook-table' : ''} ${['BC001', 'BC002', 'BC003', 'BC004'].includes(reportType) ? 'kqkd-table' : ''} ${reportType === 'BC013' ? 'bc013-table' : ''} ${reportType === 'BC014' ? 'bc014-table' : ''}`}>
                                     {(reportType === 'BC006' || reportType === 'BC011') ? (
                                         <>
                                         <thead>
@@ -4569,6 +4598,124 @@ window.showConnectionLost = function() {
                                             })()}
                                         </tbody>
                                         </>
+                                    ) : reportType === 'BC014' ? (
+                                        <>
+                                        <colgroup>
+                                            <col style={{ width: '3.5%' }} />
+                                            <col style={{ width: '5.5%' }} />
+                                            <col style={{ width: '5.5%' }} />
+                                            <col style={{ width: '5.5%' }} />
+                                            <col style={{ width: '5%' }} />
+                                            <col style={{ width: '5.5%' }} />
+                                            <col style={{ width: '8.5%' }} />
+                                            <col style={{ width: '13%' }} />
+                                            <col style={{ width: '4%' }} />
+                                            <col style={{ width: '4.5%' }} />
+                                            <col style={{ width: '6%' }} />
+                                            <col style={{ width: '8.5%' }} />
+                                            <col style={{ width: '8.5%' }} />
+                                            <col style={{ width: '6.5%' }} />
+                                            <col style={{ width: '14.5%' }} />
+                                        </colgroup>
+                                        <thead>
+                                            <tr>
+                                                <th rowSpan="2">Đơn vị</th>
+                                                <th rowSpan="2">Ngày ghi sổ</th>
+                                                <th colSpan="2">Số chứng từ</th>
+                                                <th rowSpan="2">Số hóa đơn</th>
+                                                <th rowSpan="2">Ngày hóa đơn</th>
+                                                <th rowSpan="2">Ghi chú</th>
+                                                <th rowSpan="2">Diễn giải</th>
+                                                <th rowSpan="2">Tk đ/ứ</th>
+                                                <th rowSpan="2">Số lượng</th>
+                                                <th rowSpan="2">Đơn giá</th>
+                                                <th colSpan="2">Số tiền</th>
+                                                <th rowSpan="2">Mã khách</th>
+                                                <th rowSpan="2">Tên khách</th>
+                                            </tr>
+                                            <tr>
+                                                <th>Nợ</th>
+                                                <th>Có</th>
+                                                <th>Nợ</th>
+                                                <th>Có</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {(() => {
+                                                const openDeb = reportData.opening_balance ? reportData.opening_balance.deb : 0;
+                                                const openCrd = reportData.opening_balance ? reportData.opening_balance.crd : 0;
+                                                const openNet = openDeb - openCrd;   // >0 → dư Nợ, <0 → dư Có
+                                                return (
+                                                    <tr className="bg-slate-50 font-black">
+                                                        <td></td>
+                                                        <td></td>
+                                                        <td></td>
+                                                        <td></td>
+                                                        <td></td>
+                                                        <td></td>
+                                                        <td></td>
+                                                        <td className="text-left font-bold text-slate-800">Số dư đầu kỳ</td>
+                                                        <td></td>
+                                                        <td></td>
+                                                        <td></td>
+                                                        <td className="text-right font-black col-value nowrap-cell">{openNet > 0 ? formatNum(openNet) : ''}</td>
+                                                        <td className="text-right font-black col-value nowrap-cell">{openNet < 0 ? formatNum(Math.abs(openNet)) : ''}</td>
+                                                        <td></td>
+                                                        <td></td>
+                                                    </tr>
+                                                );
+                                            })()}
+                                            {pagedDataRows.map((row, idx) => {
+                                                const dc = String(row.debit_credit || '').trim().toUpperCase();
+                                                const isDeb = (dc === 'DEB');
+                                                const isCrd = (dc === 'CRD');
+                                                return (
+                                                <tr key={idx} className="hover:bg-slate-50 border-b border-slate-200">
+                                                    <td className="text-center font-mono">{row.org_id}</td>
+                                                    <td className="text-center nowrap-cell">{row.tran_date}</td>
+                                                    <td className="text-center font-bold">{isDeb ? row.tran_no : ''}</td>
+                                                    <td className="text-center font-bold">{isCrd ? row.tran_no : ''}</td>
+                                                    <td className="text-center">{row.vat_tran_no || ''}</td>
+                                                    <td className="text-center nowrap-cell">{row.vat_tran_date || ''}</td>
+                                                    <td className="text-left">{row.comments || ''}</td>
+                                                    <td className="text-left">{row.description || ''}</td>
+                                                    <td className="text-center font-black col-code">{row.contra_account_id || ''}</td>
+                                                    <td className="text-right font-mono nowrap-cell">{row.quantity ? fmtNum(row.quantity) : ''}</td>
+                                                    <td className="text-right font-mono nowrap-cell">{row.unit_price ? fmtNum(row.unit_price) : ''}</td>
+                                                    <td className="text-right font-black col-value nowrap-cell">{isDeb ? formatNum(row.amount) : ''}</td>
+                                                    <td className="text-right font-black col-value nowrap-cell">{isCrd ? formatNum(row.amount) : ''}</td>
+                                                    <td className="text-left font-mono">{row.pr_detail_id || ''}</td>
+                                                    <td className="text-left">{row.pr_detail_name || ''}</td>
+                                                </tr>
+                                                );
+                                            })}
+                                            <tr className="bg-slate-100 font-black">
+                                                <td colSpan="11" className="text-right uppercase tracking-wider text-xs font-black">Cộng phát sinh trong kỳ</td>
+                                                <td className="text-right font-black col-value nowrap-cell">
+                                                    {formatNum(reportData.period_sums ? reportData.period_sums.deb : 0)}
+                                                </td>
+                                                <td className="text-right font-black col-value nowrap-cell">
+                                                    {formatNum(reportData.period_sums ? reportData.period_sums.crd : 0)}
+                                                </td>
+                                                <td colSpan="2"></td>
+                                            </tr>
+                                            {(() => {
+                                                const totalSumDeb = reportData.period_sums ? reportData.period_sums.deb : 0;
+                                                const totalSumCrd = reportData.period_sums ? reportData.period_sums.crd : 0;
+                                                const openDeb = reportData.opening_balance ? reportData.opening_balance.deb : 0;
+                                                const openCrd = reportData.opening_balance ? reportData.opening_balance.crd : 0;
+                                                const closeNet = (openDeb + totalSumDeb) - (openCrd + totalSumCrd);  // >0 → dư Nợ
+                                                return (
+                                                    <tr className="bg-slate-200 font-black">
+                                                        <td colSpan="11" className="text-right uppercase tracking-wider text-xs font-black text-indigo-700">SỐ DƯ CUỐI KỲ</td>
+                                                        <td className="text-right font-black col-value nowrap-cell text-indigo-700">{closeNet > 0 ? formatNum(closeNet) : ''}</td>
+                                                        <td className="text-right font-black col-value nowrap-cell text-indigo-700">{closeNet < 0 ? formatNum(Math.abs(closeNet)) : ''}</td>
+                                                        <td colSpan="2"></td>
+                                                    </tr>
+                                                );
+                                            })()}
+                                        </tbody>
+                                        </>
                                     ) : (reportType === 'BC009' || reportType === 'BC010') ? (
                                         <>
                                         <thead>
@@ -4643,13 +4790,13 @@ window.showConnectionLost = function() {
 
                     {/* Thanh dưới: phân trang (gõ số trang + Enter) cho BC007/BC008/BC013/BC012 · số dòng · lên/xuống · zoom */}
                     <ReportBar deskRef={paperScrollRef} sizerRef={sizerRef} paperRef={paperRef} landscape={isLandscape}>
-                        {(reportType === 'BC007' || reportType === 'BC008' || reportType === 'BC013') && reportData.pagination && reportData.pagination.total_pages > 1 && (
+                        {(reportType === 'BC007' || reportType === 'BC008' || reportType === 'BC013' || reportType === 'BC014') && reportData.pagination && reportData.pagination.total_pages > 1 && (
                             <PageJumper page={reportData.pagination.page} totalPages={reportData.pagination.total_pages} onGoto={p => loadReportData(p)} compact />
                         )}
                         {reportType === 'BC012' && cbPag.total_pages > 1 && (
                             <PageJumper page={cbPag.page} totalPages={cbPag.total_pages} onGoto={p => loadReportData(p)} compact />
                         )}
-                        {(reportType === 'BC007' || reportType === 'BC008' || reportType === 'BC013') && reportData.pagination && reportData.pagination.total_rows > 0 && (
+                        {(reportType === 'BC007' || reportType === 'BC008' || reportType === 'BC013' || reportType === 'BC014') && reportData.pagination && reportData.pagination.total_rows > 0 && (
                             <span className="ds-meta"><b>{reportData.pagination.total_rows.toLocaleString('vi-VN')}</b> dòng</span>
                         )}
                         {reportType === 'BC012' && cbPag.total_rows > 0 && (
@@ -4889,6 +5036,7 @@ window.showConnectionLost = function() {
             BC011: ['TH phát sinh công nợ', 'Tổng hợp phát sinh công nợ'],
             BC012: ['Sổ quỹ tiền mặt, NH', 'Sổ tiền mặt và tiền ngân hàng'],
             BC013: ['Bảng kê thuế GTGT', 'Bảng kê thuế GTGT bán ra / mua vào'],
+            BC014: ['Sổ chi tiết TK công nợ', 'Sổ chi tiết tài khoản công nợ'],
         };
         const NAV_DOCS = DOC_TABS.map(t => ({ id: t.id, label: (NAV_DOC_META[t.id] || [t.name])[0], icon: (NAV_DOC_META[t.id] || [])[1] || 'table' }));
         const NAV_REPORTS = [...REPORT_TYPES].sort((a, b) => a.id.localeCompare(b.id))
@@ -5596,7 +5744,7 @@ window.showConnectionLost = function() {
                 const cs = searchOverride !== null ? searchOverride : colSearch;
                 // Các field TEXT dài cần tối thiểu 2 ký tự để tránh scan toàn bảng
                 // Các field ID ngắn cho phép 1 ký tự (ví dụ: gõ "5" tìm TK bắt đầu bằng 5)
-                const LONG_FIELDS = new Set(['s_desc','s_pr_name','s_exp_name','s_org_name','s_item_name','s_prod_name','tran_no']);
+                const LONG_FIELDS = new Set(['s_desc','s_comments','s_pr_name','s_exp_name','s_org_name','s_item_name','s_prod_name','tran_no']);
                 const take = (key, val) => {
                     const v = (val || '').trim();
                     if (!v) return null;
@@ -5610,6 +5758,7 @@ window.showConnectionLost = function() {
                     s_acc_id:   take('s_acc_id',   cs.ACCOUNT_ID),
                     s_contra_id:take('s_contra_id',cs.ACCOUNT_ID_CONTRA),
                     s_desc:     take('s_desc',     cs.DESCRIPTION),
+                    s_comments: take('s_comments', cs.COMMENTS),
                     s_pr_name:  take('s_pr_name',  cs.PR_DETAIL_NAME),
                     s_exp_name: take('s_exp_name', cs.EXPENSE_NAME),
                     s_org_id:   take('s_org_id',   cs.ORGANIZATION_ID),
@@ -6019,7 +6168,7 @@ window.showConnectionLost = function() {
 
             const buildVoucherQuery = (targetPage = 1, targetPageSize = filters.page_size, searchOverride = null, extra = {}) => {
                 const cs = searchOverride !== null ? searchOverride : voucherColSearch;
-                const LONG = new Set(['s_desc','s_org_name','s_pr_debit','s_pr_credit','s_contact','tran_no','s_address']);
+                const LONG = new Set(['s_desc','s_comments','s_org_name','s_pr_debit','s_pr_credit','s_contact','tran_no','s_address']);
                 const take = (k,v) => { const x = (v||'').trim(); if (!x) return null; if (LONG.has(k) && x.length < 2) return null; return x; };
                 const sp = {
                     tran_no:      take('tran_no',      cs.TRAN_NO),
@@ -6029,6 +6178,7 @@ window.showConnectionLost = function() {
                     s_acc_debit:  take('s_acc_debit',  cs.ACCOUNT_ID_DEBIT),
                     s_acc_credit: take('s_acc_credit', cs.ACCOUNT_ID_CREDIT),
                     s_desc:       take('s_desc',       cs.DESCRIPTION),
+                    s_comments:   take('s_comments',   cs.COMMENTS),
                     s_pr_debit:   take('s_pr_debit',   cs.PR_DETAIL_NAME_DEBIT),
                     s_pr_credit:  take('s_pr_credit',  cs.PR_DETAIL_NAME_CREDIT),
                     s_contact:    take('s_contact',    cs.CONTACT_PERSON),
@@ -6128,7 +6278,7 @@ window.showConnectionLost = function() {
 
             const buildPurchaseQuery = (targetPage = 1, targetPageSize = filters.page_size, searchOverride = null, extra = {}) => {
                 const cs = searchOverride !== null ? searchOverride : purchaseColSearch;
-                const LONG = new Set(['s_desc','s_org_name','s_wh_name','s_exp_name','s_job_name','s_pr_name','tran_no','s_inv_no','s_po_no']);
+                const LONG = new Set(['s_desc','s_comments','s_org_name','s_wh_name','s_exp_name','s_job_name','s_pr_name','tran_no','s_inv_no','s_po_no']);
                 const take = (k,v) => {
                     const x = (v||'').trim();
                     if (!x) return null;
@@ -6146,6 +6296,7 @@ window.showConnectionLost = function() {
                     s_wh_name:     take('s_wh_name',     cs.WAREHOUSE_NAME),
                     s_item_id:     take('s_item_id',     cs.ITEM_ID),
                     s_desc:        take('s_desc',        cs.DESCRIPTION),
+                    s_comments:    take('s_comments',    cs.COMMENTS),
                     s_inv_no:      take('s_inv_no',      cs.VAT_TRAN_NO),
                     s_po_no:       take('s_po_no',       cs.PO_TRAN_NO),
                     s_exp_id:      take('s_exp_id',      cs.EXPENSE_ID),
@@ -6199,7 +6350,7 @@ window.showConnectionLost = function() {
                 });
 
                 // Add purchase specific query logic
-                const LONG = new Set(['s_desc','s_org_name','s_wh_name','s_exp_name','s_job_name','s_pr_name','tran_no','s_inv_no','s_po_no']);
+                const LONG = new Set(['s_desc','s_comments','s_org_name','s_wh_name','s_exp_name','s_job_name','s_pr_name','tran_no','s_inv_no','s_po_no']);
                 const take = (k,v) => {
                     const x = (v||'').trim();
                     if (!x) return null;
@@ -6217,6 +6368,7 @@ window.showConnectionLost = function() {
                     s_wh_name:     take('s_wh_name',     cs.WAREHOUSE_NAME),
                     s_item_id:     take('s_item_id',     cs.ITEM_ID),
                     s_desc:        take('s_desc',        cs.DESCRIPTION),
+                    s_comments:    take('s_comments',    cs.COMMENTS),
                     s_inv_no:      take('s_inv_no',      cs.VAT_TRAN_NO),
                     s_po_no:       take('s_po_no',       cs.PO_TRAN_NO),
                     s_exp_id:      take('s_exp_id',      cs.EXPENSE_ID),
@@ -6798,7 +6950,8 @@ window.showConnectionLost = function() {
                 ['JOB_ID_CONTRA','Mã CV ĐƯ'],['JOB_NAME_CONTRA','Công việc ĐƯ'],
                 ['PRODUCT_ID','Mã SP'],['PRODUCT_NAME','Sản phẩm'],
                 ['BANK_ID','Mã NH'],['BANK_NAME','Ngân hàng'],
-                ['BANK_ID_CONTRA','Mã NH ĐƯ'],['BANK_NAME_CONTRA','NH đối ứng']
+                ['BANK_ID_CONTRA','Mã NH ĐƯ'],['BANK_NAME_CONTRA','NH đối ứng'],
+                ['COMMENTS','Ghi chú']
             ];
             const WAREHOUSE_EXPORT_COLS = [
                 ['ISSUE_RECEIVE','N/X'],
@@ -6841,7 +6994,8 @@ window.showConnectionLost = function() {
                 ['ACCOUNT_ID_COST','TK kho'],
                 ['PR_DETAIL_ID','Mã đối tượng'],['PR_DETAIL_NAME','Tên đối tượng'],
                 ['EXPENSE_ID','Mã MCP'],['EXPENSE_NAME','Tên MCP'],
-                ['JOB_ID','Mã công việc'],['JOB_NAME','Tên công việc']
+                ['JOB_ID','Mã công việc'],['JOB_NAME','Tên công việc'],
+                ['COMMENTS','Ghi chú']
             ];
 
             const SALE_EXPORT_COLS = [
@@ -6877,7 +7031,8 @@ window.showConnectionLost = function() {
                 ['BANK_NAME_DEBIT','Ngân hàng'],['BANK_ACCOUNT_DEBIT','TK Ngân hàng'],
                 ['BANK_NAME_CREDIT','Ngân hàng đối ứng'],['BANK_ACCOUNT_CREDIT','TKNH đối ứng'],
                 ['CONTACT_PERSON','Người nộp/nhận'],['ADDRESS','Địa chỉ'],['REFERENCE_NO','Số tham chiếu'],
-                ['EMPLOYEE_ID','Mã NV'],['CURRENCY_ID','Tiền tệ'],['STATUS','Trạng thái']
+                ['EMPLOYEE_ID','Mã NV'],['CURRENCY_ID','Tiền tệ'],['STATUS','Trạng thái'],
+                ['COMMENTS','Ghi chú']
             ];
 
             const INCOME_ALLOC_EXPORT_COLS = [
@@ -7020,7 +7175,7 @@ window.showConnectionLost = function() {
                     const map = {
                         s_date:cs.TRAN_DATE, tran_no:cs.TRAN_NO, s_tran_id:cs.TRAN_ID,
                         s_acc_id:cs.ACCOUNT_ID, s_contra_id:cs.ACCOUNT_ID_CONTRA,
-                        s_desc:cs.DESCRIPTION, s_pr_name:cs.PR_DETAIL_NAME,
+                        s_desc:cs.DESCRIPTION, s_comments:cs.COMMENTS, s_pr_name:cs.PR_DETAIL_NAME,
                         s_exp_name:cs.EXPENSE_NAME, s_org_id:cs.ORGANIZATION_ID,
                         s_org_name:cs.ORGANIZATION_NAME, s_item_name:cs.ITEM_NAME,
                         s_prod_name:cs.PRODUCT_NAME
@@ -7278,8 +7433,8 @@ window.showConnectionLost = function() {
                 if (typeof pageArg === 'number' && pageArg !== filters.page) setFilters(f => ({ ...f, page: pageArg }));
                 if (abortRef.current) abortRef.current.abort();
                 // BC008 (sổ chi tiết) bắt buộc chọn tài khoản
-                if (reportType === 'BC008' && filters.acc_ids.length === 0) {
-                    showNotice('Vui lòng chọn Tài khoản để xem Sổ chi tiết tài khoản.', 'Chưa chọn tài khoản');
+                if ((reportType === 'BC008' || reportType === 'BC014') && filters.acc_ids.length === 0) {
+                    showNotice(`Vui lòng chọn Tài khoản để xem ${reportType === 'BC014' ? 'Sổ chi tiết tài khoản công nợ' : 'Sổ chi tiết tài khoản'}.`, 'Chưa chọn tài khoản');
                     return;
                 }
                 // BC011 (tổng hợp công nợ) bắt buộc chọn tài khoản
@@ -7289,9 +7444,9 @@ window.showConnectionLost = function() {
                 }
                 const _ctrl = new AbortController(); abortRef.current = _ctrl;
                 setLoading(true);
-                // BC007/BC008 render dạng bảng thường (không ảo hoá) → giới hạn 1000 dòng/trang
+                // BC007/BC008/BC014 render dạng bảng thường (không ảo hoá) → giới hạn 1000 dòng/trang
                 // cho mượt, dùng nút phân trang để xem tiếp (xuất Excel vẫn lấy toàn bộ).
-                const rptPageSize = (reportType === 'BC007' || reportType === 'BC008' || reportType === 'BC013') ? Math.min(filters.page_size, 1000) : filters.page_size;
+                const rptPageSize = (reportType === 'BC007' || reportType === 'BC008' || reportType === 'BC013' || reportType === 'BC014') ? Math.min(filters.page_size, 1000) : filters.page_size;
                 const query = new URLSearchParams({ from_date: filters.from_date, to_date: filters.to_date, org_ids: filters.org_ids.join(','), job_ids: filters.job_ids.join(','), page: _page, page_size: rptPageSize });
                 try {
                     if (reportType === 'BC006') {
@@ -7332,6 +7487,22 @@ window.showConnectionLost = function() {
                             markTabApplied('report');
                         } else {
                             alert('Lỗi xem Sổ chi tiết: ' + (res.message || 'không có dữ liệu'));
+                        }
+                    } else if (reportType === 'BC014') {
+                        const q14 = new URLSearchParams({
+                            ...Object.fromEntries(query.entries()),
+                            account_id: filters.acc_ids.join(','),
+                            pr_detail_ids: filters.pr_detail_ids.join(','),
+                            contra_acc_ids: filters.contra_acc_ids.join(',')
+                        });
+                        const r = await fetch(`/api/debt_account_details?${q14.toString()}`, { signal: abortRef.current.signal });
+                        if (r.status === 401) { setIsLoggedIn(false); return; }
+                        const res = await r.json();
+                        if (res.status === 'ok') {
+                            setReportData(res);
+                            markTabApplied('report');
+                        } else {
+                            alert('Lỗi xem Sổ chi tiết TK công nợ: ' + (res.message || 'không có dữ liệu'));
                         }
                     } else if (reportType === 'BC011') {
                         const q2 = new URLSearchParams({ from_date: filters.from_date, to_date: filters.to_date, org_ids: filters.org_ids.join(','), acc_ids: filters.acc_ids.join(','), pr_detail_ids: filters.pr_detail_ids.join(',') });

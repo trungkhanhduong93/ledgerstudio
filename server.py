@@ -44,7 +44,7 @@ def with_db_lock(f):
             return resp
     return decorated_function
 
-from flask import Flask, jsonify, request, session, send_from_directory
+from flask import Flask, jsonify, request, session, send_from_directory, has_request_context
 from flask_cors import CORS
 from datetime import datetime, date
 import os
@@ -1020,6 +1020,7 @@ LEDGER_SORT_WHITELIST = {
     "ITEM_ID":           "L.ITEM_ID",
     "PRODUCT_ID":        "L.PRODUCT_ID",
     "EXPENSE_ID":        "L.EXPENSE_ID",
+    "COMMENTS":          "CAST(L.COMMENTS AS NVARCHAR(4000))",   # v1.11.10: cột Ghi chú
 }
 
 PURCHASE_SORT_WHITELIST = {col: f"P.{col}" for col in [
@@ -1206,6 +1207,7 @@ def _build_where(request_args):
     ]
     TEXT_CONTAINS_FIELDS = [
         ("L.DESCRIPTION",      "s_desc"),
+        ("L.COMMENTS",         "s_comments"),   # v1.11.10: cột Ghi chú
     ]
 
     for field, arg in ID_PREFIX_FIELDS:
@@ -1680,6 +1682,8 @@ def _build_purchase_where(request_args):
             clauses.append("CONVERT(VARCHAR(10), P.VAT_TRAN_DATE, 103) LIKE ?")
             params.append(f"%{vd}%")
 
+    _comments_where(request_args, "PURCHASE_VIEW", "P", clauses, params)   # v1.11.10: cột Ghi chú
+
     n_clauses, n_params = _num_prefix_where(request_args, PURCHASE_NUM_SEARCH)
     clauses += n_clauses
     params += n_params
@@ -1727,7 +1731,7 @@ def get_purchase():
         skip_count  = page > 1 and known_total is not None and known_sums is not None and not export_all
 
         where_sql, params = _build_purchase_where(request.args)
-        order_by_sql = _resolve_order_by(request.args, PURCHASE_SORT_WHITELIST, "P.TRAN_DATE DESC, P.TRAN_NO")
+        order_by_sql = _resolve_order_by(request.args, _comments_sort(PURCHASE_SORT_WHITELIST, "PURCHASE_VIEW", "P"), "P.TRAN_DATE DESC, P.TRAN_NO")
         col_list = ", ".join(f"P.{c}" for c in PURCHASE_BASE_COLUMNS)
         # JOIN bảng dimension để lấy ORGANIZATION_NAME, EXPENSE_NAME
         # (WAREHOUSE_NAME, JOB_NAME đã có sẵn trong PURCHASE_VIEW)
@@ -1736,7 +1740,8 @@ def get_purchase():
             LEFT JOIN dbo.DM_ORGANIZATION O WITH (NOLOCK) ON P.ORGANIZATION_ID = O.ORGANIZATION_ID
             LEFT JOIN dbo.DM_EXPENSE      E WITH (NOLOCK) ON P.EXPENSE_ID      = E.EXPENSE_ID
         """
-        SELECT_LIST = f"{col_list}, O.ORGANIZATION_NAME AS ORGANIZATION_NAME, E.EXPENSE_NAME AS EXPENSE_NAME"
+        SELECT_LIST = (f"{col_list}, O.ORGANIZATION_NAME AS ORGANIZATION_NAME, E.EXPENSE_NAME AS EXPENSE_NAME, "
+                       f"{_comments_select('PURCHASE_VIEW', 'P')}")
 
         conn   = get_connection()
         cursor = conn.cursor()
@@ -1864,7 +1869,7 @@ _wh_comments_cache = {}
 
 
 def _wh_has_comments():
-    db = session.get('db_config', {}).get('database', 'N/A')
+    db = session.get('db_config', {}).get('database', 'N/A') if has_request_context() else 'N/A'
     have = _wh_comments_cache.get(db)
     if have is None:
         try:
@@ -1886,6 +1891,54 @@ def _wh_sort_whitelist():
     if _wh_has_comments():
         return WAREHOUSE_SORT_WHITELIST
     return {k: v for k, v in WAREHOUSE_SORT_WHITELIST.items() if k != "COMMENTS"}
+
+
+# Ghi chú phiếu nhập mua (PURCHASE_VIEW.COMMENTS = PURCHASE.COMMENTS) + phiếu tiền (VOUCHER.COMMENTS) — v1.11.10, Trum 04/10.
+# Cột chuẩn iPOS (header phiếu) nhưng vẫn dò INFORMATION_SCHEMA 1 lần mỗi DB như kho (Bẫy 5). CAST NVARCHAR(4000):
+# DB cũ có thể để ntext → ORDER BY báo lỗi.
+_col_exists_cache = {}
+
+
+def _db_has_col(table, col):
+    db = session.get('db_config', {}).get('database', 'N/A') if has_request_context() else 'N/A'
+    key = (db, table, col)
+    have = _col_exists_cache.get(key)
+    if have is None:
+        try:
+            cur = get_connection().cursor()
+            cur.execute("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = ? AND COLUMN_NAME = ?", [table, col])
+            have = bool(cur.fetchone()[0])
+            _col_exists_cache[key] = have
+        except Exception:
+            return False   # dò không được: coi như thiếu, không cache — lần sau dò lại
+    return have
+
+
+def _comments_select(table, alias):
+    """Biểu thức SELECT cột Ghi chú: có cột → CAST(alias.COMMENTS), thiếu → NULL (màn hình trống cột)."""
+    if _db_has_col(table, "COMMENTS"):
+        return f"CAST({alias}.COMMENTS AS NVARCHAR(4000)) AS COMMENTS"
+    return "CAST(NULL AS NVARCHAR(200)) AS COMMENTS"
+
+
+def _comments_sort(whitelist, table, alias):
+    """Whitelist sắp xếp + COMMENTS khi DB có cột."""
+    if not _db_has_col(table, "COMMENTS"):
+        return whitelist
+    return {**whitelist, "COMMENTS": f"CAST({alias}.COMMENTS AS NVARCHAR(4000))"}
+
+
+def _comments_where(request_args, table, alias, clauses, params):
+    """Ô lọc cột Ghi chú (s_comments, LIKE '%x%'). DB thiếu cột → 1=0."""
+    val = request_args.get("s_comments", "").strip()
+    if not val:
+        return
+    if _db_has_col(table, "COMMENTS"):
+        clauses.append(f"{alias}.COMMENTS LIKE ?")
+        params.append(f"%{_like_literal(val)}%")
+    else:
+        clauses.append("1=0")
+
 
 def _build_warehouse_where(request_args):
     f_date = request_args.get("from_date", "01/01/2026")
@@ -2106,7 +2159,7 @@ def _export_dir():
 # Khoá màn hình = khoá kind của App (/api/<kind>/stream_csv) + mã báo cáo — thêm tab/báo cáo thì thêm vào đây + EXPORT_SCREENS (index.html).
 _EXPORT_SCREENS = ('ledger', 'sale', 'voucher', 'purchase', 'warehouse', 'income_alloc', 'income_alloc_month',
                    'warehouse_balance', 'pr_detail',
-                   'BC005', 'BC006', 'BC007', 'BC008', 'BC009', 'BC010', 'BC011', 'BC012', 'BC013')
+                   'BC005', 'BC006', 'BC007', 'BC008', 'BC009', 'BC010', 'BC011', 'BC012', 'BC013', 'BC014')
 # Excel không mở được file có đường dẫn đầy đủ > 218 ký tự; tên file xuất thường ~40 ký tự → chặn thư mục quá sâu ngay lúc khai.
 _EXPORT_DIR_MAX = 170
 _EXPORT_DIR_WAIT = 6          # giây chờ tối đa khi kiểm 1 thư mục (ổ mạng mất kết nối có thể treo vài chục giây)
@@ -3167,6 +3220,7 @@ LEDGER_CSV_COLS = [
     ("PRODUCT_ID","Mã SP"), ("PRODUCT_NAME","Sản phẩm"),
     ("BANK_ID","Mã NH"), ("BANK_NAME","Ngân hàng"),
     ("BANK_ID_CONTRA","Mã NH ĐƯ"), ("BANK_NAME_CONTRA","NH đối ứng"),
+    ("COMMENTS","Ghi chú"),   # v1.11.10
 ]
 
 
@@ -3291,6 +3345,7 @@ def get_ledger_stream_csv():
                 prod_id or '', prod_name or '',
                 bank_id or '', bank_name or '',
                 bank_id_contra or '', bank_name_contra or '',
+                comments or '',
             ]
             return out if pick is None else [out[i] for i in pick]
 
@@ -3317,6 +3372,7 @@ PURCHASE_CSV_COLS = [
     ("PR_DETAIL_ID","Mã đối tượng"), ("PR_DETAIL_NAME","Tên đối tượng"),
     ("EXPENSE_ID","Mã MCP"), ("EXPENSE_NAME","Tên MCP"),
     ("JOB_ID","Mã công việc"), ("JOB_NAME","Tên công việc"),
+    ("COMMENTS","Ghi chú"),   # v1.11.10
 ]
 
 
@@ -3348,7 +3404,7 @@ def get_purchase_stream_csv():
         args = request.args
         total_estimate = int(args.get("total", 0) or 0)
         where_sql, params = _build_purchase_where(args)
-        order_by_sql = _resolve_order_by(args, PURCHASE_SORT_WHITELIST, "P.TRAN_DATE DESC, P.TRAN_NO")
+        order_by_sql = _resolve_order_by(args, _comments_sort(PURCHASE_SORT_WHITELIST, "PURCHASE_VIEW", "P"), "P.TRAN_DATE DESC, P.TRAN_NO")
 
         col_list = ", ".join(f"P.{c}" for c in PURCHASE_BASE_COLUMNS)
         JOIN_SQL = """
@@ -3356,7 +3412,8 @@ def get_purchase_stream_csv():
             LEFT JOIN dbo.DM_ORGANIZATION O WITH (NOLOCK) ON P.ORGANIZATION_ID = O.ORGANIZATION_ID
             LEFT JOIN dbo.DM_EXPENSE      E WITH (NOLOCK) ON P.EXPENSE_ID      = E.EXPENSE_ID
         """
-        SELECT_LIST = f"{col_list}, O.ORGANIZATION_NAME AS ORGANIZATION_NAME, E.EXPENSE_NAME AS EXPENSE_NAME"
+        SELECT_LIST = (f"{col_list}, O.ORGANIZATION_NAME AS ORGANIZATION_NAME, E.EXPENSE_NAME AS EXPENSE_NAME, "
+                       f"{_comments_select('PURCHASE_VIEW', 'P')}")
         sql = f"SELECT {SELECT_LIST} {JOIN_SQL} WHERE {where_sql}{_CHUNK_MARK} ORDER BY {order_by_sql}"
         day_split = _list_day_split(order_by_sql, "P.TRAN_DATE", JOIN_SQL, where_sql, params)
         cols = _pick_export_cols(args, PURCHASE_CSV_COLS, TRAN_NAME_EXPORT_COL)
@@ -4443,6 +4500,15 @@ VOUCHER_NUM_COLS  = ("AMOUNT",)
 VOUCHER_DATE_COLS = ("TRAN_DATE",)
 
 
+def _voucher_select():
+    """VOUCHER_SELECT + Ghi chú phiếu (H.COMMENTS, v1.11.10) — DB thiếu cột thì NULL."""
+    return f"{VOUCHER_SELECT}, {_comments_select('VOUCHER', 'H')}"
+
+
+def _voucher_sort_whitelist():
+    return _comments_sort(VOUCHER_SORT_WHITELIST, "VOUCHER", "H")
+
+
 def _build_voucher_where(request_args):
     """WHERE + params cho VOUCHER (alias H) ⋈ VOUCHER_DETAIL (alias D)."""
     f_date = request_args.get("from_date", "01/01/2026")
@@ -4497,6 +4563,8 @@ def _build_voucher_where(request_args):
         val = request_args.get(arg, "").strip()
         if val:
             clauses.append(f"{field} LIKE ?"); params.append(f"%{val}%")
+
+    _comments_where(request_args, "VOUCHER", "H", clauses, params)   # v1.11.10: cột Ghi chú
 
     n_clauses, n_params = _num_prefix_where(request_args, VOUCHER_NUM_SEARCH)
     clauses += n_clauses
@@ -5449,12 +5517,12 @@ def get_voucher():
         skip_count  = page > 1 and known_total is not None and known_sums is not None and not export_all
 
         where_sql, params = _build_voucher_where(request.args)
-        order_by_sql = _resolve_order_by(request.args, VOUCHER_SORT_WHITELIST, "H.TRAN_DATE DESC, H.TRAN_NO")
+        order_by_sql = _resolve_order_by(request.args, _voucher_sort_whitelist(), "H.TRAN_DATE DESC, H.TRAN_NO")
 
         cursor = get_connection().cursor()
 
         if export_all:
-            cursor.execute(f"SELECT {VOUCHER_SELECT} {VOUCHER_FROM} WHERE {where_sql} ORDER BY {order_by_sql}", params)
+            cursor.execute(f"SELECT {_voucher_select()} {VOUCHER_FROM} WHERE {where_sql} ORDER BY {order_by_sql}", params)
             columns  = [c[0] for c in cursor.description]
             raw_rows = cursor.fetchall()
             total_rows = len(raw_rows)
@@ -5474,7 +5542,7 @@ def get_voucher():
 
             offset = (page - 1) * page_size
             cursor.execute(
-                f"SELECT {VOUCHER_SELECT} {VOUCHER_FROM} WHERE {where_sql} ORDER BY {order_by_sql} "
+                f"SELECT {_voucher_select()} {VOUCHER_FROM} WHERE {where_sql} ORDER BY {order_by_sql} "
                 f"OFFSET ? ROWS FETCH NEXT ? ROWS ONLY", params + [offset, page_size])
             columns  = [c[0] for c in cursor.description]
             raw_rows = cursor.fetchall()
@@ -5511,6 +5579,7 @@ VOUCHER_CSV_COLS = [
     ("BANK_NAME_CREDIT","Ngân hàng đối ứng"), ("BANK_ACCOUNT_CREDIT","TKNH đối ứng"),
     ("CONTACT_PERSON","Người nộp/nhận"), ("ADDRESS","Địa chỉ"), ("REFERENCE_NO","Số tham chiếu"),
     ("EMPLOYEE_ID","Mã NV"), ("CURRENCY_ID","Tiền tệ"), ("STATUS","Trạng thái"),
+    ("COMMENTS","Ghi chú"),   # v1.11.10
 ]
 
 
@@ -5536,8 +5605,8 @@ def get_voucher_stream_csv():
         args = request.args
         total_estimate = int(args.get("total", 0) or 0)
         where_sql, params = _build_voucher_where(args)
-        order_by_sql = _resolve_order_by(args, VOUCHER_SORT_WHITELIST, "H.TRAN_DATE DESC, H.TRAN_NO")
-        sql = f"SELECT {VOUCHER_SELECT} {VOUCHER_FROM} WHERE {where_sql} ORDER BY {order_by_sql}"
+        order_by_sql = _resolve_order_by(args, _voucher_sort_whitelist(), "H.TRAN_DATE DESC, H.TRAN_NO")
+        sql = f"SELECT {_voucher_select()} {VOUCHER_FROM} WHERE {where_sql} ORDER BY {order_by_sql}"
 
         # Map tên/bank chuẩn bị sẵn (chạy 1 lần) để transform per-row khỏi query DB
         db_name = session.get('db_config', {}).get('database', 'N/A')
@@ -7365,6 +7434,164 @@ def get_account_details():
         return jsonify({"status": "error", "message": msg}), 500
 
 
+@app.route("/api/debt_account_details")
+@with_db_lock
+def get_debt_account_details():
+    """BC014 — Sổ chi tiết tài khoản công nợ (nguồn: LEDGER_VIEW + BALANCE_VIEW).
+    Hỗ trợ lọc theo Tài khoản (bắt buộc), Đối tượng, TK đối ứng, Đơn vị, Ngày chứng từ.
+    Trả về dữ liệu phân trang 15 cột + số dư đầu kỳ, tổng phát sinh Nợ/Có."""
+    try:
+        f_date = request.args.get("from_date")
+        t_date = request.args.get("to_date")
+        account_id = request.args.get("account_id", "").strip()
+        org_ids = [v for v in request.args.get("org_ids", "").split(",") if v]
+        pr_ids = [v for v in request.args.get("pr_detail_ids", "").split(",") if v]
+        contra_ids = [v for v in request.args.get("contra_acc_ids", "").split(",") if v]
+
+        page = int(request.args.get("page", 1))
+        page_size = int(request.args.get("page_size", 10000))
+        export_all = page_size <= 0
+        if export_all:
+            page = 1
+
+        if not account_id:
+            return jsonify({"status": "error", "message": "Vui lòng chọn tài khoản!"}), 400
+
+        from_dt = datetime.strptime(f_date, "%d/%m/%Y").date()
+        to_dt = datetime.strptime(t_date, "%d/%m/%Y").date()
+        first_day_of_year = date(from_dt.year, 1, 1).strftime("%Y%m%d")
+
+        _oc, org_params = _org_filter_sql(org_ids, "ORGANIZATION_ID")
+        org_where = (" AND " + _oc) if _oc else ""
+
+        pr_where, pr_params = "", []
+        if pr_ids:
+            pr_where = f" AND ISNULL(PR_DETAIL_ID, '') IN ({','.join(['?'] * len(pr_ids))})"
+            pr_params = list(pr_ids)
+
+        contra_where, contra_params = "", []
+        if contra_ids:
+            contra_where = " AND (" + " OR ".join(["ACCOUNT_ID_CONTRA LIKE ?"] * len(contra_ids)) + ")"
+            contra_params = [c + "%" for c in contra_ids]
+
+        cur = get_connection().cursor()
+        acc_clause, acc_params = _acc_like_sql(account_id)
+
+        # 1. Số dư đầu kỳ (theo Tài khoản + Đối tượng + Đơn vị)
+        open_bal_deb = 0.0
+        open_bal_crd = 0.0
+        sql_open = f"""
+            SELECT SUM(CASE WHEN DEBIT_CREDIT='DEB' THEN AMOUNT ELSE 0 END),
+                   SUM(CASE WHEN DEBIT_CREDIT='CRD' THEN AMOUNT ELSE 0 END)
+            FROM dbo.BALANCE_VIEW WITH (NOLOCK)
+            WHERE {acc_clause} AND TRAN_DATE = ? {org_where} {pr_where}
+        """
+        cur.execute(sql_open, acc_params + [first_day_of_year] + org_params + pr_params)
+        r_open = cur.fetchone()
+        if r_open:
+            open_bal_deb += float(r_open[0] or 0)
+            open_bal_crd += float(r_open[1] or 0)
+
+        if from_dt > date(from_dt.year, 1, 1):
+            sql_lk = f"""
+                SELECT SUM(CASE WHEN DEBIT_CREDIT='DEB' THEN AMOUNT ELSE 0 END),
+                       SUM(CASE WHEN DEBIT_CREDIT='CRD' THEN AMOUNT ELSE 0 END)
+                FROM dbo.LEDGER_VIEW WITH (NOLOCK)
+                WHERE {acc_clause} AND TRAN_DATE >= ? AND TRAN_DATE < ? {org_where} {pr_where}
+            """
+            cur.execute(sql_lk, acc_params + [first_day_of_year, from_dt.strftime("%Y%m%d")] + org_params + pr_params)
+            r_lk = cur.fetchone()
+            if r_lk:
+                open_bal_deb += float(r_lk[0] or 0)
+                open_bal_crd += float(r_lk[1] or 0)
+
+        # 2. Phát sinh trong kỳ
+        base_params = acc_params + [from_dt.strftime("%Y%m%d"), to_dt.strftime("%Y%m%d")] + org_params + pr_params + contra_params
+        offset = (page - 1) * page_size
+
+        stats_sql = f"""
+            WITH CTE AS (
+                SELECT DEBIT_CREDIT, AMOUNT,
+                       ROW_NUMBER() OVER (ORDER BY TRAN_DATE, TRAN_NO) as RowNum
+                FROM dbo.LEDGER_VIEW WITH (NOLOCK)
+                WHERE {acc_clause} AND TRAN_DATE >= ? AND TRAN_DATE <= ? {org_where} {pr_where} {contra_where}
+            )
+            SELECT
+                COUNT(*),
+                SUM(CASE WHEN DEBIT_CREDIT='DEB' THEN AMOUNT ELSE 0 END),
+                SUM(CASE WHEN DEBIT_CREDIT='CRD' THEN AMOUNT ELSE 0 END),
+                SUM(CASE WHEN RowNum <= ? AND DEBIT_CREDIT='DEB' THEN AMOUNT ELSE 0 END),
+                SUM(CASE WHEN RowNum <= ? AND DEBIT_CREDIT='CRD' THEN AMOUNT ELSE 0 END)
+            FROM CTE
+        """
+        cur.execute(stats_sql, base_params + [offset, offset])
+        s_row = cur.fetchone()
+
+        total_rows = s_row[0] or 0
+        total_deb = float(s_row[1] or 0)
+        total_crd = float(s_row[2] or 0)
+        offset_deb = float(s_row[3] or 0)
+        offset_crd = float(s_row[4] or 0)
+
+        paged_sql = f"""
+            WITH CTE AS (
+                SELECT
+                    ORGANIZATION_ID, TRAN_DATE, TRAN_NO, DEBIT_CREDIT,
+                    VAT_TRAN_NO, VAT_TRAN_DATE, COMMENTS, DESCRIPTION,
+                    ACCOUNT_ID_CONTRA, QUANTITY, UNIT_PRICE, AMOUNT,
+                    PR_DETAIL_ID, PR_DETAIL_NAME,
+                    ROW_NUMBER() OVER (ORDER BY TRAN_DATE, TRAN_NO) as RowNum
+                FROM dbo.LEDGER_VIEW WITH (NOLOCK)
+                WHERE {acc_clause} AND TRAN_DATE >= ? AND TRAN_DATE <= ? {org_where} {pr_where} {contra_where}
+            )
+            SELECT * FROM CTE WHERE RowNum > ? AND RowNum <= ?
+        """
+        cur.execute(paged_sql, base_params + [offset, total_rows if export_all else offset + page_size])
+
+        def _fmt_d(d):
+            if not d:
+                return ""
+            if hasattr(d, "strftime"):
+                return d.strftime("%d/%m/%Y")
+            return str(d).strip()
+
+        rows = []
+        for r in cur.fetchall():
+            rows.append({
+                "org_id": (r[0] or "").strip(),
+                "tran_date": _fmt_d(r[1]),
+                "tran_no": r[2] or "",
+                "debit_credit": (r[3] or "").strip(),
+                "vat_tran_no": r[4] or "",
+                "vat_tran_date": _fmt_d(r[5]),
+                "comments": r[6] or "",
+                "description": r[7] or "",
+                "contra_account_id": (r[8] or "").strip(),
+                "quantity": float(r[9] or 0),
+                "unit_price": float(r[10] or 0),
+                "amount": float(r[11] or 0),
+                "pr_detail_id": (r[12] or "").strip(),
+                "pr_detail_name": r[13] or "",
+            })
+
+        return jsonify({
+            "status": "ok",
+            "opening_balance": {"deb": open_bal_deb, "crd": open_bal_crd},
+            "offset_balance": {"deb": offset_deb, "crd": offset_crd},
+            "period_sums": {"deb": total_deb, "crd": total_crd},
+            "data": rows,
+            "pagination": {
+                "total_rows": total_rows,
+                "total_pages": 1 if export_all else max(1, (total_rows + page_size - 1) // page_size),
+                "page": page
+            }
+        })
+    except Exception as e:
+        msg = str(e)
+        logger.error(f"Error in BC014 get_debt_account_details: {msg}")
+        return jsonify({"status": "error", "message": msg}), 500
+
+
 # ============================================================
 # BC012 — SỔ TIỀN MẶT VÀ TIỀN NGÂN HÀNG (nguồn: VOUCHER_VIEW)
 #   - Mỗi tài khoản tiền (mặc định 111,112,113) là 1 "sổ" riêng:
@@ -7787,7 +8014,7 @@ import re as _re
 from decimal import Decimal
 # (xlsx_report as XR đã import ở đầu file)
 
-_REPORT_EXPORT_CODES =('BC005', 'BC006', 'BC007', 'BC008', 'BC009', 'BC010', 'BC011', 'BC012', 'BC013')
+_REPORT_EXPORT_CODES = ('BC005', 'BC006', 'BC007', 'BC008', 'BC009', 'BC010', 'BC011', 'BC012', 'BC013', 'BC014')
 # Đường dẫn các job đang ghi (file đích chưa xuất hiện trên đĩa) — để 2 lần bấm liên tiếp không chọn trùng tên
 _export_reserved = set()
 
@@ -8145,6 +8372,96 @@ def _rx_plan(rpt, variant, info, p, payload):
             yield [XR.Span('SỐ DƯ CUỐI KỲ', 5, 'right'), close_net if close_net > 0 else None,
                    -close_net if close_net < 0 else None], 'closing'
         return dict(layout=XR.layout_bc008(info), total=0, prepare=prepare, rows=rows, needs_db=True)
+
+    if rpt == 'BC014':
+        account_id = ','.join(_rx_list(p.get('acc_ids')))
+        if not account_id:
+            return "Vui lòng chọn Tài khoản để xuất Sổ chi tiết tài khoản công nợ."
+        acc_clause, acc_params = _acc_like_sql(account_id)
+        pr_ids = _rx_list(p.get('pr_detail_ids'))
+        pr_where, pr_params = "", []
+        if pr_ids:
+            pr_where = f" AND ISNULL(PR_DETAIL_ID, '') IN ({','.join(['?'] * len(pr_ids))})"
+            pr_params = list(pr_ids)
+
+        contra_ids = _rx_list(p.get('contra_acc_ids'))
+        contra_where, contra_params = "", []
+        if contra_ids:
+            contra_where = " AND (" + " OR ".join(["ACCOUNT_ID_CONTRA LIKE ?"] * len(contra_ids)) + ")"
+            contra_params = [c + "%" for c in contra_ids]
+
+        first_day = date(from_dt.year, 1, 1).strftime("%Y%m%d")
+        sql = f"""SELECT ORGANIZATION_ID, TRAN_DATE, TRAN_NO, DEBIT_CREDIT,
+                         VAT_TRAN_NO, VAT_TRAN_DATE, COMMENTS, DESCRIPTION,
+                         ACCOUNT_ID_CONTRA, QUANTITY, UNIT_PRICE, AMOUNT,
+                         PR_DETAIL_ID, PR_DETAIL_NAME
+                  FROM dbo.LEDGER_VIEW WITH (NOLOCK)
+                  WHERE {acc_clause} AND TRAN_DATE >= ? AND TRAN_DATE <= ? {org_where} {pr_where} {contra_where}{_CHUNK_MARK}
+                  ORDER BY TRAN_DATE, TRAN_NO"""
+        sql_params = acc_params + [d_from, d_to] + list(org_params) + pr_params + contra_params
+
+        def prepare(db, ctx):
+            # dư đầu = BALANCE_VIEW đầu năm + LEDGER_VIEW từ đầu năm tới trước kỳ
+            r = db.one(f"""SELECT SUM(CASE WHEN DEBIT_CREDIT='DEB' THEN AMOUNT ELSE 0 END),
+                                  SUM(CASE WHEN DEBIT_CREDIT='CRD' THEN AMOUNT ELSE 0 END)
+                           FROM dbo.BALANCE_VIEW WITH (NOLOCK)
+                           WHERE {acc_clause} AND TRAN_DATE = ? {org_where} {pr_where}""",
+                       acc_params + [first_day] + list(org_params) + pr_params, "so du dau nam")
+            odeb, ocrd = _rx_dec(r[0] if r else 0), _rx_dec(r[1] if r else 0)
+            if from_dt > date(from_dt.year, 1, 1):
+                r = db.one(f"""SELECT SUM(CASE WHEN DEBIT_CREDIT='DEB' THEN AMOUNT ELSE 0 END),
+                                      SUM(CASE WHEN DEBIT_CREDIT='CRD' THEN AMOUNT ELSE 0 END)
+                               FROM dbo.LEDGER_VIEW WITH (NOLOCK)
+                               WHERE {acc_clause} AND TRAN_DATE >= ? AND TRAN_DATE < ? {org_where} {pr_where}""",
+                           acc_params + [first_day, d_from] + list(org_params) + pr_params, "phat sinh truoc ky")
+                if r:
+                    odeb += _rx_dec(r[0])
+                    ocrd += _rx_dec(r[1])
+            n, deb, crd, days = _rx_ledger_days(
+                db, f"{acc_clause} AND TRAN_DATE >= ? AND TRAN_DATE <= ? {org_where} {pr_where} {contra_where}", sql_params)
+            ctx.update(odeb=odeb, ocrd=ocrd, deb=deb, crd=crd)
+            ctx['fetch'] = _day_chunks(sql, sql_params, days, "TRAN_DATE")
+            return n + 3
+
+        def rows(src, ctx):
+            open_net = ctx['odeb'] - ctx['ocrd']
+            yield [
+                None, None, None, None, None, None,
+                None, 'Số dư đầu kỳ', None, None, None,
+                open_net if open_net > 0 else None,
+                -open_net if open_net < 0 else None,
+                None, None
+            ], 'opening'
+            for r in src:
+                amt = _rx_dec(r[11] or 0)
+                qty = _rx_dec(r[9]) if r[9] is not None and float(r[9] or 0) != 0 else None
+                price = _rx_dec(r[10]) if r[10] is not None and float(r[10] or 0) != 0 else None
+                tno = r[2] or ''
+                dc = str(r[3] or '').strip().upper()
+                is_deb = (dc == 'DEB')
+                is_crd = (dc == 'CRD')
+                yield [
+                    r[0] or '',
+                    r[1],
+                    tno if is_deb else None,
+                    tno if is_crd else None,
+                    r[4] or None,
+                    r[5],
+                    r[6] or '',
+                    r[7] or '',
+                    r[8] or '',
+                    qty,
+                    price,
+                    amt if is_deb else None,
+                    amt if is_crd else None,
+                    r[12] or '',
+                    r[13] or ''
+                ], 'data'
+            yield [XR.Span('Cộng phát sinh trong kỳ', 11, 'right'), ctx['deb'], ctx['crd'], None, None], 'total'
+            close_net = (ctx['odeb'] + ctx['deb']) - (ctx['ocrd'] + ctx['crd'])
+            yield [XR.Span('SỐ DƯ CUỐI KỲ', 11, 'right'), close_net if close_net > 0 else None,
+                   -close_net if close_net < 0 else None, None, None], 'closing'
+        return dict(layout=XR.layout_bc014(info), total=0, prepare=prepare, rows=rows, needs_db=True)
 
     if rpt == 'BC012':
         acc_ids = _rx_list(p.get('acc_ids')) or ["111", "112", "113"]

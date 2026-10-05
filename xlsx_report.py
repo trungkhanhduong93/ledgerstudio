@@ -996,3 +996,37 @@ def bc013_summary_rows(totals, kind='BR'):
             ('Thuế GTGT của hàng hoá dịch vụ bán ra:', totals.get('total_vat_amount')),
         ]
     return [([Span(label, 7, 'left'), value or 0], 'summary') for label, value in items]
+
+
+def layout_bc014(info):
+    """BC014 — Sổ chi tiết tài khoản công nợ (15 cột, khổ ngang A4, header 2 tầng theo mẫu)."""
+    cols = [
+        Col('Đơn vị', 6, 'code'),
+        Col('Ngày ghi sổ', 10, 'date'),
+        Col('Số chứng từ - Nợ', 11, 'code', bold=True),
+        Col('Số chứng từ - Có', 11, 'code', bold=True),
+        Col('Số hóa đơn', 10, 'code'),
+        Col('Ngày hóa đơn', 10, 'date'),
+        Col('Ghi chú', 16, 'text', wrap=True),
+        Col('Diễn giải', 24, 'text', wrap=True),
+        Col('Tk đ/ứ', 7, 'code', bold=True),
+        Col('Số lượng', 9, 'num'),
+        Col('Đơn giá', 12, 'num'),
+        Col('Số tiền - Nợ', 15, 'num', bold=True, carry=True),
+        Col('Số tiền - Có', 15, 'num', bold=True, carry=True),
+        Col('Mã khách', 12, 'code'),
+        Col('Tên khách', 26, 'text', wrap=True)
+    ]
+    header = [
+        [('Đơn vị', 1, 2), ('Ngày ghi sổ', 1, 2), ('Số chứng từ', 2, 1),
+         ('Số hóa đơn', 1, 2), ('Ngày hóa đơn', 1, 2), ('Ghi chú', 1, 2),
+         ('Diễn giải', 1, 2), ('Tk đ/ứ', 1, 2), ('Số lượng', 1, 2), ('Đơn giá', 1, 2),
+         ('Số tiền', 2, 1), ('Mã khách', 1, 2), ('Tên khách', 1, 2)],
+        [('Nợ', 1, 1), ('Có', 1, 1), ('Nợ', 1, 1), ('Có', 1, 1)]
+    ]
+    styles = {
+        'opening': {'bold': True, 'bg': SLATE_50},
+        'total': {'bold': True, 'bg': SLATE_100, 'upper': True},
+        'closing': {'bold': True, 'bg': SLATE_200},
+    }
+    return Layout('BC014', 'Sổ chi tiết tài khoản công nợ', cols, header, info, styles, landscape=True)
