@@ -1649,7 +1649,7 @@ chủ `/api/<kind>/stream_csv` (hộp tiến trình nhỏ + hộp "Đã xuất x
   Đóng cửa sổ → EXE + cổng tắt 2,7 s.
 - Chưa làm: chạy trên DB thật của khách; sửa CSV danh sách mất số 0 đầu ở cột mã (điểm 7); chuyển Tách sheet lên máy chủ (CLAUDE.md mục 6 ý 2).
 
-## 42. v1.12.2 (build 09/10, CHƯA push / phát hành): báo cáo BC015 Nhập xuất tồn *(09/10/2026)*
+## 42. v1.12.2 (phát hành 09/10, commit `001bc65`): báo cáo BC015 Nhập xuất tồn *(09/10/2026)*
 
 **Yêu cầu Trum (09/10):** "đọc dự án rồi tạo thêm báo cáo Nhập xuất tồn cho studio đi". Tui hỏi 11 điểm, Trum trả lời "ok mặc định":
 1. Mã BC015 "BÁO CÁO NHẬP XUẤT TỒN", A4 ngang, không ghi mẫu nhà nước.
@@ -1697,3 +1697,8 @@ bỏ nhóm này (Bẫy 32), Trum chưa xác nhận. Không dòng nào có giờ 
 - EXE 1.12.2: build 1 lần ra 17.056.130 byte (+333 KB, pywin32), loại xong còn 16.735.954 byte (bản 1.12.1: 16.723.550). Chạy EXE:
   `/api/version` = 1.12.2, `app.js` có `inventory_summary`, `BC015_Nhap_Xuat_Ton`, `rpt_wh_ids`. Đã tắt EXE + cửa sổ app.
 - Chưa làm: so với `RPT_WAREHOUSEBALANCE` của iPOS trên DB thật; đo tốc độ trên DB lớn; Trum xác nhận việc bỏ hàng `IS_WAREHOUSE_BALANCE = 0`.
+- Phát hành (Trum: "push phát hành"): push `001bc65`, zip làm lại từ EXE mới, release v1.12.2 "Báo cáo Nhập xuất tồn" lúc 20:12.
+  API `releases/latest` không đăng nhập ra v1.12.2, digest EXE `0fd226ee…4988` = file build. Ghi chú release: `_release_summary` ra 6 ý.
+- Test cập nhật thật (EXE release v1.12.1 `55987f91…db3b`, thư mục tạm, 20:44 ≈ 32 phút sau khi đăng). Trước đó hoãn vì Trum đang mở app
+  ở cổng 5050, mà bản cũ khi mở sẽ tắt tiến trình giữ cổng. `check_update` báo có bản mới, kèm 6 ý. Tải 16,7 MB khoảng 2 s, v1.12.2 lên sau 8,8 s,
+  còn 1 file, SHA = release. `/api/metadata` 401 (đăng nhập lại). Đã tắt EXE + cửa sổ app.
