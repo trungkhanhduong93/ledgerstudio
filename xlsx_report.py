@@ -1040,25 +1040,24 @@ _NXT_KEYS = ('oq', 'oa', 'iq', 'ia', 'xq', 'xa', 'cq', 'ca')
 
 
 def layout_bc015(info):
-    """BC015 — Nhập xuất tồn (11 cột, khổ ngang). Dòng do app dựng sẵn (nxtViewRows) — Chi tiết có dòng kho + cộng kho."""
+    """BC015 — Nhập xuất tồn (11 cột, khổ ngang). Dòng do app dựng sẵn (nxtViewRows) — nhóm theo kho / nhóm hàng thì có dòng nhóm mang tổng."""
     cols = [Col('Mã hàng', 14, 'code', bold=True), Col('Tên hàng', 32, 'text', wrap=True), Col('ĐVT', 8, 'text', align='center')]
     for part in ('Tồn đầu kỳ', 'Nhập trong kỳ', 'Xuất trong kỳ', 'Tồn cuối kỳ'):
         cols += [Col(f'{part} - Số lượng', 11, 'qty'), Col(f'{part} - Thành tiền', 16, 'num')]
     header = [[('Mã hàng', 1, 2), ('Tên hàng', 1, 2), ('ĐVT', 1, 2), ('Tồn đầu kỳ', 2, 1), ('Nhập trong kỳ', 2, 1),
                ('Xuất trong kỳ', 2, 1), ('Tồn cuối kỳ', 2, 1)],
               [('Số lượng', 1, 1), ('Thành tiền', 1, 1)] * 4]
-    styles = {'group': {'bold': True, 'bg': SLATE_100}, 'sub': {'bold': True, 'bg': SLATE_50}, 'total': _TOTAL_B06}
+    styles = {'group': {'bold': True, 'bg': SLATE_100}, 'total': _TOTAL_B06}
     return Layout('BC015', 'Nhập xuất tồn', cols, header, info, styles, landscape=True, row_height=18)
 
 
 def rows_bc015(payload):
     for r in payload.get('rows') or []:
         t = r.get('t')
-        if t == 'wh':
-            yield [Span(r.get('label') or '', 11, 'left', upper=False)], 'group'
-        elif t in ('sub', 'total'):
-            # cộng kho / tổng cộng: chỉ cộng tiền (số lượng khác đơn vị tính, cộng lại vô nghĩa)
-            yield [Span(r.get('label') or '', 3, 'right')] + [None if k.endswith('q') else (r.get(k) or 0)
-                                                              for k in _NXT_KEYS], t
+        if t == 'grp':
+            # dòng nhóm (kho / nhóm hàng) mang luôn tổng của nhóm — cộng cả số lượng lẫn tiền (Trum 10/10/2026)
+            yield [Span(r.get('label') or '', 3, 'left', upper=False)] + [r.get(k) or 0 for k in _NXT_KEYS], 'group'
+        elif t == 'total':
+            yield [Span(r.get('label') or '', 3, 'right')] + [r.get(k) or 0 for k in _NXT_KEYS], 'total'
         else:
             yield [r.get('item') or '', r.get('name') or '', r.get('unit') or ''] + [r.get(k) or 0 for k in _NXT_KEYS], 'data'

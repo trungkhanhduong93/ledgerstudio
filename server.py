@@ -931,13 +931,16 @@ def get_metadata():
             SELECT 'unit',             CAST(UNIT_ID         AS NVARCHAR(100)), UNIT_NAME,       NULL FROM dbo.DM_UNIT WITH (NOLOCK)        WHERE ACTIVE=1
             UNION ALL
             SELECT 'banks',            CAST(BANK_ID         AS NVARCHAR(100)), BANK_NAME,       NULL FROM dbo.DM_BANK WITH (NOLOCK)        WHERE ACTIVE=1
+            UNION ALL
+            SELECT 'item_class',       CAST(ITEM_CLASS_ID   AS NVARCHAR(100)), ITEM_CLASS_NAME, NULL FROM dbo.DM_ITEM_CLASS WITH (NOLOCK)  WHERE ACTIVE=1
         """
         cursor.execute(batch_sql)
         accounts, orgs, pr_details, jobs, items, expenses, products, warehouses, units, banks = [], [], [], [], [], [], [], [], [], []
+        item_classes = []   # nhóm hàng (DM_ITEM_CLASS) — ô lọc Nhóm hàng của BC015
         bucket = {
             'account': accounts, 'org': orgs, 'pr_detail': pr_details,
             'job': jobs, 'item': items, 'expense': expenses, 'product': products,
-            'warehouse': warehouses, 'unit': units, 'banks': banks
+            'warehouse': warehouses, 'unit': units, 'banks': banks, 'item_class': item_classes
         }
         for kind, id_val, name_val, extra_val in cursor.fetchall():
             item = {"id": (id_val or '').strip(), "name": name_val or ''}
@@ -988,7 +991,7 @@ def get_metadata():
             "pr_detail_classes": pr_detail_classes,
             "tran_ids": tran_ids, "jobs": jobs, "items": items,
             "products": products, "expenses": expenses, "warehouses": warehouses,
-            "units": units, "banks": banks
+            "units": units, "banks": banks, "item_classes": item_classes
         }
         _meta_cache[db_name] = result
         return jsonify(result)
@@ -6424,8 +6427,8 @@ def get_debt_summary():
 # chưa có mốc nào → cộng mọi phát sinh trước kỳ. Nhập / xuất = WAREHOUSE (ISSUE_RECEIVE N / X), gồm cả chuyển kho nội bộ như
 # iPOS. Bảng gốc WAREHOUSE thay WAREHOUSE_VIEW (view nối FULL OUTER nhiều danh mục — chậm, không cần).
 # Bỏ hàng DM_ITEM.IS_WAREHOUSE_BALANCE = 0 (món bán không theo dõi tồn: chỉ có xuất, tồn âm) — DB thiếu cột thì không lọc.
-# Server trả theo (Kho, Hàng); chế độ Tổng hợp (gộp kho) cộng ở trình duyệt.
-def _nxt_where(alias, org_ids, wh_ids, item_ids, acc_ids):
+# Server trả theo (Kho, Hàng) kèm nhóm hàng; gộp kho / nhóm theo nhóm hàng làm ở trình duyệt (v1.12.3).
+def _nxt_where(alias, org_ids, wh_ids, item_ids, acc_ids, cls_ids=()):
     clauses, params = [], []
     oc, op = _org_filter_sql(org_ids, f"{alias}.ORGANIZATION_ID")
     if oc:
@@ -6439,6 +6442,10 @@ def _nxt_where(alias, org_ids, wh_ids, item_ids, acc_ids):
     if ac:
         clauses.append(ac)
         params += ap
+    if cls_ids:   # Nhóm hàng (v1.12.3) — nhóm hiện tại của hàng trong danh mục
+        clauses.append(f"EXISTS (SELECT 1 FROM dbo.DM_ITEM IC WITH (NOLOCK) WHERE IC.ITEM_ID = {alias}.ITEM_ID "
+                       f"AND IC.ITEM_CLASS_ID IN ({','.join(['?'] * len(cls_ids))}))")
+        params += cls_ids
     if _db_has_col("DM_ITEM", "IS_WAREHOUSE_BALANCE"):
         clauses.append(f"NOT EXISTS (SELECT 1 FROM dbo.DM_ITEM IZ WITH (NOLOCK) "
                        f"WHERE IZ.ITEM_ID = {alias}.ITEM_ID AND IZ.IS_WAREHOUSE_BALANCE = 0)")
@@ -6457,6 +6464,7 @@ def get_inventory_summary():
         to_dt = datetime.strptime(request.args.get("to_date", ""), "%d/%m/%Y").date()
         lst = lambda k: [v.strip() for v in request.args.get(k, "").split(",") if v.strip()]
         org_ids, wh_ids, item_ids, acc_ids = lst("org_ids"), lst("wh_ids"), lst("item_ids"), lst("acc_ids")
+        cls_ids = lst("cls_ids")
         # cận cuối nửa mở (< ngày sau Đến ngày): TRAN_DATE có giờ vẫn lấy đủ ngày cuối kỳ
         from datetime import timedelta
         d_from, d_end = from_dt.strftime("%Y%m%d"), (to_dt + timedelta(days=1)).strftime("%Y%m%d")
@@ -6475,7 +6483,7 @@ def get_inventory_summary():
             return n
 
         # 1) Tồn tại mốc
-        bw, bp = _nxt_where("B", org_ids, wh_ids, item_ids, acc_ids)
+        bw, bp = _nxt_where("B", org_ids, wh_ids, item_ids, acc_ids, cls_ids)
         cur.execute(f"""{anchor_cte}
             SELECT B.WAREHOUSE_ID, B.ITEM_ID, SUM(ISNULL(B.QUANTITY,0)), SUM(ISNULL(B.AMOUNT,0))
             FROM dbo.WAREHOUSE_BALANCE B WITH (NOLOCK)
@@ -6488,7 +6496,7 @@ def get_inventory_summary():
             n['oa'] += float(r[3] or 0)
 
         # 2) Phát sinh từ mốc (đơn vị chưa có mốc: từ đầu) tới trước kỳ
-        ww, wp = _nxt_where("W", org_ids, wh_ids, item_ids, acc_ids)
+        ww, wp = _nxt_where("W", org_ids, wh_ids, item_ids, acc_ids, cls_ids)
         sign = "CASE W.ISSUE_RECEIVE WHEN 'N' THEN 1 WHEN 'X' THEN -1 ELSE 0 END"
         cur.execute(f"""{anchor_cte}
             SELECT W.WAREHOUSE_ID, W.ITEM_ID, SUM({sign} * ISNULL(W.QUANTITY,0)), SUM({sign} * ISNULL(W.AMOUNT,0))
@@ -6518,11 +6526,13 @@ def get_inventory_summary():
             n['xq'] += float(r[4] or 0)
             n['xa'] += float(r[5] or 0)
 
-        # 4) Tên kho / hàng / ĐVT — chỉ cần cho các khoá có trong kết quả
-        items, whs = {}, {}
+        # 4) Tên kho / hàng / ĐVT / nhóm hàng — chỉ cần cho các khoá có trong kết quả
+        items, whs, classes = {}, {}, {}
         if acc:
-            cur.execute("SELECT ITEM_ID, ITEM_NAME, UNIT_ID FROM dbo.DM_ITEM WITH (NOLOCK)")
-            items = {(r[0] or '').strip(): ((r[1] or '').strip(), (r[2] or '').strip()) for r in cur.fetchall()}
+            cur.execute("SELECT ITEM_ID, ITEM_NAME, UNIT_ID, ITEM_CLASS_ID FROM dbo.DM_ITEM WITH (NOLOCK)")
+            items = {(r[0] or '').strip(): ((r[1] or '').strip(), (r[2] or '').strip(), (r[3] or '').strip()) for r in cur.fetchall()}
+            cur.execute("SELECT ITEM_CLASS_ID, ITEM_CLASS_NAME FROM dbo.DM_ITEM_CLASS WITH (NOLOCK)")
+            classes = {(r[0] or '').strip(): (r[1] or '').strip() for r in cur.fetchall()}
             cur.execute("SELECT WAREHOUSE_ID, WAREHOUSE_NAME FROM dbo.DM_WAREHOUSE WITH (NOLOCK)")
             whs = {(r[0] or '').strip(): (r[1] or '').strip() for r in cur.fetchall()}
 
@@ -6533,10 +6543,11 @@ def get_inventory_summary():
             n['ca'] = n['oa'] + n['ia'] - n['xa']
             if all(round(n[k], 4 if k.endswith('q') else 2) == 0 for k in _NXT_KEYS):
                 continue
-            name, unit = items.get(item, ('', ''))
+            name, unit, cls = items.get(item, ('', '', ''))
             for k in _NXT_KEYS:
                 total[k] += n[k]
-            rows.append({"wh": wh, "wh_name": whs.get(wh, ''), "item": item, "name": name, "unit": unit, **n})
+            rows.append({"wh": wh, "wh_name": whs.get(wh, ''), "item": item, "name": name, "unit": unit,
+                         "cls": cls, "cls_name": classes.get(cls, ''), **n})
         rows.sort(key=lambda x: (x["wh"], x["item"]))
 
         # mốc từng đơn vị (để đối chiếu) — CONVERT ở SQL: driver "SQL Server" cũ có thể trả ngày dạng chuỗi

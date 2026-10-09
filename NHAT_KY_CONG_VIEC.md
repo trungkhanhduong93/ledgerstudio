@@ -1702,3 +1702,35 @@ bỏ nhóm này (Bẫy 32), Trum chưa xác nhận. Không dòng nào có giờ 
 - Test cập nhật thật (EXE release v1.12.1 `55987f91…db3b`, thư mục tạm, 20:44 ≈ 32 phút sau khi đăng). Trước đó hoãn vì Trum đang mở app
   ở cổng 5050, mà bản cũ khi mở sẽ tắt tiến trình giữ cổng. `check_update` báo có bản mới, kèm 6 ý. Tải 16,7 MB khoảng 2 s, v1.12.2 lên sau 8,8 s,
   còn 1 file, SHA = release. `/api/metadata` 401 (đăng nhập lại). Đã tắt EXE + cửa sổ app.
+
+## 43. v1.12.3 (build 10/10, CHƯA push / phát hành): BC015 lọc Nhóm hàng, 3 cách nhóm, tổng số lượng *(10/10/2026)*
+
+**Yêu cầu Trum (10/10):** lần đầu xin nhóm nhiều cấp, kho và nhóm hàng xếp trên dưới tuỳ chọn. Tui hỏi 10 điểm, Trum đổi ý: "làm đơn giản thôi".
+Bản chốt có 3 ý. Một, thêm ô lọc nhóm hàng. Hai, chọn nhóm theo kho hoặc theo nhóm hàng, chỉ 1 trong 2. Ba, cộng cả số lượng và tiền: không
+nhóm thì chỉ có dòng Tổng cộng cuối báo cáo, có nhóm thì thêm tổng ở dòng nhóm. Trum duyệt "ok". Lúc đầu Trum bảo đợi anti hồi token rồi
+giao, tui viết sẵn spec (scratchpad `spec_bc015_v1123.md`). Sau đó Trum bảo "tự làm luôn đi".
+
+**Tra trước khi sửa (chỉ SELECT):** `DM_ITEM_CLASS` phẳng, không có cột cha (TRUNGDEMO 28 nhóm có phát sinh / 40 nhóm ACTIVE, SALE_DEMO 18,
+BIMGROUP 5). Hàng nào cũng có `ITEM_CLASS_ID`. Metadata chưa có danh sách nhóm hàng.
+
+**Đã sửa:**
+- `server.py`: `/api/metadata` thêm `item_classes`. `_nxt_where` nhận `cls_ids` và lọc `EXISTS (… DM_ITEM.ITEM_CLASS_ID IN …)`.
+  `/api/inventory_summary` đọc `cls_ids`, mỗi dòng trả thêm `cls` / `cls_name`.
+- `xlsx_report.py`: `rows_bc015` có kiểu dòng `grp` (nhãn gộp 3 cột + 8 số) và `total` đủ 8 số. Bỏ kiểu `wh`, `sub`.
+- `index.html`: `NXT_MODES` (none / wh / cls), `nxtViewRows` viết lại. App `nxtMode` mặc định `wh`, 3 nút ở dòng tiêu đề.
+  `filters.rpt_cls_ids`, gửi `cls_ids`, vào snapshot bộ lọc. ReportTab có ô Nhóm hàng sau ô Hàng hóa, dòng tiêu đề "Nhóm hàng: …",
+  3 mẫu xuất, tên file `KhongNhom` / `TheoKho` / `TheoNhom` + `Nhom…`, dòng nhóm trên bảng có đủ 8 số, dòng Tổng cộng có số lượng.
+
+**Verify** (scratchpad phiên a0172f09: `t5.py`, `t6.js`, `pp/ui4.js`, `cmp2.py`. SQL Express, CHỈ SELECT):
+- M1: `ast.parse` 2 file Python. `webbuild/build.js` dịch xong.
+- M2 + M4 (`t5.py`): metadata 40 nhóm = số dòng `ACTIVE = 1`. So với tính tay từ dòng thô, 6 ca lọc nhóm: 1 nhóm, 2 nhóm, 3 nhóm + đơn vị
+  + 2 kho + TK 15, nhóm + 3 mã hàng, nhóm không tồn tại (0 dòng), không lọc. Cả 6 ca 0 dòng lệch, `cls` đúng danh mục. `t2.py` cũ 10/10 ca vẫn khớp.
+- `t6.js` chạy `nxtViewRows` cắt nguyên văn từ index.html, dữ liệu TRUNGDEMO 2024 thêm 1 hàng không nhóm ở 2 kho. Cả 3 cách nhóm: Tổng cộng
+  = cộng các dòng hàng, mỗi dòng nhóm = cộng các hàng bên dưới, "(Chưa phân nhóm)" ở cuối, không còn dòng `wh` / `sub`. Giá trị lạ (`detail`)
+  rơi về Theo kho.
+- M3 (`build_web` + Chrome headless, TRUNGDEMO tháng 1/2026, lọc NVL01 + TP01): request gửi `cls_ids=NVL01,TP01`, tiêu đề có dòng Nhóm hàng.
+  Không nhóm 69 dòng (68 mã), Theo kho 83 dòng, Theo nhóm hàng 71 dòng. Xuất Excel cả 3 mẫu qua hộp Xuất thật, `cmp2.py` so từng ô với
+  màn hình: lệch 1 ô, là ô làm tròn 379.614,5 đã biết từ mục 42. Thanh lọc 2 hàng ở 1280 / 1366 / 1440px, 1 hàng ở 1920px.
+  Không lỗi JS, nút chính không báo "Cập nhật báo cáo" khi đổi cách nhóm.
+- EXE 1.12.3: build 00:22 11/10, 16.736.937 byte (1.12.2: 16.735.954). Chạy EXE: `app.js` có `TheoNhom`, `rpt_cls_ids`. Đã tắt EXE.
+- Chưa làm: so với `RPT_WAREHOUSEBALANCE` của iPOS trên DB thật (như mục 42).
