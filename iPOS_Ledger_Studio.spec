@@ -14,7 +14,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['IPython', 'matplotlib', 'matplotlib_inline', 'numpy', 'pandas', 'PIL'],
+    excludes=['IPython', 'matplotlib', 'matplotlib_inline', 'numpy', 'pandas', 'PIL', 'win32evtlog', 'win32evtlogutil', 'win32api', 'win32con', 'pywintypes'],
     noarchive=False,
     optimize=0,
 )

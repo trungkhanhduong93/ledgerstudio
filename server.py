@@ -2159,7 +2159,7 @@ def _export_dir():
 # Khoá màn hình = khoá kind của App (/api/<kind>/stream_csv) + mã báo cáo — thêm tab/báo cáo thì thêm vào đây + EXPORT_SCREENS (index.html).
 _EXPORT_SCREENS = ('ledger', 'sale', 'voucher', 'purchase', 'warehouse', 'income_alloc', 'income_alloc_month',
                    'warehouse_balance', 'pr_detail',
-                   'BC005', 'BC006', 'BC007', 'BC008', 'BC009', 'BC010', 'BC011', 'BC012', 'BC013', 'BC014')
+                   'BC005', 'BC006', 'BC007', 'BC008', 'BC009', 'BC010', 'BC011', 'BC012', 'BC013', 'BC014', 'BC015')
 # Excel không mở được file có đường dẫn đầy đủ > 218 ký tự; tên file xuất thường ~40 ký tự → chặn thư mục quá sâu ngay lúc khai.
 _EXPORT_DIR_MAX = 170
 _EXPORT_DIR_WAIT = 6          # giây chờ tối đa khi kiểm 1 thư mục (ổ mạng mất kết nối có thể treo vài chục giây)
@@ -6418,6 +6418,139 @@ def get_debt_summary():
         return jsonify({"status": "error", "message": msg}), 401 if "đăng nhập" in msg else 500
 
 
+# ===== BC015 — BÁO CÁO NHẬP XUẤT TỒN (v1.12.2, Trum 09/10/2026) =====
+# Tồn đầu = mốc WAREHOUSE_BALANCE (iPOS kết chuyển tồn đầu năm, mỗi năm 1 mốc 01/01) + nhập − xuất từ mốc tới trước Từ ngày.
+# Mốc = ngày lớn nhất ≤ Từ ngày, tính THEO TỪNG ĐƠN VỊ (Trum duyệt: năm chưa kết chuyển thì lấy mốc gần nhất trước đó); đơn vị
+# chưa có mốc nào → cộng mọi phát sinh trước kỳ. Nhập / xuất = WAREHOUSE (ISSUE_RECEIVE N / X), gồm cả chuyển kho nội bộ như
+# iPOS. Bảng gốc WAREHOUSE thay WAREHOUSE_VIEW (view nối FULL OUTER nhiều danh mục — chậm, không cần).
+# Bỏ hàng DM_ITEM.IS_WAREHOUSE_BALANCE = 0 (món bán không theo dõi tồn: chỉ có xuất, tồn âm) — DB thiếu cột thì không lọc.
+# Server trả theo (Kho, Hàng); chế độ Tổng hợp (gộp kho) cộng ở trình duyệt.
+def _nxt_where(alias, org_ids, wh_ids, item_ids, acc_ids):
+    clauses, params = [], []
+    oc, op = _org_filter_sql(org_ids, f"{alias}.ORGANIZATION_ID")
+    if oc:
+        clauses.append(oc)
+        params += op
+    for col, vals in (("WAREHOUSE_ID", wh_ids), ("ITEM_ID", item_ids)):
+        if vals:
+            clauses.append(f"{alias}.{col} IN ({','.join(['?'] * len(vals))})")
+            params += vals
+    ac, ap = _acc_like_sql(",".join(acc_ids), f"{alias}.ACCOUNT_ID")
+    if ac:
+        clauses.append(ac)
+        params += ap
+    if _db_has_col("DM_ITEM", "IS_WAREHOUSE_BALANCE"):
+        clauses.append(f"NOT EXISTS (SELECT 1 FROM dbo.DM_ITEM IZ WITH (NOLOCK) "
+                       f"WHERE IZ.ITEM_ID = {alias}.ITEM_ID AND IZ.IS_WAREHOUSE_BALANCE = 0)")
+    return (" AND " + " AND ".join(clauses)) if clauses else "", params
+
+
+_NXT_KEYS = ('oq', 'oa', 'iq', 'ia', 'xq', 'xa', 'cq', 'ca')
+
+
+@app.route("/api/inventory_summary")
+@with_db_lock
+def get_inventory_summary():
+    """BC015 — Nhập xuất tồn theo (Kho, Hàng). Mỗi dòng: tồn đầu / nhập / xuất / tồn cuối, số lượng (ĐVT kho) + tiền."""
+    try:
+        from_dt = datetime.strptime(request.args.get("from_date", ""), "%d/%m/%Y").date()
+        to_dt = datetime.strptime(request.args.get("to_date", ""), "%d/%m/%Y").date()
+        lst = lambda k: [v.strip() for v in request.args.get(k, "").split(",") if v.strip()]
+        org_ids, wh_ids, item_ids, acc_ids = lst("org_ids"), lst("wh_ids"), lst("item_ids"), lst("acc_ids")
+        # cận cuối nửa mở (< ngày sau Đến ngày): TRAN_DATE có giờ vẫn lấy đủ ngày cuối kỳ
+        from datetime import timedelta
+        d_from, d_end = from_dt.strftime("%Y%m%d"), (to_dt + timedelta(days=1)).strftime("%Y%m%d")
+        cur = get_connection().cursor()
+
+        anchor_cte = """WITH M AS (SELECT ISNULL(ORGANIZATION_ID,'') AS ORG, MAX(TRAN_DATE) AS D
+                                   FROM dbo.WAREHOUSE_BALANCE WITH (NOLOCK) WHERE TRAN_DATE <= ?
+                                   GROUP BY ISNULL(ORGANIZATION_ID,''))"""
+        acc = {}
+
+        def node(wh, item):
+            k = ((wh or '').strip(), (item or '').strip())
+            n = acc.get(k)
+            if n is None:
+                n = acc[k] = dict.fromkeys(_NXT_KEYS, 0.0)
+            return n
+
+        # 1) Tồn tại mốc
+        bw, bp = _nxt_where("B", org_ids, wh_ids, item_ids, acc_ids)
+        cur.execute(f"""{anchor_cte}
+            SELECT B.WAREHOUSE_ID, B.ITEM_ID, SUM(ISNULL(B.QUANTITY,0)), SUM(ISNULL(B.AMOUNT,0))
+            FROM dbo.WAREHOUSE_BALANCE B WITH (NOLOCK)
+            JOIN M ON M.ORG = ISNULL(B.ORGANIZATION_ID,'') AND M.D = B.TRAN_DATE
+            WHERE 1=1 {bw}
+            GROUP BY B.WAREHOUSE_ID, B.ITEM_ID""", [d_from] + bp)
+        for r in cur.fetchall():
+            n = node(r[0], r[1])
+            n['oq'] += float(r[2] or 0)
+            n['oa'] += float(r[3] or 0)
+
+        # 2) Phát sinh từ mốc (đơn vị chưa có mốc: từ đầu) tới trước kỳ
+        ww, wp = _nxt_where("W", org_ids, wh_ids, item_ids, acc_ids)
+        sign = "CASE W.ISSUE_RECEIVE WHEN 'N' THEN 1 WHEN 'X' THEN -1 ELSE 0 END"
+        cur.execute(f"""{anchor_cte}
+            SELECT W.WAREHOUSE_ID, W.ITEM_ID, SUM({sign} * ISNULL(W.QUANTITY,0)), SUM({sign} * ISNULL(W.AMOUNT,0))
+            FROM dbo.WAREHOUSE W WITH (NOLOCK)
+            LEFT JOIN M ON M.ORG = ISNULL(W.ORGANIZATION_ID,'')
+            WHERE W.TRAN_DATE < ? AND (M.D IS NULL OR W.TRAN_DATE >= M.D) {ww}
+            GROUP BY W.WAREHOUSE_ID, W.ITEM_ID""", [d_from, d_from] + wp)
+        for r in cur.fetchall():
+            n = node(r[0], r[1])
+            n['oq'] += float(r[2] or 0)
+            n['oa'] += float(r[3] or 0)
+
+        # 3) Nhập / xuất trong kỳ
+        cur.execute(f"""
+            SELECT W.WAREHOUSE_ID, W.ITEM_ID,
+                   SUM(CASE WHEN W.ISSUE_RECEIVE='N' THEN ISNULL(W.QUANTITY,0) ELSE 0 END),
+                   SUM(CASE WHEN W.ISSUE_RECEIVE='N' THEN ISNULL(W.AMOUNT,0) ELSE 0 END),
+                   SUM(CASE WHEN W.ISSUE_RECEIVE='X' THEN ISNULL(W.QUANTITY,0) ELSE 0 END),
+                   SUM(CASE WHEN W.ISSUE_RECEIVE='X' THEN ISNULL(W.AMOUNT,0) ELSE 0 END)
+            FROM dbo.WAREHOUSE W WITH (NOLOCK)
+            WHERE W.TRAN_DATE >= ? AND W.TRAN_DATE < ? {ww}
+            GROUP BY W.WAREHOUSE_ID, W.ITEM_ID""", [d_from, d_end] + wp)
+        for r in cur.fetchall():
+            n = node(r[0], r[1])
+            n['iq'] += float(r[2] or 0)
+            n['ia'] += float(r[3] or 0)
+            n['xq'] += float(r[4] or 0)
+            n['xa'] += float(r[5] or 0)
+
+        # 4) Tên kho / hàng / ĐVT — chỉ cần cho các khoá có trong kết quả
+        items, whs = {}, {}
+        if acc:
+            cur.execute("SELECT ITEM_ID, ITEM_NAME, UNIT_ID FROM dbo.DM_ITEM WITH (NOLOCK)")
+            items = {(r[0] or '').strip(): ((r[1] or '').strip(), (r[2] or '').strip()) for r in cur.fetchall()}
+            cur.execute("SELECT WAREHOUSE_ID, WAREHOUSE_NAME FROM dbo.DM_WAREHOUSE WITH (NOLOCK)")
+            whs = {(r[0] or '').strip(): (r[1] or '').strip() for r in cur.fetchall()}
+
+        rows = []
+        total = dict.fromkeys(_NXT_KEYS, 0.0)
+        for (wh, item), n in acc.items():
+            n['cq'] = n['oq'] + n['iq'] - n['xq']
+            n['ca'] = n['oa'] + n['ia'] - n['xa']
+            if all(round(n[k], 4 if k.endswith('q') else 2) == 0 for k in _NXT_KEYS):
+                continue
+            name, unit = items.get(item, ('', ''))
+            for k in _NXT_KEYS:
+                total[k] += n[k]
+            rows.append({"wh": wh, "wh_name": whs.get(wh, ''), "item": item, "name": name, "unit": unit, **n})
+        rows.sort(key=lambda x: (x["wh"], x["item"]))
+
+        # mốc từng đơn vị (để đối chiếu) — CONVERT ở SQL: driver "SQL Server" cũ có thể trả ngày dạng chuỗi
+        cur.execute("""SELECT ISNULL(ORGANIZATION_ID,''), CONVERT(VARCHAR(8), MAX(TRAN_DATE), 112) FROM dbo.WAREHOUSE_BALANCE WITH (NOLOCK)
+                       WHERE TRAN_DATE <= ? GROUP BY ISNULL(ORGANIZATION_ID,'')""", [d_from])
+        anchors = {(r[0] or '').strip(): f"{r[1][6:8]}/{r[1][4:6]}/{r[1][:4]}" for r in cur.fetchall() if r[1]}
+        return jsonify({"status": "ok", "data": rows, "total": total, "anchors": anchors})
+    except Exception as e:
+        msg = str(e)
+        if "đăng nhập" not in msg:
+            invalidate_pool()
+        return jsonify({"status": "error", "message": msg}), 401 if "đăng nhập" in msg else 500
+
+
 # ===== BC007 — SỔ NHẬT KÝ CHUNG =====
 
 # ===== API XUẤT EXCEL CHUYÊN DỤNG (XỬ LÝ DỮ LIỆU LỚN) =====
@@ -8041,7 +8174,7 @@ import re as _re
 from decimal import Decimal
 # (xlsx_report as XR đã import ở đầu file)
 
-_REPORT_EXPORT_CODES = ('BC005', 'BC006', 'BC007', 'BC008', 'BC009', 'BC010', 'BC011', 'BC012', 'BC013', 'BC014')
+_REPORT_EXPORT_CODES = ('BC005', 'BC006', 'BC007', 'BC008', 'BC009', 'BC010', 'BC011', 'BC012', 'BC013', 'BC014', 'BC015')
 # Đường dẫn các job đang ghi (file đích chưa xuất hiện trên đĩa) — để 2 lần bấm liên tiếp không chọn trùng tên
 _export_reserved = set()
 
@@ -8269,6 +8402,9 @@ def _rx_plan(rpt, variant, info, p, payload):
         is11 = rpt == 'BC011'
         n = len(payload.get('rows') or []) + (1 if payload.get('total') else 0)
         return dict(layout=XR.layout_bc006(info, is11), total=n, rows=lambda src, ctx: XR.rows_bc006(payload, is11))
+    if rpt == 'BC015':
+        n = len(payload.get('rows') or [])
+        return dict(layout=XR.layout_bc015(info), total=n, rows=lambda src, ctx: XR.rows_bc015(payload))
     if rpt in ('BC009', 'BC010'):
         n = len(payload.get('rows') or [])
         return dict(layout=XR.layout_cash_flow(info, rpt == 'BC009'), total=n,

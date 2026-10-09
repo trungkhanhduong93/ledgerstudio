@@ -165,6 +165,10 @@ cmd = [
     # (bản 1.8.1, 16/09/2026), mở app phải giải nén lâu hơn. App không dùng tới các gói này.
     '--exclude-module', 'IPython', '--exclude-module', 'matplotlib', '--exclude-module', 'matplotlib_inline',
     '--exclude-module', 'numpy', '--exclude-module', 'pandas', '--exclude-module', 'PIL',
+    # Máy build cài pywin32 (08/10/2026) → logging.handlers (NTEventLogHandler) kéo win32evtlog/win32api/pywintypes vào: +333 KB
+    # (bản 1.12.2). App chỉ ghi log ra file, DPAPI + hộp chọn thư mục gọi qua ctypes — không cần pywin32.
+    '--exclude-module', 'win32evtlog', '--exclude-module', 'win32evtlogutil', '--exclude-module', 'win32api',
+    '--exclude-module', 'win32con', '--exclude-module', 'pywintypes',
 ]
 for data in ADD_DATA:
     cmd.extend(['--add-data', data])

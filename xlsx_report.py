@@ -55,6 +55,7 @@ SLATE_100_80 = '#F4F7FA'   # bg-slate-100/80 trộn trên nền trắng
 
 # Giống formatNum() trên app: dương 1,234 · âm (1,234) · bằng 0 hiện "-"
 NUM_FMT = '#,##0;(#,##0);"-"'
+QTY_FMT = '#,##0.00;(#,##0.00);"-"'   # số lượng (BC015): 2 số lẻ như cột Số lượng ở bảng dữ liệu
 DATE_FMT = 'dd/mm/yyyy'
 
 
@@ -64,9 +65,10 @@ class ExportCancelled(Exception):
 
 class Col:
     """1 cột của bảng.
-    kind: text | code | num | int | date | pct
+    kind: text | code | num | qty | int | date | pct
       code — mã TK/đơn vị/số HĐ: ghi CHUỖI, giữ số 0 đầu
       num  — tiền: ghi SỐ THẬT, hiển thị NUM_FMT
+      qty  — số lượng: ghi SỐ THẬT, hiển thị QTY_FMT
       pct  — nhận giá trị theo ĐƠN VỊ % (10 nghĩa là 10%) → ghi 0.1, hiển thị 10%
       date — nhận datetime/date hoặc chuỗi dd/mm/yyyy → ghi NGÀY THẬT
       int  — số thứ tự
@@ -78,7 +80,7 @@ class Col:
         self.header = header
         self.width = width
         self.kind = kind
-        self.align = align or {'num': 'right', 'code': 'center', 'int': 'center',
+        self.align = align or {'num': 'right', 'qty': 'right', 'code': 'center', 'int': 'center',
                                'date': 'center', 'pct': 'center'}.get(kind, 'left')
         self.bold = bold
         self.wrap = wrap
@@ -273,6 +275,8 @@ class XlsxReportWriter:
         kind = kind or col.kind
         if kind == 'num':
             p['num_format'] = NUM_FMT
+        elif kind == 'qty':
+            p['num_format'] = QTY_FMT
         elif kind == 'int':
             p['num_format'] = '0'
         elif kind == 'date':
@@ -520,12 +524,12 @@ class XlsxReportWriter:
                 ws.write_blank(r, c, None, fmt)
             else:
                 kind = col.kind
-                if kind == 'num' or kind == 'int':
+                if kind in ('num', 'qty', 'int'):
                     x = _to_float(v)
                     if x is None:
                         ws.write_string(r, c, str(v), fmt)
                     else:
-                        ws.write_number(r, c, round(x, 4) if kind == 'num' else x, fmt)
+                        ws.write_number(r, c, x if kind == 'int' else round(x, 4), fmt)
                 elif kind == 'pct':
                     x = _to_float(v)
                     if x is None:
@@ -716,7 +720,7 @@ class CsvReportWriter:
             col = self.cols[c]
             if v is None or v == '':
                 out.append('')
-            elif col.kind in ('num', 'int', 'pct'):
+            elif col.kind in ('num', 'qty', 'int', 'pct'):
                 x = _to_float(v)
                 out.append(_csv_cell(v) if x is None else _num_text(x))
             elif col.kind == 'date':
@@ -1030,3 +1034,31 @@ def layout_bc014(info):
         'closing': {'bold': True, 'bg': SLATE_200},
     }
     return Layout('BC014', 'Sổ chi tiết tài khoản công nợ', cols, header, info, styles, landscape=True)
+
+
+_NXT_KEYS = ('oq', 'oa', 'iq', 'ia', 'xq', 'xa', 'cq', 'ca')
+
+
+def layout_bc015(info):
+    """BC015 — Nhập xuất tồn (11 cột, khổ ngang). Dòng do app dựng sẵn (nxtViewRows) — Chi tiết có dòng kho + cộng kho."""
+    cols = [Col('Mã hàng', 14, 'code', bold=True), Col('Tên hàng', 32, 'text', wrap=True), Col('ĐVT', 8, 'text', align='center')]
+    for part in ('Tồn đầu kỳ', 'Nhập trong kỳ', 'Xuất trong kỳ', 'Tồn cuối kỳ'):
+        cols += [Col(f'{part} - Số lượng', 11, 'qty'), Col(f'{part} - Thành tiền', 16, 'num')]
+    header = [[('Mã hàng', 1, 2), ('Tên hàng', 1, 2), ('ĐVT', 1, 2), ('Tồn đầu kỳ', 2, 1), ('Nhập trong kỳ', 2, 1),
+               ('Xuất trong kỳ', 2, 1), ('Tồn cuối kỳ', 2, 1)],
+              [('Số lượng', 1, 1), ('Thành tiền', 1, 1)] * 4]
+    styles = {'group': {'bold': True, 'bg': SLATE_100}, 'sub': {'bold': True, 'bg': SLATE_50}, 'total': _TOTAL_B06}
+    return Layout('BC015', 'Nhập xuất tồn', cols, header, info, styles, landscape=True, row_height=18)
+
+
+def rows_bc015(payload):
+    for r in payload.get('rows') or []:
+        t = r.get('t')
+        if t == 'wh':
+            yield [Span(r.get('label') or '', 11, 'left', upper=False)], 'group'
+        elif t in ('sub', 'total'):
+            # cộng kho / tổng cộng: chỉ cộng tiền (số lượng khác đơn vị tính, cộng lại vô nghĩa)
+            yield [Span(r.get('label') or '', 3, 'right')] + [None if k.endswith('q') else (r.get(k) or 0)
+                                                              for k in _NXT_KEYS], t
+        else:
+            yield [r.get('item') or '', r.get('name') or '', r.get('unit') or ''] + [r.get(k) or 0 for k in _NXT_KEYS], 'data'

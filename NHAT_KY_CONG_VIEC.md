@@ -1648,3 +1648,52 @@ chủ `/api/<kind>/stream_csv` (hộp tiến trình nhỏ + hộp "Đã xuất x
   3,7 s). Updater tải 16,7 MB ~18 s, v1.12.1 lên sau 20,8 s, còn 1 file, SHA = release. `/api/metadata` 401 (đăng nhập lại).
   Đóng cửa sổ → EXE + cổng tắt 2,7 s.
 - Chưa làm: chạy trên DB thật của khách; sửa CSV danh sách mất số 0 đầu ở cột mã (điểm 7); chuyển Tách sheet lên máy chủ (CLAUDE.md mục 6 ý 2).
+
+## 42. v1.12.2 (build 09/10, CHƯA push / phát hành): báo cáo BC015 Nhập xuất tồn *(09/10/2026)*
+
+**Yêu cầu Trum (09/10):** "đọc dự án rồi tạo thêm báo cáo Nhập xuất tồn cho studio đi". Tui hỏi 11 điểm, Trum trả lời "ok mặc định":
+1. Mã BC015 "BÁO CÁO NHẬP XUẤT TỒN", A4 ngang, không ghi mẫu nhà nước.
+2. Cột: Mã hàng · Tên hàng · ĐVT · Tồn đầu / Nhập / Xuất / Tồn cuối (Số lượng + Thành tiền) · dòng Tổng cộng. Không có cột đơn giá.
+3. Nút Chi tiết | Tổng hợp. Chi tiết nhóm theo kho, có dòng cộng kho. Tổng hợp gộp mọi kho. Mở báo cáo thì vào Chi tiết.
+4. Chuyển kho nội bộ giữ trong Nhập và Xuất như iPOS.
+5. Năm chưa kết chuyển tồn thì lấy mốc gần nhất trước đó, theo từng đơn vị.
+6. Lọc: Thời gian · Đơn vị · Kho · Hàng hóa · Tài khoản. Không lọc Nhóm hàng. Loại đơn vị ngoài cây '00'.
+7. Ẩn dòng có đủ 8 số bằng 0. Không phân trang.
+8. Xuất Excel / CSV 2 mẫu, có PDF, có thư mục lưu riêng.
+9. Kiểm trên DB demo. So với iPOS thật thì Trum tự làm.
+10. Build 1.12.2 rồi commit, chưa push.
+11. Không nói "điều phối" nên tui tự làm.
+
+**Tra trước khi sửa (chỉ SELECT, SQL Express máy dev):** `SYS_REPORT` nhóm 06 có `RPT_WAREHOUSEBALANCE` (LIST_ORDER 4, khổ ngang, lọc
+Kho / Nhóm hàng / Hàng hóa). `WAREHOUSE_BALANCE` = tồn đầu năm, TRUNGDEMO có mốc 01/01 các năm 2019–2024 (đơn vị 01 năm 2023 chỉ 1 dòng),
+đơn vị 02 có 2019 / 2021 / 2022. SALE_DEMO có mốc 2019. BIMGROUP không có mốc nào. `WAREHOUSE.ISSUE_RECEIVE` chỉ có N / X. Ngoài kế hoạch:
+`DM_ITEM.IS_WAREHOUSE_BALANCE = 0` là món bán (nước cam, trà sữa…), chỉ có xuất BH/BH1, TRUNGDEMO có 1.207 / 3.762 dòng `WAREHOUSE`. Tui quyết
+bỏ nhóm này (Bẫy 32), Trum chưa xác nhận. Không dòng nào có giờ trong `TRAN_DATE` ở cả 3 DB.
+
+**Đã sửa:**
+- `server.py`: `_nxt_where` + `/api/inventory_summary` (3 câu gộp theo Kho + Hàng: tồn tại mốc, phát sinh mốc → trước kỳ, nhập / xuất trong kỳ;
+  CTE `M` = mốc từng đơn vị); `_rx_plan` BC015 nhận payload như BC011; thêm BC015 vào `_REPORT_EXPORT_CODES`, `_EXPORT_SCREENS`.
+- `xlsx_report.py`: kiểu cột `qty`, `layout_bc015`, `rows_bc015`.
+- `index.html`: `REPORT_TYPES`, `REPORT_FORM_CODE`, `REPORT_TITLE`, `NAV_REPORT_META`; `nxtViewRows` + `fmtQtyRpt` (cấp trên cùng); App
+  `nxtMode` + nút ở `AppPageHeader`, `filters.rpt_wh_ids`, nhánh BC015 trong `loadReportData`, snapshot bộ lọc báo cáo; ReportTab thêm
+  ô Kho / Hàng hóa, tiêu đề, tên file, mẫu xuất, bảng, số dòng ở `ReportBar`.
+- `build_exe.py`: loại `win32evtlog`, `win32evtlogutil`, `win32api`, `win32con`, `pywintypes` (Bẫy 11).
+- `webbuild/node_modules/@babel/standalone` bị trống từ 06/10 01:05 nên `webbuild/build.js` báo không tìm thấy module. Đã chạy lại `npm ci`.
+
+**Verify** (bộ kiểm ngoài repo, scratchpad phiên a0172f09: `harness.py`, `t1.py`–`t4.py`, `cmp_xlsx.py`, `run_srv.py`, `pp/ui1.js`–`ui3.js`,
+`pp/bar.js`; SQL Express, CHỈ SELECT; thư mục xuất + kết nối đã lưu trỏ về thư mục tạm):
+- M1: `ast.parse` 2 file Python, `check_babel.js` xanh.
+- M2 + M4 trên DB demo: `t2.py` tự tính lại từ dòng thô `WAREHOUSE_BALANCE` + `WAREHOUSE` bằng Python, so với API: 10/10 ca khớp từng
+  (Kho, Hàng) × 8 số. Các ca: cả năm 2019, kỳ vắt 2 năm 15/05/2021–20/08/2022, năm 2023 (mốc 1 dòng), tháng 3/2024, 2018–2026, đơn vị 02, 2 kho,
+  3 mã hàng, TK 155, TK 152 + 156 với đơn vị 01. Liền mạch: tồn cuối 2024 = tồn đầu 2026 = 843.757.127,99.
+  `t3.py`: SALE_DEMO 3 kỳ, BIMGROUP không mốc (2026: 62 dòng, tồn đầu 0), kho không tồn tại ra 0 dòng.
+- M3 (bản dịch sẵn `build_web` + Chrome headless, TRUNGDEMO tháng 1/2026): Chi tiết 154 dòng (145 dòng hàng), Tổng hợp 122 dòng (121 mã),
+  đổi chế độ không bật dấu "Cập nhật báo cáo". Thanh lọc 1 hàng ở 1366 / 1440px, 2 hàng ở 1280px (BC014 thì 2 hàng ở cả 1366px).
+  Chọn kho HQV01: request gửi `wh_ids=HQV01`, tiêu đề ghi "Kho: HQV01 - Kho Bar HQV". Xuất Excel 2 mẫu qua hộp Xuất thật, `cmp_xlsx.py` so
+  từng ô với bảng trên màn hình. Lệch 3 ô, cả 3 do cách so chứ không phải lỗi: Python làm tròn 379.614,5 thành 379.614 còn trình duyệt
+  ra 379.615, và "Phở  gà" có 2 dấu cách bị trình duyệt gộp. CSV: mã giữ `="0012"`, tên có dấu nháy / phẩy đúng, ô số lượng dòng cộng trống.
+- Tác động chéo (`ui3.js`): đã chọn kho ở BC015 rồi sang Chứng từ kho, Chứng từ tổng hợp, Chứng từ nhập - mua hàng, Truy vấn. Các request
+  này gửi `wh_ids` rỗng / không có. Lần đầu khoá tên `wh_ids` trong `filters` nên sẽ lọc ngầm 4 tab. `pre-push-qa` bắt được, đã đổi sang `rpt_wh_ids`.
+- EXE 1.12.2: build 1 lần ra 17.056.130 byte (+333 KB, pywin32), loại xong còn 16.735.954 byte (bản 1.12.1: 16.723.550). Chạy EXE:
+  `/api/version` = 1.12.2, `app.js` có `inventory_summary`, `BC015_Nhap_Xuat_Ton`, `rpt_wh_ids`. Đã tắt EXE + cửa sổ app.
+- Chưa làm: so với `RPT_WAREHOUSEBALANCE` của iPOS trên DB thật; đo tốc độ trên DB lớn; Trum xác nhận việc bỏ hàng `IS_WAREHOUSE_BALANCE = 0`.
