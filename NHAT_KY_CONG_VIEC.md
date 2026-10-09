@@ -1703,7 +1703,7 @@ bỏ nhóm này (Bẫy 32), Trum chưa xác nhận. Không dòng nào có giờ 
   ở cổng 5050, mà bản cũ khi mở sẽ tắt tiến trình giữ cổng. `check_update` báo có bản mới, kèm 6 ý. Tải 16,7 MB khoảng 2 s, v1.12.2 lên sau 8,8 s,
   còn 1 file, SHA = release. `/api/metadata` 401 (đăng nhập lại). Đã tắt EXE + cửa sổ app.
 
-## 43. v1.12.3 (build 10/10, CHƯA push / phát hành): BC015 lọc Nhóm hàng, 3 cách nhóm, tổng số lượng *(10/10/2026)*
+## 43. v1.12.3 (phát hành 10/10, commit `b40caa1`): BC015 lọc Nhóm hàng, 3 cách nhóm, tổng số lượng *(10/10/2026)*
 
 **Yêu cầu Trum (10/10):** lần đầu xin nhóm nhiều cấp, kho và nhóm hàng xếp trên dưới tuỳ chọn. Tui hỏi 10 điểm, Trum đổi ý: "làm đơn giản thôi".
 Bản chốt có 3 ý. Một, thêm ô lọc nhóm hàng. Hai, chọn nhóm theo kho hoặc theo nhóm hàng, chỉ 1 trong 2. Ba, cộng cả số lượng và tiền: không
@@ -1732,5 +1732,8 @@ BIMGROUP 5). Hàng nào cũng có `ITEM_CLASS_ID`. Metadata chưa có danh sách
   Không nhóm 69 dòng (68 mã), Theo kho 83 dòng, Theo nhóm hàng 71 dòng. Xuất Excel cả 3 mẫu qua hộp Xuất thật, `cmp2.py` so từng ô với
   màn hình: lệch 1 ô, là ô làm tròn 379.614,5 đã biết từ mục 42. Thanh lọc 2 hàng ở 1280 / 1366 / 1440px, 1 hàng ở 1920px.
   Không lỗi JS, nút chính không báo "Cập nhật báo cáo" khi đổi cách nhóm.
-- EXE 1.12.3: build 00:22 11/10, 16.736.937 byte (1.12.2: 16.735.954). Chạy EXE: `app.js` có `TheoNhom`, `rpt_cls_ids`. Đã tắt EXE.
+- EXE 1.12.3: build 00:22 10/10, 16.736.937 byte (1.12.2: 16.735.954). Chạy EXE: `app.js` có `TheoNhom`, `rpt_cls_ids`. Đã tắt EXE.
 - Chưa làm: so với `RPT_WAREHOUSEBALANCE` của iPOS trên DB thật (như mục 42).
+- Phát hành 10/10 theo lệnh "push phát hành": push `b40caa1`, zip tạo lại từ EXE vừa build, release v1.12.3 "Nhập xuất tồn theo nhóm hàng".
+  API `releases/latest` không đăng nhập ra v1.12.3, digest EXE `3c26609d…c69b` = file build. Lần tạo đầu lỗi 422 vì tui ghép sai mã commit cho `--target`,
+  không để lại tag hay release dở. Chưa test cập nhật thật 1.12.2 → 1.12.3: Trum đang mở EXE `dist` ở cổng 5050 từ 00:29.
