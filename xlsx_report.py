@@ -961,21 +961,21 @@ def rows_bc012(flat):
 
 
 def layout_bc013(info, kind='BR'):
-    """Bảng kê thuế GTGT: kind 'BR' = bán ra, 'MV' = mua vào — cùng 11 cột, khác chữ bên mua / bên bán."""
+    """Bảng kê thuế GTGT: kind 'BR' = bán ra, 'MV' = mua vào — cùng 13 cột, khác chữ bên mua / bên bán."""
     buy = kind == 'MV'
     party = 'Tên người bán' if buy else 'Tên người mua'
     tax_code = 'Mã số thuế người bán' if buy else 'Mã số thuế người mua'
     amount = 'Doanh số mua chưa có thuế' if buy else 'Doanh số bán chưa có thuế'
     cols = [Col('TT', 6, 'int'), Col('Ký hiệu hóa đơn', 11, 'code'), Col('Số hóa đơn', 11, 'code', bold=True),
-            Col('Ngày phát hành', 12, 'date'), Col(party, 28, 'text', wrap=True),
+            Col('Ngày phát hành', 12, 'date'), Col('Ngày CT gốc', 12, 'date'), Col(party, 28, 'text', wrap=True),
             Col(tax_code, 15, 'code'), Col('Mặt hàng', 30, 'text', wrap=True),
             Col(amount, 18, 'num', carry=True), Col('Thuế suất (%)', 9, 'pct'),
-            Col('Thuế GTGT', 17, 'num', carry=True), Col('Ghi chú', 14, 'text', wrap=True)]
+            Col('Thuế GTGT', 17, 'num', carry=True), Col('TK thuế', 10, 'code'), Col('Ghi chú', 14, 'text', wrap=True)]
     header = [
-        [('TT', 1, 2), ('Hóa đơn, chứng từ, biên lai nộp thuế', 3, 1), (party, 1, 2),
+        [('TT', 1, 2), ('Hóa đơn, chứng từ, biên lai nộp thuế', 4, 1), (party, 1, 2),
          (tax_code, 1, 2), ('Mặt hàng', 1, 2), (amount, 1, 2),
-         ('Thuế suất (%)', 1, 2), ('Thuế GTGT', 1, 2), ('Ghi chú', 1, 2)],
-        [('Ký hiệu hóa đơn', 1, 1), ('Số hóa đơn', 1, 1), ('Ngày phát hành', 1, 1)],
+         ('Thuế suất (%)', 1, 2), ('Thuế GTGT', 1, 2), ('TK thuế', 1, 2), ('Ghi chú', 1, 2)],
+        [('Ký hiệu hóa đơn', 1, 1), ('Số hóa đơn', 1, 1), ('Ngày phát hành', 1, 1), ('Ngày CT gốc', 1, 1)],
     ]
     styles = {
         'total': {'bold': True, 'bg': SLATE_100_80},
@@ -999,7 +999,7 @@ def bc013_summary_rows(totals, kind='BR'):
             ('Tổng doanh thu hàng hoá dịch vụ bán ra chịu thuế GTGT:', totals.get('taxable_amount_item')),
             ('Thuế GTGT của hàng hoá dịch vụ bán ra:', totals.get('total_vat_amount')),
         ]
-    return [([Span(label, 7, 'left'), value or 0], 'summary') for label, value in items]
+    return [([Span(label, 8, 'left'), value or 0], 'summary') for label, value in items]
 
 
 def layout_bc014(info):

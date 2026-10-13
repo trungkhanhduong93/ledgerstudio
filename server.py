@@ -6936,26 +6936,28 @@ def report_export_csv():
                 vat_acc_where = " AND (" + " OR ".join(["ACCOUNT_ID LIKE ?"] * len(acc_ids_13)) + ")"
                 vat_acc_params = [a + "%" for a in acc_ids_13]
             buy = vat_kind == 'MV'
-            headers = ["TT", "Ký hiệu hóa đơn", "Số hóa đơn", "Ngày phát hành",
+            headers = ["TT", "Ký hiệu hóa đơn", "Số hóa đơn", "Ngày phát hành", "Ngày CT gốc",
                        "Tên người bán" if buy else "Tên người mua",
                        "Mã số thuế người bán" if buy else "Mã số thuế người mua", "Mặt hàng",
                        "Doanh số mua chưa có thuế" if buy else "Doanh số bán chưa có thuế",
-                       "Thuế suất (%)", "Thuế GTGT", "Ghi chú"]
+                       "Thuế suất (%)", "Thuế GTGT", "TK thuế", "Ghi chú"]
             if mode == "summary":
                 # Gộp mỗi số hóa đơn 1 dòng — GROUP BY y hệt nhánh summary của /api/vat_sales_report
-                sql = f"""SELECT ISNULL(VAT_TRAN_SERIE,''), ISNULL(VAT_TRAN_NO,''), VAT_TRAN_DATE,
+                sql = f"""SELECT ISNULL(VAT_TRAN_SERIE,''), ISNULL(VAT_TRAN_NO,''), VAT_TRAN_DATE, TRAN_DATE_ORIG,
                                  ISNULL(PR_DETAIL_NAME,''), ISNULL(TAX_FILE_NUMBER,''),
                                  {item_sql}, ISNULL(SUM(AMOUNT_ITEM),0),
-                                 ISNULL(MAX(VAT_TAX_RATE),0), ISNULL(SUM(AMOUNT),0), N''
+                                 ISNULL(MAX(VAT_TAX_RATE),0), ISNULL(SUM(AMOUNT),0),
+                                 ISNULL(ACCOUNT_ID,''), N''
                           FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK)
                           WHERE TRAN_ID = '{tran_id}'
                             AND VAT_TRAN_DATE >= ? AND VAT_TRAN_DATE <= ?{vat_org_where}{vat_acc_where}
-                          GROUP BY VAT_TRAN_SERIE, VAT_TRAN_NO, VAT_TRAN_DATE, PR_DETAIL_NAME, TAX_FILE_NUMBER, ACCOUNT_ID
+                          GROUP BY VAT_TRAN_SERIE, VAT_TRAN_NO, VAT_TRAN_DATE, TRAN_DATE_ORIG, PR_DETAIL_NAME, TAX_FILE_NUMBER, ACCOUNT_ID
                           ORDER BY VAT_TRAN_DATE, VAT_TRAN_NO"""
             else:
-                sql = f"""SELECT ISNULL(VAT_TRAN_SERIE,''), ISNULL(VAT_TRAN_NO,''), VAT_TRAN_DATE,
+                sql = f"""SELECT ISNULL(VAT_TRAN_SERIE,''), ISNULL(VAT_TRAN_NO,''), VAT_TRAN_DATE, TRAN_DATE_ORIG,
                                  ISNULL(PR_DETAIL_NAME,''), ISNULL(TAX_FILE_NUMBER,''), ISNULL(ITEM_NAME,''),
-                                 ISNULL(AMOUNT_ITEM,0), ISNULL(VAT_TAX_RATE,0), ISNULL(AMOUNT,0), ISNULL(COMMENTS,'')
+                                 ISNULL(AMOUNT_ITEM,0), ISNULL(VAT_TAX_RATE,0), ISNULL(AMOUNT,0),
+                                 ISNULL(ACCOUNT_ID,''), ISNULL(COMMENTS,'')
                           FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK)
                           WHERE TRAN_ID = '{tran_id}'
                             AND VAT_TRAN_DATE >= ? AND VAT_TRAN_DATE <= ?{vat_org_where}{vat_acc_where}
@@ -7018,15 +7020,17 @@ def report_export_csv():
                         lines = []
                         for r in batch:
                             stt += 1
-                            amt = float(r[6] or 0); vat = float(r[8] or 0)
+                            amt = float(r[7] or 0); vat = float(r[9] or 0)
                             sum_amt += amt; sum_vat += vat
+                            pub_d = r[2].strftime("%d/%m/%Y") if hasattr(r[2], 'strftime') else (r[2] or '')
+                            orig_d = r[3].strftime("%d/%m/%Y") if hasattr(r[3], 'strftime') else (r[3] or '')
                             lines.append(','.join(_csv_escape(x) for x in [
-                                stt, _csv_text_cell(r[0]), _csv_text_cell(r[1]), r[2],
-                                r[3] or '', _csv_text_cell(r[4]), r[5] or '',
-                                _amt(amt), _amt(float(r[7] or 0)), _amt(vat), r[9] or '']))
+                                stt, _csv_text_cell(r[0]), _csv_text_cell(r[1]), pub_d, orig_d,
+                                r[4] or '', _csv_text_cell(r[5]), r[6] or '',
+                                _amt(amt), _amt(float(r[8] or 0)), _amt(vat), _csv_text_cell(r[10] or ''), r[11] or '']))
                         yield '\r\n'.join(lines) + '\r\n'
                     yield ','.join(_csv_escape(x) for x in [
-                        '', '', '', '', '', '', 'Tổng cộng', _amt(sum_amt), '', _amt(sum_vat), '']) + '\r\n'
+                        '', '', '', '', '', '', '', 'Tổng cộng', _amt(sum_amt), '', _amt(sum_vat), '', '']) + '\r\n'
                 elif report_type == "BC007" and mode == "detail":  # NHẬT KÝ CHUNG CHI TIẾT
                     cur.execute(sql, params)
                     while True:
@@ -8027,7 +8031,7 @@ def get_vat_sales_report():
                     FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK)
                     WHERE TRAN_ID = '{tran_id}'
                       AND VAT_TRAN_DATE >= ? AND VAT_TRAN_DATE <= ?{org_where}{acc_where}
-                    GROUP BY VAT_TRAN_SERIE, VAT_TRAN_NO, VAT_TRAN_DATE, PR_DETAIL_NAME, TAX_FILE_NUMBER, ACCOUNT_ID
+                    GROUP BY VAT_TRAN_SERIE, VAT_TRAN_NO, VAT_TRAN_DATE, TRAN_DATE_ORIG, PR_DETAIL_NAME, TAX_FILE_NUMBER, ACCOUNT_ID
                 ) AS Grp
             """
         else:
@@ -8058,6 +8062,7 @@ def get_vat_sales_report():
                         ISNULL(VAT_TRAN_SERIE, '') AS serie,
                         ISNULL(VAT_TRAN_NO, '') AS no,
                         VAT_TRAN_DATE AS date_raw,
+                        TRAN_DATE_ORIG AS orig_date_raw,
                         ISNULL(PR_DETAIL_NAME, '') AS seller,
                         ISNULL(TAX_FILE_NUMBER, '') AS tax_code,
                         {item_sql} AS item,
@@ -8070,7 +8075,7 @@ def get_vat_sales_report():
                     FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK)
                     WHERE TRAN_ID = '{tran_id}'
                       AND VAT_TRAN_DATE >= ? AND VAT_TRAN_DATE <= ?{org_where}{acc_where}
-                    GROUP BY VAT_TRAN_SERIE, VAT_TRAN_NO, VAT_TRAN_DATE, PR_DETAIL_NAME, TAX_FILE_NUMBER, ACCOUNT_ID
+                    GROUP BY VAT_TRAN_SERIE, VAT_TRAN_NO, VAT_TRAN_DATE, TRAN_DATE_ORIG, PR_DETAIL_NAME, TAX_FILE_NUMBER, ACCOUNT_ID
                 ) AS Paged
                 WHERE RowNum > ? AND RowNum <= ?
                 ORDER BY RowNum
@@ -8082,6 +8087,7 @@ def get_vat_sales_report():
                         ISNULL(VAT_TRAN_SERIE, '') AS serie,
                         ISNULL(VAT_TRAN_NO, '') AS no,
                         VAT_TRAN_DATE AS date_raw,
+                        TRAN_DATE_ORIG AS orig_date_raw,
                         ISNULL(PR_DETAIL_NAME, '') AS seller,
                         ISNULL(TAX_FILE_NUMBER, '') AS tax_code,
                         ISNULL(ITEM_NAME, '') AS item,
@@ -8106,14 +8112,16 @@ def get_vat_sales_report():
                 "serie": (r[0] or '').strip(),
                 "no": (r[1] or '').strip(),
                 "date": r[2].strftime("%d/%m/%Y") if r[2] else "",
-                "seller": (r[3] or '').strip(),
-                "tax_code": (r[4] or '').strip(),
-                "item": (r[5] or '').strip(),
-                "amount_item": float(r[6] or 0),
-                "tax_rate": float(r[7] or 0),
-                "tax_amount": float(r[8] or 0),
-                "comments": (r[9] or '').strip(),
-                "account_id": (r[10] or '').strip()
+                "orig_tran_date": r[3].strftime("%d/%m/%Y") if r[3] else "",
+                "seller": (r[4] or '').strip(),
+                "tax_code": (r[5] or '').strip(),
+                "item": (r[6] or '').strip(),
+                "amount_item": float(r[7] or 0),
+                "tax_rate": float(r[8] or 0),
+                "tax_amount": float(r[9] or 0),
+                "comments": (r[10] or '').strip(),
+                "account_id": (r[11] or '').strip(),
+                "account_id_vat": (r[11] or '').strip()
             })
 
         totals = {
@@ -8668,18 +8676,20 @@ def _rx_plan(rpt, variant, info, p, payload):
             acc_params = [a + "%" for a in acc_ids]
         params = [d_from, d_to] + list(org_params) + acc_params
         base_where = f"TRAN_ID = '{tran_id}' AND VAT_TRAN_DATE >= ? AND VAT_TRAN_DATE <= ?{org_where}{acc_where}"
-        group_by = "GROUP BY VAT_TRAN_SERIE, VAT_TRAN_NO, VAT_TRAN_DATE, PR_DETAIL_NAME, TAX_FILE_NUMBER, ACCOUNT_ID"
+        group_by = "GROUP BY VAT_TRAN_SERIE, VAT_TRAN_NO, VAT_TRAN_DATE, TRAN_DATE_ORIG, PR_DETAIL_NAME, TAX_FILE_NUMBER, ACCOUNT_ID"
 
         if mode == 'summary':
-            sql = f"""SELECT ISNULL(VAT_TRAN_SERIE,''), ISNULL(VAT_TRAN_NO,''), VAT_TRAN_DATE, ISNULL(PR_DETAIL_NAME,''),
-                             ISNULL(TAX_FILE_NUMBER,''), {item_sql}, ISNULL(SUM(AMOUNT_ITEM),0),
-                             ISNULL(MAX(VAT_TAX_RATE),0), ISNULL(SUM(AMOUNT),0), N''
+            sql = f"""SELECT ISNULL(VAT_TRAN_SERIE,''), ISNULL(VAT_TRAN_NO,''), VAT_TRAN_DATE, TRAN_DATE_ORIG,
+                             ISNULL(PR_DETAIL_NAME,''), ISNULL(TAX_FILE_NUMBER,''), {item_sql},
+                             ISNULL(SUM(AMOUNT_ITEM),0), ISNULL(MAX(VAT_TAX_RATE),0), ISNULL(SUM(AMOUNT),0),
+                             ISNULL(ACCOUNT_ID,''), N''
                       FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK) WHERE {base_where} {group_by}
                       ORDER BY VAT_TRAN_DATE, VAT_TRAN_NO"""
         else:
-            sql = f"""SELECT ISNULL(VAT_TRAN_SERIE,''), ISNULL(VAT_TRAN_NO,''), VAT_TRAN_DATE, ISNULL(PR_DETAIL_NAME,''),
-                             ISNULL(TAX_FILE_NUMBER,''), ISNULL(ITEM_NAME,''), ISNULL(AMOUNT_ITEM,0),
-                             ISNULL(VAT_TAX_RATE,0), ISNULL(AMOUNT,0), ISNULL(COMMENTS,'')
+            sql = f"""SELECT ISNULL(VAT_TRAN_SERIE,''), ISNULL(VAT_TRAN_NO,''), VAT_TRAN_DATE, TRAN_DATE_ORIG,
+                             ISNULL(PR_DETAIL_NAME,''), ISNULL(TAX_FILE_NUMBER,''), ISNULL(ITEM_NAME,''),
+                             ISNULL(AMOUNT_ITEM,0), ISNULL(VAT_TAX_RATE,0), ISNULL(AMOUNT,0),
+                             ISNULL(ACCOUNT_ID,''), ISNULL(COMMENTS,'')
                       FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK) WHERE {base_where}
                       ORDER BY {detail_order}"""
 
@@ -8705,13 +8715,13 @@ def _rx_plan(rpt, variant, info, p, payload):
             stt, s_amt, s_vat = 0, Decimal(0), Decimal(0)
             for r in src:
                 stt += 1
-                amt, vat = _rx_dec(r[6]), _rx_dec(r[8])
+                amt, vat = _rx_dec(r[7]), _rx_dec(r[9])
                 s_amt += amt
                 s_vat += vat
-                yield [stt, (r[0] or '').strip(), (r[1] or '').strip(), r[2], (r[3] or '').strip(),
-                       (r[4] or '').strip(), (r[5] or '').strip(), amt, float(r[7] or 0), vat,
-                       (r[9] or '').strip()], 'data'
-            yield [XR.Span('Tổng cộng', 7, 'center'), s_amt, None, s_vat, None], 'total'
+                yield [stt, (r[0] or '').strip(), (r[1] or '').strip(), r[2], r[3], (r[4] or '').strip(),
+                       (r[5] or '').strip(), (r[6] or '').strip(), amt, float(r[8] or 0), vat,
+                       (r[10] or '').strip(), (r[11] or '').strip()], 'data'
+            yield [XR.Span('Tổng cộng', 8, 'center'), s_amt, None, s_vat, None, None], 'total'
         return dict(layout=XR.layout_bc013(info, kind), total=0, prepare=prepare, rows=rows,
                     after=lambda ctx: XR.bc013_summary_rows(ctx['totals'], kind), needs_db=True)
 
