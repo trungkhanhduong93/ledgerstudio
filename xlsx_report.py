@@ -112,7 +112,7 @@ class Layout:
     def __init__(self, code, sheet_name, columns, header, info, row_styles=None, landscape=False,
                  border_color=BLACK, signature='standard', row_height=None,
                  carry_out_label='Cộng chuyển sang sheet sau', carry_in_label='Số cộng sheet trước chuyển sang',
-                 continue_rows=None):
+                 continue_rows=None, paper=9):
         self.code = code
         self.sheet_name = sheet_name
         self.columns = columns
@@ -128,6 +128,7 @@ class Layout:
         self.carry_in_label = carry_in_label
         # continue_rows(last_meta) -> list[(values, style)]: dòng mở đầu sheet nối tiếp (vd BC012 "Tài khoản X (tiếp theo)")
         self.continue_rows = continue_rows
+        self.paper = paper
 
 
 # ---------------------------------------------------------------------------------------------------------
@@ -341,8 +342,8 @@ class XlsxReportWriter:
         self._row = 0
         self._sheet_rows = 0
 
-        # Trang in: A4, đúng hướng giấy như trên app, vừa 1 trang ngang, lặp đầu bảng mỗi trang
-        ws.set_paper(9)
+        # Trang in: A4/A3, đúng hướng giấy như trên app, vừa 1 trang ngang, lặp đầu bảng mỗi trang
+        ws.set_paper(getattr(L, 'paper', 9))
         if L.landscape:
             ws.set_landscape()
         else:
@@ -961,16 +962,16 @@ def rows_bc012(flat):
 
 
 def layout_bc013(info, kind='BR'):
-    """Bảng kê thuế GTGT: kind 'BR' = bán ra, 'MV' = mua vào — cùng 13 cột, khác chữ bên mua / bên bán."""
+    """Bảng kê thuế GTGT: kind 'BR' = bán ra, 'MV' = mua vào — cùng 13 cột, khổ A3 ngang, khác chữ bên mua / bên bán."""
     buy = kind == 'MV'
     party = 'Tên người bán' if buy else 'Tên người mua'
     tax_code = 'Mã số thuế người bán' if buy else 'Mã số thuế người mua'
     amount = 'Doanh số mua chưa có thuế' if buy else 'Doanh số bán chưa có thuế'
-    cols = [Col('TT', 6, 'int'), Col('Ký hiệu hóa đơn', 11, 'code'), Col('Số hóa đơn', 11, 'code', bold=True),
-            Col('Ngày phát hành', 12, 'date'), Col('Ngày CT gốc', 12, 'date'), Col(party, 28, 'text', wrap=True),
-            Col(tax_code, 15, 'code'), Col('Mặt hàng', 30, 'text', wrap=True),
-            Col(amount, 18, 'num', carry=True), Col('Thuế suất (%)', 9, 'pct'),
-            Col('Thuế GTGT', 17, 'num', carry=True), Col('TK thuế', 10, 'code'), Col('Ghi chú', 14, 'text', wrap=True)]
+    cols = [Col('TT', 6, 'int'), Col('Ký hiệu hóa đơn', 13, 'code'), Col('Số hóa đơn', 13, 'code', bold=True),
+            Col('Ngày phát hành', 13, 'date'), Col('Ngày CT gốc', 13, 'date'), Col(party, 36, 'text', wrap=True),
+            Col(tax_code, 17, 'code'), Col('Mặt hàng', 36, 'text', wrap=True),
+            Col(amount, 19, 'num', carry=True), Col('Thuế suất (%)', 10, 'pct'),
+            Col('Thuế GTGT', 19, 'num', carry=True), Col('TK thuế', 11, 'code'), Col('Ghi chú', 18, 'text', wrap=True)]
     header = [
         [('TT', 1, 2), ('Hóa đơn, chứng từ, biên lai nộp thuế', 4, 1), (party, 1, 2),
          (tax_code, 1, 2), ('Mặt hàng', 1, 2), (amount, 1, 2),
@@ -982,7 +983,7 @@ def layout_bc013(info, kind='BR'):
         'summary': {'noborder': True, 'bold': True, 'indent': 1},
     }
     return Layout('BC013', 'Bảng kê mua vào' if buy else 'Bảng kê bán ra', cols, header, info, styles, landscape=True,
-                  border_color=SLATE_300, signature='vat', row_height=16)
+                  border_color=SLATE_300, signature='vat', row_height=16, paper=8)
 
 
 def bc013_summary_rows(totals, kind='BR'):

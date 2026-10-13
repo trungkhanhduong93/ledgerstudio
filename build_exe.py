@@ -39,6 +39,9 @@ else:
 WEB_DIR = 'build_web'
 
 def build_web():
+    if os.path.isfile(os.path.join(WEB_DIR, 'app.js')) and os.path.isfile('index.html') and os.path.getmtime(os.path.join(WEB_DIR, 'app.js')) >= os.path.getmtime('index.html'):
+        print(f"[webbuild] Ban build_web da san sang va moi hon index.html — bo qua build_web().")
+        return
     node = shutil.which('node')
     npm = shutil.which('npm')
     if not node or not npm:

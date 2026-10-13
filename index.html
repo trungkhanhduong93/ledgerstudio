@@ -3716,7 +3716,7 @@ window.showConnectionLost = function() {
         // lại ReportTab (BC012 tới 10.000 dòng/trang). "Vừa khung" chỉ THU NHỎ cho vừa bề ngang, không phóng quá 100%.
         // Bản in bỏ scale (@media print). Nhớ lựa chọn qua localStorage['ds_report_zoom'].
         const REPORT_ZOOMS = [0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5];
-        const ReportBar = ({ deskRef, sizerRef, paperRef, landscape, children }) => {
+        const ReportBar = ({ deskRef, sizerRef, paperRef, landscape, paperWidthMm, children }) => {
             const [pref, setPref] = React.useState(() => {
                 try { const n = Number(localStorage.getItem('ds_report_zoom')); return REPORT_ZOOMS.includes(n) ? n : 'fit'; } catch (e) { return 'fit'; }
             });
@@ -3724,14 +3724,14 @@ window.showConnectionLost = function() {
             React.useLayoutEffect(() => {   // layout effect: tính "Vừa khung" trước lượt vẽ đầu, không chớp 100% → 98%
                 const desk = deskRef.current;
                 if (!desk) return;
-                const paperPx = (landscape ? 297 : 210) * 96 / 25.4;
+                const paperPx = (paperWidthMm || (landscape ? 297 : 210)) * 96 / 25.4;
                 const calc = () => { const w = desk.clientWidth - 32; setFit(Math.max(0.5, Math.min(1, Math.floor(w / paperPx * 100) / 100))); };
                 calc();
                 let t = null;
                 const ro = new ResizeObserver(() => { clearTimeout(t); t = setTimeout(calc, 120); });
                 ro.observe(desk);
                 return () => { clearTimeout(t); ro.disconnect(); };
-            }, [landscape]);
+            }, [landscape, paperWidthMm]);
             const zoom = pref === 'fit' ? fit : pref;
             React.useLayoutEffect(() => {
                 const paper = paperRef.current, sizer = sizerRef.current;
@@ -4208,7 +4208,7 @@ window.showConnectionLost = function() {
                     {loading && <div className="ds-loading"><div className="ds-loadbar"></div><div className="ds-loadpill"><Icon name="loader" size={14} className="animate-spin"/>Đang kết xuất báo cáo...</div></div>}
                     <div className="flex-1 overflow-auto custom-scrollbar ds-desk px-4 relative" ref={paperScrollRef}>
                         <div ref={sizerRef} className="ds-papersizer">
-                        <div ref={paperRef} className={`report-paper ${isLandscape ? 'paper-landscape' : 'paper-portrait'} ${reportType === 'BC014' ? 'bc014-paper' : ''}`}>
+                        <div ref={paperRef} className={`report-paper ${isLandscape ? 'paper-landscape' : 'paper-portrait'} ${reportType === 'BC014' ? 'bc014-paper' : ''} ${reportType === 'BC013' ? 'bc013-paper' : ''}`}>
                             {/* Khối tiêu đề — screenHeader dùng chung với file Excel xuất ra (buildReportHeader) */}
                             <div className="flex justify-between items-start mb-6">
                                 <div>
@@ -4244,11 +4244,17 @@ window.showConnectionLost = function() {
                                         .bc006-table .col-tk { width: 5% !important; font-size: 11px; font-weight: 700; }
                                         ` : ''}
                                         ${reportType === 'BC013' ? `
-                                        .bc013-table { width: 100% !important; min-width: 100% !important; max-width: 100% !important; table-layout: fixed !important; border-collapse: collapse !important; }
-                                        .bc013-table th, .bc013-table td { border: 1px solid #cbd5e1 !important; word-break: break-word !important; white-space: normal !important; font-size: 10.5px !important; padding: 4px 3px !important; box-sizing: border-box !important; }
+                                        .bc013-paper { width: 420mm !important; min-width: 420mm !important; max-width: 420mm !important; padding: 12mm 15mm !important; box-sizing: border-box !important; }
+                                        .bc013-table { width: 100% !important; min-width: 100% !important; max-width: 100% !important; table-layout: fixed !important; border-collapse: collapse !important; margin: 0 !important; }
+                                        .bc013-table th, .bc013-table td { border: 1px solid #cbd5e1 !important; word-break: break-word !important; overflow-wrap: anywhere !important; white-space: normal !important; font-size: 10px !important; padding: 5px 4px !important; box-sizing: border-box !important; line-height: 1.35 !important; }
+                                        .bc013-table .nowrap-cell { white-space: nowrap !important; word-break: normal !important; overflow-wrap: normal !important; }
+                                        .bc013-table th { background: #f1f5f9 !important; font-weight: 800 !important; text-align: center !important; text-transform: uppercase !important; vertical-align: middle !important; }
                                         .bc013-table tbody tr { content-visibility: auto !important; contain-intrinsic-size: 0 28px !important; }
                                         .bc013-table th:last-child, .bc013-table td:last-child { border-right: 1px solid #cbd5e1 !important; }
-                                        @media print { @page { size: A4 landscape; margin: 8mm; } }
+                                        @media print {
+                                            @page { size: A3 landscape; margin: 8mm; }
+                                            .report-paper.bc013-paper { padding: 0 !important; margin: 0 !important; box-shadow: none !important; border: none !important; width: 100% !important; max-width: 100% !important; min-width: 100% !important; }
+                                        }
                                         ` : ''}
                                         ${(reportType === 'BC011' || reportType === 'BC006') ? '@media print { @page { size: A4 landscape; margin: 8mm; } }' : ''}
                                     `}</style>
@@ -4505,41 +4511,56 @@ window.showConnectionLost = function() {
                                         </>
                                     ) : reportType === 'BC013' ? (
                                     <>
+                                        <colgroup>
+                                            <col style={{ width: '2.5%' }} />
+                                            <col style={{ width: '5.5%' }} />
+                                            <col style={{ width: '5.5%' }} />
+                                            <col style={{ width: '5.0%' }} />
+                                            <col style={{ width: '5.0%' }} />
+                                            <col style={{ width: '18.0%' }} />
+                                            <col style={{ width: '7.5%' }} />
+                                            <col style={{ width: '16.0%' }} />
+                                            <col style={{ width: '9.0%' }} />
+                                            <col style={{ width: '4.5%' }} />
+                                            <col style={{ width: '9.0%' }} />
+                                            <col style={{ width: '4.5%' }} />
+                                            <col style={{ width: '8.0%' }} />
+                                        </colgroup>
                                         <thead>
                                             <tr>
-                                                <th rowSpan="2" className="px-1 py-2 text-center w-[2.5%] text-xs font-bold">TT</th>
+                                                <th rowSpan="2" className="px-1 py-2 text-center text-xs font-bold">TT</th>
                                                 <th colSpan="4" className="px-1 py-2 text-center text-xs font-bold">Hóa đơn, chứng từ, biên lai nộp thuế</th>
-                                                <th rowSpan="2" className="px-1 py-2 text-center w-[14%] text-xs font-bold">{vk.party}</th>
-                                                <th rowSpan="2" className="px-1 py-2 text-center w-[9%] text-xs font-bold">{vk.taxCode}</th>
-                                                <th rowSpan="2" className="px-1 py-2 text-center w-[15%] text-xs font-bold">Mặt hàng</th>
-                                                <th rowSpan="2" className="px-1 py-2 text-center w-[10%] text-xs font-bold col-value">{vk.amount}</th>
-                                                <th rowSpan="2" className="px-1 py-2 text-center w-[5%] text-xs font-bold">Thuế suất (%)</th>
-                                                <th rowSpan="2" className="px-1 py-2 text-center w-[10%] text-xs font-bold col-value">Thuế GTGT</th>
-                                                <th rowSpan="2" className="px-1 py-2 text-center w-[5%] text-xs font-bold">TK thuế</th>
-                                                <th rowSpan="2" className="px-1 py-2 text-center w-[6.5%] text-xs font-bold">Ghi chú</th>
+                                                <th rowSpan="2" className="px-1 py-2 text-center text-xs font-bold">{vk.party}</th>
+                                                <th rowSpan="2" className="px-1 py-2 text-center text-xs font-bold">{vk.taxCode}</th>
+                                                <th rowSpan="2" className="px-1 py-2 text-center text-xs font-bold">Mặt hàng</th>
+                                                <th rowSpan="2" className="px-1 py-2 text-center text-xs font-bold col-value">{vk.amount}</th>
+                                                <th rowSpan="2" className="px-1 py-2 text-center text-xs font-bold">Thuế suất (%)</th>
+                                                <th rowSpan="2" className="px-1 py-2 text-center text-xs font-bold col-value">Thuế GTGT</th>
+                                                <th rowSpan="2" className="px-1 py-2 text-center text-xs font-bold">TK thuế</th>
+                                                <th rowSpan="2" className="px-1 py-2 text-center text-xs font-bold">Ghi chú</th>
                                             </tr>
                                             <tr>
-                                                <th className="px-1 py-1 text-center w-[5.5%] text-[11px] font-bold">Ký hiệu hóa đơn</th>
-                                                <th className="px-1 py-1 text-center w-[5.5%] text-[11px] font-bold">Số hóa đơn</th>
-                                                <th className="px-1 py-1 text-center w-[6%] text-[11px] font-bold">Ngày phát hành</th>
-                                                <th className="px-1 py-1 text-center w-[6%] text-[11px] font-bold">Ngày CT gốc</th>
+                                                <th className="px-1 py-1 text-center text-[11px] font-bold">Ký hiệu hóa đơn</th>
+                                                <th className="px-1 py-1 text-center text-[11px] font-bold">Số hóa đơn</th>
+                                                <th className="px-1 py-1 text-center text-[11px] font-bold">Ngày phát hành</th>
+                                                <th className="px-1 py-1 text-center text-[11px] font-bold">Ngày CT gốc</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {pagedDataRows.map((row, idx) => (
                                                 <tr key={`${row.serie}_${row.no}_${idx}`} className="hover:bg-slate-50">
                                                     <td className="text-center text-xs">{idx + 1}</td>
-                                                    <td className="text-center text-xs col-code">{row.serie}</td>
-                                                    <td className="text-center font-bold text-xs col-code">{row.no}</td>
-                                                    <td className="text-center text-xs">{row.date}</td>
-                                                    <td className="text-center text-xs">{row.orig_tran_date || ''}</td>
+                                                    <td className="text-center text-xs col-code nowrap-cell">{row.serie}</td>
+                                                    <td className="text-center font-bold text-xs col-code nowrap-cell">{row.no}</td>
+                                                    <td className="text-center text-xs nowrap-cell">{row.date}</td>
+                                                    <td className="text-center text-xs nowrap-cell">{row.orig_tran_date || ''}</td>
                                                     <td className="px-2 text-xs">{row.seller}</td>
-                                                    <td className="text-center text-xs col-code">{row.tax_code}</td>
+                                                    <td className="text-center text-xs col-code nowrap-cell">{row.tax_code}</td>
                                                     <td className="px-2 text-xs">{row.item}</td>
-                                                    <td className="text-right px-2 text-xs col-value">{formatNum(row.amount_item)}</td>
-                                                    <td className="text-center text-xs">{row.tax_rate !== undefined ? row.tax_rate + '%' : '0%'}</td>
-                                                    <td className="text-right px-2 text-xs col-value">{formatNum(row.tax_amount)}</td>
-                                                    <td className="text-center text-xs col-code">{row.account_id_vat || row.account_id || ''}</td>
+                                                    <td className="text-right px-2 text-xs col-value nowrap-cell">{formatNum(row.amount_item)}</td>
+                                                    <td className="text-center text-xs nowrap-cell">{row.tax_rate !== undefined ? row.tax_rate + '%' : '0%'}</td>
+                                                    <td className="text-right px-2 text-xs col-value nowrap-cell">{formatNum(row.tax_amount)}</td>
+                                                    <td className="text-center text-xs col-code nowrap-cell">{row.account_id_vat || row.account_id || ''}</td>
                                                     <td className="px-2 text-xs">{row.comments}</td>
                                                 </tr>
                                             ))}
@@ -4556,9 +4577,9 @@ window.showConnectionLost = function() {
                                                 return (
                                                     <tr className="font-bold bg-slate-100/80">
                                                         <td colSpan="8" className="text-center text-xs">{(reportData.pagination && reportData.pagination.total_pages > 1) ? 'Cộng trang' : 'Tổng cộng'}</td>
-                                                        <td className="text-right px-2 text-xs col-value">{formatNum(pageAmtSum)}</td>
+                                                        <td className="text-right px-2 text-xs col-value nowrap-cell">{formatNum(pageAmtSum)}</td>
                                                         <td></td>
-                                                        <td className="text-right px-2 text-xs col-value">{formatNum(pageVatSum)}</td>
+                                                        <td className="text-right px-2 text-xs col-value nowrap-cell">{formatNum(pageVatSum)}</td>
                                                         <td></td>
                                                         <td></td>
                                                     </tr>
@@ -4994,7 +5015,7 @@ window.showConnectionLost = function() {
                     </div>
 
                     {/* Thanh dưới: phân trang (gõ số trang + Enter) cho BC007/BC008/BC013/BC012 · số dòng · lên/xuống · zoom */}
-                    <ReportBar deskRef={paperScrollRef} sizerRef={sizerRef} paperRef={paperRef} landscape={isLandscape}>
+                    <ReportBar deskRef={paperScrollRef} sizerRef={sizerRef} paperRef={paperRef} landscape={isLandscape} paperWidthMm={reportType === 'BC013' ? 420 : (isLandscape ? 297 : 210)}>
                         {(reportType === 'BC007' || reportType === 'BC008' || reportType === 'BC013' || reportType === 'BC014') && reportData.pagination && reportData.pagination.total_pages > 1 && (
                             <PageJumper page={reportData.pagination.page} totalPages={reportData.pagination.total_pages} onGoto={p => loadReportData(p)} compact />
                         )}

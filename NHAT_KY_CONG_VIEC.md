@@ -1737,3 +1737,20 @@ BIMGROUP 5). Hàng nào cũng có `ITEM_CLASS_ID`. Metadata chưa có danh sách
 - Phát hành 10/10 theo lệnh "push phát hành": push `b40caa1`, zip tạo lại từ EXE vừa build, release v1.12.3 "Nhập xuất tồn theo nhóm hàng".
   API `releases/latest` không đăng nhập ra v1.12.3, digest EXE `3c26609d…c69b` = file build. Lần tạo đầu lỗi 422 vì tui ghép sai mã commit cho `--target`,
   không để lại tag hay release dở. Chưa test cập nhật thật 1.12.2 → 1.12.3: Trum đang mở EXE `dist` ở cổng 5050 từ 00:29.
+
+## 44. v1.12.4 (phát hành 13/10, commit `bf837cd`): BC013 bổ sung cột Ngày chứng từ gốc và TK thuế *(13/10/2026)*
+
+- Bổ sung 2 cột Ngày chứng từ gốc `TRAN_DATE_ORIG` và TK thuế `ACCOUNT_ID` vào Bảng kê thuế GTGT BC013 (bán ra và mua vào).
+- Hỗ trợ 2 chế độ xem Chi tiết (mỗi mặt hàng 1 dòng) và Tổng hợp (mỗi số HĐ 1 dòng) trên web và xuất Excel/CSV nền.
+
+## 45. v1.12.5 (phát hành 13/10): BC013 cân đối sang khổ A3 ngang *(13/10/2026)*
+
+- **Yêu cầu Trum (13/10):** BC013 cân đối khổ báo cáo sang khổ A3 ngang, các cột đang bị quá chật chội. Làm xong push phát hành luôn.
+- **Thực hiện:**
+  - Chuyển tờ giấy in `.bc013-paper` sang khổ A3 ngang: rộng `420mm` (thay vì A4 ngang 297mm), padding `12mm 15mm`.
+  - In ấn `@media print`: `@page { size: A3 landscape; margin: 8mm; }`.
+  - Phân bổ 13 cột bằng `<colgroup>` theo tỷ lệ % vừa vặn 100%: TT 2.5%, Ký hiệu HĐ 5.5%, Số HĐ 5.5%, Ngày phát hành 5%, Ngày CT gốc 5%, Tên người mua/bán 18% (thoáng rộng gấp đôi A4), MST 7.5% (vừa vặn 1 dòng không ngắt), Mặt hàng 16%, Doanh số 9%, Thuế suất 4.5%, Thuế GTGT 9%, TK thuế 4.5%, Ghi chú 8%.
+  - Thêm class `nowrap-cell` cho các ô mã, số HĐ, ngày tháng, số tiền để triệt để không bị ngắt dòng giữa chừng.
+  - Thanh dưới `ReportBar`: truyền `paperWidthMm={reportType === 'BC013' ? 420 : (isLandscape ? 297 : 210)}` để tính zoom "Vừa khung" tự động scale vừa khít màn hình từ 420mm.
+  - Xuất Excel `xlsx_report.py`: cấu hình `paper=8` (A3 trong Excel OpenXML), đồng thời mở rộng độ rộng các cột trong `layout_bc013` (Tên khách & Mặt hàng 36, MST 17, Tiền 19...).
+  - Dịch sẵn web bằng `webbuild/build.js` và build EXE `dist/iPOS_Ledger_Studio.exe` v1.12.5 thành công, tạo zip chuẩn.
