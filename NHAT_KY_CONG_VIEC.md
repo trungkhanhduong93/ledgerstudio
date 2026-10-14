@@ -1752,5 +1752,27 @@ BIMGROUP 5). Hàng nào cũng có `ITEM_CLASS_ID`. Metadata chưa có danh sách
   - Phân bổ 13 cột bằng `<colgroup>` theo tỷ lệ % vừa vặn 100%: TT 2.5%, Ký hiệu HĐ 5.5%, Số HĐ 5.5%, Ngày phát hành 5%, Ngày CT gốc 5%, Tên người mua/bán 18% (thoáng rộng gấp đôi A4), MST 7.5% (vừa vặn 1 dòng không ngắt), Mặt hàng 16%, Doanh số 9%, Thuế suất 4.5%, Thuế GTGT 9%, TK thuế 4.5%, Ghi chú 8%.
   - Thêm class `nowrap-cell` cho các ô mã, số HĐ, ngày tháng, số tiền để triệt để không bị ngắt dòng giữa chừng.
   - Thanh dưới `ReportBar`: truyền `paperWidthMm={reportType === 'BC013' ? 420 : (isLandscape ? 297 : 210)}` để tính zoom "Vừa khung" tự động scale vừa khít màn hình từ 420mm.
-  - Xuất Excel `xlsx_report.py`: cấu hình `paper=8` (A3 trong Excel OpenXML), đồng thời mở rộng độ rộng các cột trong `layout_bc013` (Tên khách & Mặt hàng 36, MST 17, Tiền 19...).
   - Dịch sẵn web bằng `webbuild/build.js` và build EXE `dist/iPOS_Ledger_Studio.exe` v1.12.5 thành công, tạo zip chuẩn.
+
+## 46. v1.12.6: BC013 lựa chọn lấy số theo Ngày chứng từ hoặc Ngày hóa đơn *(14/10/2026)*
+
+- **Yêu cầu Trum (14/10):** Sửa báo cáo BC013 cho lựa chọn lấy số báo cáo theo ngày hóa đơn hoặc theo ngày chứng từ, mặc định là theo ngày chứng từ.
+- **Phân tích dữ liệu iPOS:**
+  - Trong view `VAT_TRANSACTION_VIEW`: ngày hóa đơn là `VAT_TRAN_DATE`, ngày chứng từ gốc là `TRAN_DATE_ORIG`.
+  - Chứng từ trực tiếp (hoặc chứng từ cũ) có thể có `TRAN_DATE_ORIG` IS NULL, do đó khi lọc theo Ngày chứng từ bắt buộc dùng `ISNULL(TRAN_DATE_ORIG, VAT_TRAN_DATE)` để đảm bảo không sót dòng phát sinh nào.
+- **Thực hiện:**
+  - **Backend (`server.py`):**
+    - Endpoint `/api/vat_sales_report`: nhận tham số `date_by` (`orig` mặc định, `inv`). Áp dụng cột ngày tương ứng cho `totals_sql`, `count_sql`, `page_sql` (cả chế độ Chi tiết & Tổng hợp), sắp xếp theo ngày đã chọn.
+    - Endpoint `/api/report_export_csv`: nhận `date_by`, áp dụng lọc ngày và đặt hậu tố tên file `TheoNgayCT` / `TheoNgayHD`.
+    - Background Job xuất Excel / CSV (`_rx_plan`): nhận `p.get('date_by')`, áp dụng cột ngày tương ứng cho câu đếm dòng và truy vấn lấy dữ liệu.
+  - **Frontend (`index.html`):**
+    - State `vatDateBy` trong `App` (mặc định `'orig'`).
+    - Bổ sung cụm nút gạt `Ngày CT | Ngày HĐ` trên thanh lọc báo cáo BC013, ngay cạnh nút `Chi tiết | Tổng hợp` với tooltip giải thích chi tiết.
+    - Cập nhật hàm `buildReportHeader`: hiển thị dòng phụ "Tiêu chí lấy số: Theo ngày chứng từ / Theo ngày hóa đơn" trên giao diện xem web và file xuất Excel.
+    - Tên file xuất Excel/CSV bổ sung `TheoNgayCT` hoặc `TheoNgayHD`.
+    - Đưa `vatDateBy` vào snapshot bộ lọc để kích hoạt dirty check (chấm cam/đỏ trên nút Xem báo cáo khi người dùng chuyển tiêu chí).
+  - **Kiểm thử & Đóng gói:**
+    - AST check `server.py` hợp lệ.
+    - Chạy script kiểm thử `scratch/test_vat_sql.py` xác thực câu SQL đúng 100% cho cả 2 tiêu chí.
+    - Chạy `webbuild/build.js` biên dịch JSX & bundle CSS tĩnh mượt mà.
+    - Chạy `build_exe.py` đóng gói EXE `dist/iPOS_Ledger_Studio.exe` v1.12.6 thành công.
