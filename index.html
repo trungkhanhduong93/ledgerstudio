@@ -3767,7 +3767,7 @@ window.showConnectionLost = function() {
             );
         };
 
-        const ReportTab = ({ filters, setFilters, period, timeMode, setTimeMode, meta, onToggleFilter, activeDropdown, setActiveDropdown, reportData: initialReportData, loadReportData, loading, monthList, monthlyData: initialMonthlyData, jobList, jobData: initialJobData, reportType, setReportType, setPendingReportType, setShowClearModal, trialBalanceData, trialBalanceTotal, cashBookData, vatSalesTotals, vatSalesMode, vatKind, onVatView, journalViewMode, setJournalViewMode, showNotice, isDirty, nxtMode }) => {
+        const ReportTab = ({ filters, setFilters, period, timeMode, setTimeMode, meta, onToggleFilter, activeDropdown, setActiveDropdown, reportData: initialReportData, loadReportData, loading, monthList, monthlyData: initialMonthlyData, jobList, jobData: initialJobData, reportType, setReportType, setPendingReportType, setShowClearModal, trialBalanceData, trialBalanceTotal, cashBookData, vatSalesTotals, vatSalesMode, vatDateBy, vatKind, onVatView, journalViewMode, setJournalViewMode, showNotice, isDirty, nxtMode }) => {
             const paperScrollRef = React.useRef(null);
             const paperRef = React.useRef(null), sizerRef = React.useRef(null);   // ReportBar đặt zoom vào tờ này
             const isLandscape = ['BC001', 'BC002', 'BC003', 'BC004', 'BC006', 'BC007', 'BC011', 'BC012', 'BC013', 'BC014', 'BC015'].includes(reportType);
@@ -4019,6 +4019,9 @@ window.showConnectionLost = function() {
                     const def = reportType === 'BC012' ? '111, 112, 113' : vk ? accLabel([vk.acc]) : '—';
                     subLines.push(`Tài khoản: ${f.acc_ids.length > 0 ? accLabel(f.acc_ids) : def}`);
                 }
+                if (reportType === 'BC013') {
+                    subLines.push(`Tiêu chí lấy số: ${vatDateBy === 'inv' ? 'Theo ngày hóa đơn' : 'Theo ngày chứng từ'}`);
+                }
                 if (reportType === 'BC011' || reportType === 'BC014') {
                     subLines.push(`Đối tượng: ${f.pr_detail_ids.length > 0 ? f.pr_detail_ids.map(id => { const x = (meta.pr_details || []).find(z => z.id === id); return x ? `${id} - ${x.name}` : id; }).join(', ') : 'Tất cả'}`);
                 }
@@ -4093,7 +4096,10 @@ window.showConnectionLost = function() {
                     fileBase: (v) => {
                         const parts = [vk ? vk.file : REPORT_FILE[reportType] || reportType];
                         if (reportType === 'BC007') parts.push({ detail: 'ChiTiet', summary: 'TongHop', full: 'DayDuCot' }[v] || 'ChiTiet');
-                        if (reportType === 'BC013') parts.push(v === 'summary' ? 'TongHop' : 'ChiTiet');
+                        if (reportType === 'BC013') {
+                            parts.push(v === 'summary' ? 'TongHop' : 'ChiTiet');
+                            parts.push(vatDateBy === 'inv' ? 'TheoNgayHD' : 'TheoNgayCT');
+                        }
                         if (reportType === 'BC015') parts.push((NXT_MODES.find(m => m.id === v) || NXT_MODES[1]).file);
                         if (reportType === 'BC015' && (f.rpt_wh_ids || []).length > 0)
                             parts.push('Kho' + f.rpt_wh_ids.slice(0, 2).join('-') + (f.rpt_wh_ids.length > 2 ? `+${f.rpt_wh_ids.length - 2}` : ''));
@@ -4117,7 +4123,10 @@ window.showConnectionLost = function() {
                             // BC007/BC008/BC012/BC013/BC014: server tự truy vấn toàn bộ (không phụ thuộc trang đang xem)
                             body.params = { from_date: f.from_date, to_date: f.to_date, org_ids: f.org_ids, acc_ids: f.acc_ids,
                                 contra_acc_ids: f.contra_acc_ids, pr_detail_ids: f.pr_detail_ids, tran_no: f.tran_no || '' };
-                            if (vatShown) body.params.vat_kind = vatShown;   // BC013: loại của dữ liệu đang hiện
+                            if (vatShown) {
+                                body.params.vat_kind = vatShown;   // BC013: loại của dữ liệu đang hiện
+                                body.params.date_by = vatDateBy;
+                            }
                         } else if (reportType === 'BC005') {
                             body.payload = { rows: CDKT_INDICATORS.map(row => ({ id: row.id, name: row.name, type: row.type,
                                 closing: Number((reportData.closing || {})[row.id] || 0),
@@ -4168,10 +4177,16 @@ window.showConnectionLost = function() {
                             {/* Bảng kê thuế GTGT: nút Bán ra | Mua vào nằm ở dòng tiêu đề trang (App → AppPageHeader). Bấm là tải lại
                                 (App.onVatView đổi state rồi tải ở lượt vẽ sau — xem changeVatView) */}
                             {reportType === 'BC013' && (
+                                <>
+                                <div className="ds-seg" title="Lấy số theo: Ngày CT = ngày chứng từ gốc (mặc định), Ngày HĐ = ngày phát hành hóa đơn">
+                                    <button disabled={loading} onClick={() => { if (vatDateBy === 'orig' || loading) return; onVatView(null, null, 'orig'); }} className={`${vatDateBy === 'orig' ? 'is-on' : ''}`}>Ngày CT</button>
+                                    <button disabled={loading} onClick={() => { if (vatDateBy === 'inv' || loading) return; onVatView(null, null, 'inv'); }} className={`${vatDateBy === 'inv' ? 'is-on' : ''}`}>Ngày HĐ</button>
+                                </div>
                                 <div className="ds-seg">
                                     <button disabled={loading} onClick={() => { if (vatSalesMode === 'detail' || loading) return; onVatView('detail'); }} className={`${vatSalesMode === 'detail' ? 'is-on' : ''}`}>Chi tiết</button>
                                     <button disabled={loading} onClick={() => { if (vatSalesMode === 'summary' || loading) return; onVatView('summary'); }} className={`${vatSalesMode === 'summary' ? 'is-on' : ''}`}>Tổng hợp</button>
                                 </div>
+                                </>
                             )}
                             {(reportType === 'BC011' || reportType === 'BC014') ? (
                                 <div className="ds-slot"><PremiumDropdown label="Đối tượng" items={meta.pr_details} selectedItems={filters.pr_detail_ids} onSelect={id => onToggleFilter('pr_detail_ids', id)} isActive={activeDropdown === 'Đối tượng'} onToggle={setActiveDropdown} /></div>
@@ -5787,6 +5802,7 @@ window.showConnectionLost = function() {
             const [cashBookData, setCashBookData] = useState({ rows: [], pagination: { total_rows: 0, total_pages: 1, page: 1 } });
         const [vatSalesTotals, setVatSalesTotals] = useState({ total_amount_item: 0, taxable_amount_item: 0, total_vat_amount: 0 });
         const [vatSalesMode, setVatSalesMode] = useState('detail');
+        const [vatDateBy, setVatDateBy] = useState('orig');   // 'orig' ngày chứng từ (mặc định) | 'inv' ngày hóa đơn
         const [nxtMode, setNxtMode] = useState('wh');   // BC015 cách nhóm: none / wh / cls (NXT_MODES) — không tải lại
         const [vatKind, setVatKind] = useState('BR');   // bảng kê thuế GTGT: 'BR' bán ra | 'MV' mua vào (VAT_KINDS)
         const [vatReloadTick, setVatReloadTick] = useState(0);   // tăng = tải lại bảng kê ở lượt vẽ sau (changeVatView)
@@ -7085,13 +7101,14 @@ window.showConnectionLost = function() {
                             journalViewMode,
                             vatSalesMode,
                             vatKind,
+                            vatDateBy,
                         ]);
                     }
                 } catch (e) {
                     return '';
                 }
                 return '';
-            }, [filters, saleFilters, incomeAllocFilters, incomeMonthFilters, voucherFilters, purchaseFilters, warehouseFilters, warehouseBalanceFilters, prDetailFilters, reportType, journalViewMode, vatSalesMode, vatKind]);
+            }, [filters, saleFilters, incomeAllocFilters, incomeMonthFilters, voucherFilters, purchaseFilters, warehouseFilters, warehouseBalanceFilters, prDetailFilters, reportType, journalViewMode, vatSalesMode, vatKind, vatDateBy]);
 
             const markTabApplied = (tab) => {
                 setAppliedSnapshots(p => ({ ...p, [tab]: getTabFilterSnapshot(tab) }));
@@ -7672,7 +7689,7 @@ window.showConnectionLost = function() {
                         }
                     } else if (reportType === 'BC013') {
                     const activeMode = modeArg || vatSalesMode || 'detail';
-                    const q2 = new URLSearchParams({ from_date: filters.from_date, to_date: filters.to_date, org_ids: filters.org_ids.join(','), acc_ids: filters.acc_ids.join(','), mode: activeMode, vat_kind: vatKind, page: _page, page_size: rptPageSize });
+                    const q2 = new URLSearchParams({ from_date: filters.from_date, to_date: filters.to_date, org_ids: filters.org_ids.join(','), acc_ids: filters.acc_ids.join(','), mode: activeMode, vat_kind: vatKind, date_by: vatDateBy, page: _page, page_size: rptPageSize });
                     const r = await fetch(`/api/vat_sales_report?${q2.toString()}`, { signal: abortRef.current.signal });
                     if (r.status === 401) { setIsLoggedIn(false); return; }
                     const res = await r.json();
@@ -7710,16 +7727,17 @@ window.showConnectionLost = function() {
                 } finally { setLoading(false); }
             };
 
-            // Bảng kê thuế GTGT (BC013): nút Chi tiết/Tổng hợp (mode) và Bán ra/Mua vào (kind) — đổi state rồi tải lại ở effect dưới,
+            // Bảng kê thuế GTGT (BC013): nút Chi tiết/Tổng hợp (mode), Bán ra/Mua vào (kind), Ngày CT/Ngày HĐ (dateBy) — đổi state rồi tải lại ở effect dưới,
             // tức SAU lượt vẽ mới: loadReportData + markTabApplied lúc đó mới đọc đúng state mới. Trước v1.11.0 nút gọi thẳng
             // loadReportData trong onClick → hàm còn giữ state cũ, ghi nhận bộ lọc bằng chế độ cũ → nút báo "Cập nhật báo cáo" chấm đỏ
             // dù bảng đã đúng. Đổi loại thì bỏ chọn Tài khoản: TK bán ra (3331x) và mua vào (133x) không bao giờ trùng → chỉ ra bảng rỗng.
-            const changeVatView = (mode, kind) => {
+            const changeVatView = (mode, kind, dateBy) => {
                 if (mode) setVatSalesMode(mode);
                 if (kind) {
                     setVatKind(kind);
                     setFilters(p => (p.acc_ids.length ? { ...p, acc_ids: [] } : p));
                 }
+                if (dateBy) setVatDateBy(dateBy);
                 setVatReloadTick(t => t + 1);
             };
             useEffect(() => {
@@ -8938,6 +8956,7 @@ window.showConnectionLost = function() {
                                 journalViewMode={journalViewMode}
                                 setJournalViewMode={setJournalViewMode}
                                 vatSalesMode={vatSalesMode}
+                                vatDateBy={vatDateBy}
                                 nxtMode={nxtMode}
                                 vatKind={vatKind}
                                 onVatView={changeVatView}

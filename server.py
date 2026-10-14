@@ -6929,6 +6929,11 @@ def report_export_csv():
                 return jsonify({"status": "error", "message": "Loại bảng kê không hợp lệ (BR = bán ra, MV = mua vào)."}), 400
             tran_id, item_sql, detail_order = _VAT_KINDS[vat_kind]
             acc_ids_13 = [v.strip() for v in request.args.get("acc_ids", "").split(",") if v.strip()]
+            date_by = (request.args.get("date_by") or "orig").strip().lower()
+            if date_by not in ("orig", "inv"):
+                date_by = "orig"
+            date_col = "VAT_TRAN_DATE" if date_by == "inv" else "ISNULL(TRAN_DATE_ORIG, VAT_TRAN_DATE)"
+            detail_order_sql = detail_order if date_by == "inv" else detail_order.replace("VAT_TRAN_DATE", date_col)
             _oc, _op = _org_filter_sql(org_ids, "ORGANIZATION_ID")
             vat_org_where = (" AND " + _oc) if _oc else ""
             vat_acc_where, vat_acc_params = "", []
@@ -6950,9 +6955,9 @@ def report_export_csv():
                                  ISNULL(ACCOUNT_ID,''), N''
                           FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK)
                           WHERE TRAN_ID = '{tran_id}'
-                            AND VAT_TRAN_DATE >= ? AND VAT_TRAN_DATE <= ?{vat_org_where}{vat_acc_where}
+                            AND {date_col} >= ? AND {date_col} <= ?{vat_org_where}{vat_acc_where}
                           GROUP BY VAT_TRAN_SERIE, VAT_TRAN_NO, VAT_TRAN_DATE, TRAN_DATE_ORIG, PR_DETAIL_NAME, TAX_FILE_NUMBER, ACCOUNT_ID
-                          ORDER BY VAT_TRAN_DATE, VAT_TRAN_NO"""
+                          ORDER BY {date_col}, VAT_TRAN_NO"""
             else:
                 sql = f"""SELECT ISNULL(VAT_TRAN_SERIE,''), ISNULL(VAT_TRAN_NO,''), VAT_TRAN_DATE, TRAN_DATE_ORIG,
                                  ISNULL(PR_DETAIL_NAME,''), ISNULL(TAX_FILE_NUMBER,''), ISNULL(ITEM_NAME,''),
@@ -6960,10 +6965,11 @@ def report_export_csv():
                                  ISNULL(ACCOUNT_ID,''), ISNULL(COMMENTS,'')
                           FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK)
                           WHERE TRAN_ID = '{tran_id}'
-                            AND VAT_TRAN_DATE >= ? AND VAT_TRAN_DATE <= ?{vat_org_where}{vat_acc_where}
-                          ORDER BY {detail_order}"""
+                            AND {date_col} >= ? AND {date_col} <= ?{vat_org_where}{vat_acc_where}
+                          ORDER BY {detail_order_sql}"""
             params = [d_from, d_to] + list(_op) + vat_acc_params
-            fname = (f"BC013_Bang_Ke_Thue_GTGT_{'Mua_Vao' if buy else 'Ban_Ra'}_{'TongHop' if mode == 'summary' else 'ChiTiet'}"
+            date_sfx = "TheoNgayHD" if date_by == "inv" else "TheoNgayCT"
+            fname = (f"BC013_Bang_Ke_Thue_GTGT_{'Mua_Vao' if buy else 'Ban_Ra'}_{'TongHop' if mode == 'summary' else 'ChiTiet'}_{date_sfx}"
                      f"_{from_dt.strftime('%d%m%Y')}-{to_dt.strftime('%d%m%Y')}.csv")
         else:
             return jsonify({"status": "error", "message": "Report type không hỗ trợ xuất CSV."}), 400
@@ -7978,6 +7984,9 @@ def get_vat_sales_report():
         t_date = request.args.get("to_date")
         mode = request.args.get("mode", "detail")  # 'detail' | 'summary'
         kind = _vat_kind(request.args.get("vat_kind"))
+        date_by = (request.args.get("date_by") or "orig").strip().lower()
+        if date_by not in ("orig", "inv"):
+            date_by = "orig"
         if not kind:
             return jsonify({"status": "error", "message": "Loại bảng kê không hợp lệ (BR = bán ra, MV = mua vào)."}), 400
         tran_id, item_sql, detail_order = _VAT_KINDS[kind]
@@ -8004,6 +8013,9 @@ def get_vat_sales_report():
             acc_where = " AND (" + " OR ".join(["ACCOUNT_ID LIKE ?"] * len(acc_ids)) + ")"
             acc_params = [a + "%" for a in acc_ids]
 
+        date_col = "VAT_TRAN_DATE" if date_by == "inv" else "ISNULL(TRAN_DATE_ORIG, VAT_TRAN_DATE)"
+        detail_order_sql = detail_order if date_by == "inv" else detail_order.replace("VAT_TRAN_DATE", date_col)
+
         params = [f_dt, t_dt] + list(_op) + list(acc_params)
         cur = get_connection().cursor()
 
@@ -8015,7 +8027,7 @@ def get_vat_sales_report():
                 ISNULL(SUM(AMOUNT), 0)
             FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK)
             WHERE TRAN_ID = '{tran_id}'
-              AND VAT_TRAN_DATE >= ? AND VAT_TRAN_DATE <= ?{org_where}{acc_where}
+              AND {date_col} >= ? AND {date_col} <= ?{org_where}{acc_where}
         """
         cur.execute(totals_sql, params)
         tot_row = cur.fetchone()
@@ -8030,7 +8042,7 @@ def get_vat_sales_report():
                     SELECT VAT_TRAN_SERIE, VAT_TRAN_NO
                     FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK)
                     WHERE TRAN_ID = '{tran_id}'
-                      AND VAT_TRAN_DATE >= ? AND VAT_TRAN_DATE <= ?{org_where}{acc_where}
+                      AND {date_col} >= ? AND {date_col} <= ?{org_where}{acc_where}
                     GROUP BY VAT_TRAN_SERIE, VAT_TRAN_NO, VAT_TRAN_DATE, TRAN_DATE_ORIG, PR_DETAIL_NAME, TAX_FILE_NUMBER, ACCOUNT_ID
                 ) AS Grp
             """
@@ -8039,7 +8051,7 @@ def get_vat_sales_report():
                 SELECT COUNT(*)
                 FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK)
                 WHERE TRAN_ID = '{tran_id}'
-                  AND VAT_TRAN_DATE >= ? AND VAT_TRAN_DATE <= ?{org_where}{acc_where}
+                  AND {date_col} >= ? AND {date_col} <= ?{org_where}{acc_where}
             """
         cur.execute(count_sql, params)
         c_row = cur.fetchone()
@@ -8071,10 +8083,10 @@ def get_vat_sales_report():
                         ISNULL(SUM(AMOUNT), 0) AS vat_amount,
                         N'' AS comments,
                         ISNULL(ACCOUNT_ID, '') AS account_id,
-                        ROW_NUMBER() OVER (ORDER BY VAT_TRAN_DATE, VAT_TRAN_NO) AS RowNum
+                        ROW_NUMBER() OVER (ORDER BY {date_col}, VAT_TRAN_NO) AS RowNum
                     FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK)
                     WHERE TRAN_ID = '{tran_id}'
-                      AND VAT_TRAN_DATE >= ? AND VAT_TRAN_DATE <= ?{org_where}{acc_where}
+                      AND {date_col} >= ? AND {date_col} <= ?{org_where}{acc_where}
                     GROUP BY VAT_TRAN_SERIE, VAT_TRAN_NO, VAT_TRAN_DATE, TRAN_DATE_ORIG, PR_DETAIL_NAME, TAX_FILE_NUMBER, ACCOUNT_ID
                 ) AS Paged
                 WHERE RowNum > ? AND RowNum <= ?
@@ -8096,10 +8108,10 @@ def get_vat_sales_report():
                         ISNULL(AMOUNT, 0) AS vat_amount,
                         ISNULL(COMMENTS, '') AS comments,
                         ISNULL(ACCOUNT_ID, '') AS account_id,
-                        ROW_NUMBER() OVER (ORDER BY {detail_order}) AS RowNum
+                        ROW_NUMBER() OVER (ORDER BY {detail_order_sql}) AS RowNum
                     FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK)
                     WHERE TRAN_ID = '{tran_id}'
-                      AND VAT_TRAN_DATE >= ? AND VAT_TRAN_DATE <= ?{org_where}{acc_where}
+                      AND {date_col} >= ? AND {date_col} <= ?{org_where}{acc_where}
                 ) AS Paged
                 WHERE RowNum > ? AND RowNum <= ?
                 ORDER BY RowNum
@@ -8137,7 +8149,7 @@ def get_vat_sales_report():
         }
 
         # vat_kind trả về để app ghi tiêu đề / xuất file theo loại của DỮ LIỆU ĐANG HIỆN, không theo nút vừa bấm
-        return jsonify({"status": "ok", "data": rows, "totals": totals, "pagination": pagination, "vat_kind": kind})
+        return jsonify({"status": "ok", "data": rows, "totals": totals, "pagination": pagination, "vat_kind": kind, "date_by": date_by})
     except Exception as e:
         msg = str(e)
         if "đăng nhập" not in msg:
@@ -8675,7 +8687,12 @@ def _rx_plan(rpt, variant, info, p, payload):
             acc_where = " AND (" + " OR ".join(["ACCOUNT_ID LIKE ?"] * len(acc_ids)) + ")"
             acc_params = [a + "%" for a in acc_ids]
         params = [d_from, d_to] + list(org_params) + acc_params
-        base_where = f"TRAN_ID = '{tran_id}' AND VAT_TRAN_DATE >= ? AND VAT_TRAN_DATE <= ?{org_where}{acc_where}"
+        date_by = (p.get('date_by') or 'orig').strip().lower()
+        if date_by not in ("orig", "inv"):
+            date_by = "orig"
+        date_col = "VAT_TRAN_DATE" if date_by == "inv" else "ISNULL(TRAN_DATE_ORIG, VAT_TRAN_DATE)"
+        detail_order_sql = detail_order if date_by == "inv" else detail_order.replace("VAT_TRAN_DATE", date_col)
+        base_where = f"TRAN_ID = '{tran_id}' AND {date_col} >= ? AND {date_col} <= ?{org_where}{acc_where}"
         group_by = "GROUP BY VAT_TRAN_SERIE, VAT_TRAN_NO, VAT_TRAN_DATE, TRAN_DATE_ORIG, PR_DETAIL_NAME, TAX_FILE_NUMBER, ACCOUNT_ID"
 
         if mode == 'summary':
@@ -8684,14 +8701,14 @@ def _rx_plan(rpt, variant, info, p, payload):
                              ISNULL(SUM(AMOUNT_ITEM),0), ISNULL(MAX(VAT_TAX_RATE),0), ISNULL(SUM(AMOUNT),0),
                              ISNULL(ACCOUNT_ID,''), N''
                       FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK) WHERE {base_where} {group_by}
-                      ORDER BY VAT_TRAN_DATE, VAT_TRAN_NO"""
+                      ORDER BY {date_col}, VAT_TRAN_NO"""
         else:
             sql = f"""SELECT ISNULL(VAT_TRAN_SERIE,''), ISNULL(VAT_TRAN_NO,''), VAT_TRAN_DATE, TRAN_DATE_ORIG,
                              ISNULL(PR_DETAIL_NAME,''), ISNULL(TAX_FILE_NUMBER,''), ISNULL(ITEM_NAME,''),
                              ISNULL(AMOUNT_ITEM,0), ISNULL(VAT_TAX_RATE,0), ISNULL(AMOUNT,0),
                              ISNULL(ACCOUNT_ID,''), ISNULL(COMMENTS,'')
                       FROM dbo.VAT_TRANSACTION_VIEW WITH (NOLOCK) WHERE {base_where}
-                      ORDER BY {detail_order}"""
+                      ORDER BY {detail_order_sql}"""
 
         def prepare(db, ctx):
             # đúng 2 câu của /api/vat_sales_report: 3 số tổng dưới bảng + số dòng theo chế độ
