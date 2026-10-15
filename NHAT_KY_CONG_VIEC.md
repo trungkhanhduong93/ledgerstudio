@@ -1776,3 +1776,21 @@ BIMGROUP 5). Hàng nào cũng có `ITEM_CLASS_ID`. Metadata chưa có danh sách
     - Chạy script kiểm thử `scratch/test_vat_sql.py` xác thực câu SQL đúng 100% cho cả 2 tiêu chí.
     - Chạy `webbuild/build.js` biên dịch JSX & bundle CSS tĩnh mượt mà.
     - Chạy `build_exe.py` đóng gói EXE `dist/iPOS_Ledger_Studio.exe` v1.12.6 thành công.
+
+## 47. v1.12.7: Bổ sung cột Người liên hệ CONTACT_PERSON ở Danh sách chứng từ bán hàng *(15/10/2026)*
+
+- **Yêu cầu Trum (15/10):** Thêm cột Người liên hệ ở bên Danh sách chứng từ bán hàng, cột là `CONTACT_PERSON` trong `SALE_VIEW`, làm xong phát hành luôn.
+- **Hiện trạng:**
+  - `SALE_VIEW` trong DB và `SALE_BASE_COLUMNS` trong `server.py` vốn đã có `CONTACT_PERSON`.
+  - Bộ lọc SQL `_build_sale_where` trong `server.py` đã hỗ trợ `s_contact` cho `S.CONTACT_PERSON LIKE ?`.
+  - Danh sách xuất `SALE_CSV_COLS` và `SALE_EXPORT_COLS` đã có `CONTACT_PERSON`.
+  - Trên giao diện web, bảng `SALE_GRID.cols` trước đó chưa khai báo cột `CONTACT_PERSON` và `buildSaleQuery` chưa truyền tham số `s_contact` từ ô lọc cột.
+- **Thực hiện:**
+  - **Frontend (`index.html`):**
+    - Khai báo cột `CONTACT_PERSON` (nhãn "Người liên hệ") trong `SALE_GRID.cols`, đặt ngay sau cột `PR_DETAIL_NAME` (Tên đối tượng) và trước `ADDRESS` (Địa chỉ), hỗ trợ sắp xếp (`sort: 'CONTACT_PERSON'`), ô lọc cột (`search: 2`), kéo co giãn độ rộng, ẩn hiện / đóng băng cột và tự động co giãn AutoFit.
+    - Bổ sung `s_contact: take('s_contact', cs.CONTACT_PERSON)` vào hàm `buildSaleQuery`.
+  - **Đóng gói & Phát hành:**
+    - Dịch sẵn web bằng `webbuild/build.js` (Babel 7.29.7 + Tailwind 3.4.17).
+    - Đóng gói EXE `dist/iPOS_Ledger_Studio.exe` v1.12.7 bằng `build_exe.py` (dung lượng 16.738.709 bytes).
+    - Tạo file zip `dist/iPOS_Ledger_Studio.zip` đồng bộ từ file EXE vừa build.
+

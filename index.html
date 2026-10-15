@@ -1793,6 +1793,7 @@ window.showConnectionLost = function() {
                 { id: 'VAT_TRAN_SERIE',      label: 'Ký hiệu',       sort: 'VAT_TRAN_SERIE',    th: 'border-r w-24',                      search: 1, td: 'border-r text-center', q: 'pre' },
                 { id: 'PR_DETAIL_ID',        label: 'Mã ĐT',         sort: 'PR_DETAIL_ID',      th: 'border-r w-24',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
                 { id: 'PR_DETAIL_NAME',      label: 'Tên đối tượng', sort: 'PR_DETAIL_NAME',    th: 'border-r w-44 px-3', align: 'left',  search: 2, td: 'border-r whitespace-nowrap px-3 font-bold' },
+                { id: 'CONTACT_PERSON',      label: 'Người liên hệ', sort: 'CONTACT_PERSON',    th: 'border-r w-36 px-3', align: 'left',  search: 2, td: 'border-r whitespace-nowrap px-3' },
                 // v1.10.3: địa chỉ ghi trên chứng từ (SALE_VIEW.ADDRESS — cột có sẵn trong SALE_BASE_COLUMNS), dài thì cắt "…", rê chuột xem đủ
                 { id: 'ADDRESS',             label: 'Địa chỉ',       sort: 'ADDRESS',           th: 'border-r w-56 px-3', align: 'left',  search: 2,
                   td: (r, k) => <td key={k} className="border-r truncate max-w-[280px] px-3" title={r.ADDRESS || ''}>{r.ADDRESS}</td> },
@@ -6114,6 +6115,7 @@ window.showConnectionLost = function() {
                     s_job_name:  take('s_job_name',  cs.JOB_NAME),
                     s_pr_id:     take('s_pr_id',     cs.PR_DETAIL_ID),
                     s_pr_name:   take('s_pr_name',   cs.PR_DETAIL_NAME),
+                    s_contact:   take('s_contact',   cs.CONTACT_PERSON),
                     s_address:   take('s_address',   cs.ADDRESS),
                     s_tax:       take('s_tax',       cs.TAX_FILE_NUMBER),
                     s_acc_id:    take('s_acc_id',    cs.ACCOUNT_ID),
