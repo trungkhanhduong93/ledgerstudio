@@ -6097,6 +6097,8 @@ def get_trial_balance():
         f_date  = request.args.get("from_date")
         t_date  = request.args.get("to_date")
         org_ids = [v for v in request.args.get("org_ids", "").split(",") if v]
+        # Lọc Tài khoản kiểu "bắt đầu bằng" (như BC008). Lọc trên kết quả sau khi cuộn lên TK cha → số TK cha không đổi.
+        acc_pfx = tuple(a.strip() for a in request.args.get("acc_ids", "").split(",") if a.strip())
 
         from_dt = datetime.strptime(f_date, "%d/%m/%Y").date()
         to_dt   = datetime.strptime(t_date, "%d/%m/%Y").date()
@@ -6277,6 +6279,8 @@ def get_trial_balance():
         # 8. Filter những tài khoản có số liệu (chỉ trả về những tài khoản != 0)
         output = []
         for acc_id, node in final_result.items():
+            if acc_pfx and not acc_id.startswith(acc_pfx):
+                continue
             if any(round(v, 2) != 0 for v in node.values()):
                 output.append({
                     "id": acc_id,
@@ -6291,6 +6295,8 @@ def get_trial_balance():
         # Bằng cách lấy tổng của tất cả các LEAF nodes (tài khoản không phải parent)
         total = {"open_deb": 0, "open_crd": 0, "period_deb": 0, "period_crd": 0, "close_deb": 0, "close_crd": 0}
         for acc_id, node in raw_result.items():
+            if acc_pfx and not acc_id.startswith(acc_pfx):
+                continue
             for k in total:
                 total[k] += node[k]
 

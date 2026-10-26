@@ -178,5 +178,10 @@ for data in ADD_DATA:
 cmd.append('server.py')
 
 print('Running PyInstaller...')
-subprocess.run(cmd)
+# Máy build cài JDK 17 (11/08/2026): thư mục bin của nó nằm trong PATH, có sẵn ucrtbase.dll + 39 api-ms-win-*.dll
+# → PyInstaller gói cả bộ UCRT vào EXE: +857 KB (bản 1.12.8). Bỏ mọi thư mục có ucrtbase.dll trừ System32 khỏi PATH lúc build.
+_sys32 = os.path.normcase(os.path.join(os.environ.get('SystemRoot', r'C:\Windows'), 'System32'))
+_path = [p for p in os.environ.get('PATH', '').split(os.pathsep)
+         if os.path.normcase(os.path.normpath(p)) == _sys32 or not os.path.isfile(os.path.join(p, 'ucrtbase.dll'))]
+subprocess.run(cmd, env={**os.environ, 'PATH': os.pathsep.join(_path)})
 print(f'\n[SUCCESS] Built {APP_NAME}.exe v{new_version} in dist folder.')
