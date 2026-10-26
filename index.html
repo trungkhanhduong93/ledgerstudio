@@ -4036,7 +4036,7 @@ window.showConnectionLost = function() {
                     if ((f.rpt_cls_ids || []).length > 0) subLines.push(`Nhóm hàng: ${named(f.rpt_cls_ids, meta.item_classes)}`);
                     if (f.acc_ids.length > 0) subLines.push(`Tài khoản: ${accLabel(f.acc_ids)}`);
                 }
-                if (reportType === 'BC006' && f.acc_ids.length > 0) subLines.push(`Tài khoản: ${accLabel(f.acc_ids)}`);
+                if ((reportType === 'BC006' || reportType === 'BC007') && f.acc_ids.length > 0) subLines.push(`Tài khoản: ${accLabel(f.acc_ids)}`);
                 subLines.push(`Đơn vị: ${f.org_ids.length > 0 ? f.org_ids.map(id => { const o = orgs.find(z => z.id === id); return o ? `${id} - ${o.name}` : id; }).join(', ') : 'Tất cả'}`);
                 const company = meta.company || {};
                 return {
@@ -4107,7 +4107,7 @@ window.showConnectionLost = function() {
                             parts.push('Kho' + f.rpt_wh_ids.slice(0, 2).join('-') + (f.rpt_wh_ids.length > 2 ? `+${f.rpt_wh_ids.length - 2}` : ''));
                         if (reportType === 'BC015' && (f.rpt_cls_ids || []).length > 0)
                             parts.push('Nhom' + f.rpt_cls_ids.slice(0, 2).join('-') + (f.rpt_cls_ids.length > 2 ? `+${f.rpt_cls_ids.length - 2}` : ''));
-                        if (['BC006', 'BC008', 'BC011', 'BC012', 'BC013', 'BC014', 'BC015'].includes(reportType) && f.acc_ids.length > 0)
+                        if (['BC006', 'BC007', 'BC008', 'BC011', 'BC012', 'BC013', 'BC014', 'BC015'].includes(reportType) && f.acc_ids.length > 0)
                             parts.push('TK' + f.acc_ids.slice(0, 3).join('-') + (f.acc_ids.length > 3 ? `+${f.acc_ids.length - 3}` : ''));
                         if (reportType === 'BC014' && f.pr_detail_ids.length > 0)
                             parts.push('DT' + f.pr_detail_ids.slice(0, 2).join('-'));
@@ -4167,7 +4167,7 @@ window.showConnectionLost = function() {
                                 <div className="ds-slot"><PremiumDropdown label="Nhóm hàng" items={meta.item_classes || []} selectedItems={filters.rpt_cls_ids || []} onSelect={id => onToggleFilter('rpt_cls_ids', id)} isActive={activeDropdown === 'Nhóm hàng'} onToggle={setActiveDropdown} /></div>
                                 </>
                             )}
-                            {(reportType === 'BC006' || reportType === 'BC008' || reportType === 'BC011' || reportType === 'BC012' || reportType === 'BC013' || reportType === 'BC014' || reportType === 'BC015') ? (
+                            {(reportType === 'BC006' || reportType === 'BC007' || reportType === 'BC008' || reportType === 'BC011' || reportType === 'BC012' || reportType === 'BC013' || reportType === 'BC014' || reportType === 'BC015') ? (
                                 <div className="ds-slot"><PremiumDropdown label="Tài khoản" items={meta.accounts} codePrefix selectedItems={filters.acc_ids} onSelect={id => onToggleFilter('acc_ids', id)} isActive={activeDropdown === 'Tài khoản'} onToggle={setActiveDropdown} /></div>
                             ) : null}
                             {reportType === 'BC007' && (
@@ -7633,6 +7633,7 @@ window.showConnectionLost = function() {
                             markTabApplied('report');
                         }
                     } else if (reportType === 'BC007') {
+                        query.set('acc_ids', filters.acc_ids.join(','));
                         const r = await fetch(`/api/journal?${query.toString()}`, { signal: abortRef.current.signal });
                         if (r.status === 401) { setIsLoggedIn(false); return; }
                         const res = await r.json();

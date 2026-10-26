@@ -7420,9 +7420,14 @@ def get_journal():
         # và làm Bảng cân đối kế toán không cân (đã trả giá ở LedgerReport 15/08/2026).
         _oc, org_params = _org_filter_sql(org_ids, "ORGANIZATION_ID")
         org_where = (" AND " + _oc) if _oc else ""
+        # Lọc Tài khoản "bắt đầu bằng" (v1.12.9) — ghép sau bộ lọc đơn vị, params nối đúng thứ tự dấu ? (Bẫy 2)
+        _ac, _ap = _acc_like_sql(request.args.get("acc_ids", ""))
+        if _ac:
+            org_where += " AND " + _ac
+            org_params = list(org_params) + _ap
 
         cur = get_connection().cursor()
-        
+
         count_sql = f"""
             SELECT COUNT(*),
                    SUM(CASE WHEN DEBIT_CREDIT='DEB' THEN AMOUNT ELSE 0 END),
@@ -8458,10 +8463,22 @@ def _rx_plan(rpt, variant, info, p, payload):
     _oc, org_params = _org_filter_sql(org_ids, "ORGANIZATION_ID")
     org_where = (" AND " + _oc) if _oc else ""
 
+    if rpt == 'BC007':
+        # Lọc Tài khoản như /api/journal: ghép vào bộ lọc đơn vị (chỉ BC007 — BC008… dùng org_where gốc ở dưới)
+        _jacc = ','.join(_rx_list(p.get('acc_ids')))
+        _ac, _ap = _acc_like_sql(_jacc)
+        if _ac:
+            org_where += " AND " + _ac
+            org_params = list(org_params) + _ap
+
     if rpt == 'BC007' and variant == 'full':
         # "Nhật ký chung đầy đủ cột" — mẫu SQL người dùng đưa (trước đây chỉ có ở CSV mode=detail)
         _lvc, _lvp = _org_filter_sql(org_ids, "LV.ORGANIZATION_ID")
         org_where_lv = (" AND " + _lvc) if _lvc else ""
+        _lac, _lap = _acc_like_sql(_jacc, "LV.ACCOUNT_ID")
+        if _lac:
+            org_where_lv += " AND " + _lac
+            _lvp = list(_lvp) + _lap
         sql = f"""SELECT LV.ORGANIZATION_ID, O.ORGANIZATION_NAME, LV.JOB_NAME, LV.TRAN_ID, LV.TRAN_DATE, LV.TRAN_NO,
                          LV.DESCRIPTION, LV.ACCOUNT_ID, LV.ACCOUNT_ID_CONTRA, LV.PR_DETAIL_ID, LV.PR_DETAIL_NAME,
                          LV.DEBIT_CREDIT, LV.AMOUNT, LV.COMMENTS
