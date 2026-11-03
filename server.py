@@ -1030,7 +1030,7 @@ PURCHASE_SORT_WHITELIST = {col: f"P.{col}" for col in [
     "ORGANIZATION_ID","TRAN_ID","TRAN_NO","TRAN_DATE","VAT_TRAN_NO","VAT_TRAN_DATE",
     "PO_TRAN_NO","WAREHOUSE_ID","WAREHOUSE_NAME","ITEM_ID","DESCRIPTION","UNIT_ID",
     "QUANTITY","UNIT_ID_WH","QUANTITY_WH","UNIT_PRICE","DISCOUNT_AMOUNT","PURCHASE_COST",
-    "VAT_TAX_RATE","VAT_TAX_AMOUNT","TOTAL_AMOUNT","ACCOUNT_ID_COST","PR_DETAIL_ID",
+    "VAT_TAX_RATE","VAT_TAX_ID","VAT_TAX_AMOUNT","TOTAL_AMOUNT","ACCOUNT_ID_COST","PR_DETAIL_ID",
     "PR_DETAIL_NAME","EXPENSE_ID","JOB_ID","JOB_NAME"
 ]}
 PURCHASE_SORT_WHITELIST["ORGANIZATION_NAME"] = "O.ORGANIZATION_NAME"
@@ -1601,7 +1601,7 @@ PURCHASE_BASE_COLUMNS = [
     "ITEM_ID", "DESCRIPTION", "UNIT_ID",
     "QUANTITY", "UNIT_ID_WH", "QUANTITY_WH",
     "UNIT_PRICE", "DISCOUNT_AMOUNT", "PURCHASE_COST",
-    "VAT_TAX_RATE", "VAT_TAX_AMOUNT", "TOTAL_AMOUNT",
+    "VAT_TAX_RATE", "VAT_TAX_ID", "VAT_TAX_AMOUNT", "TOTAL_AMOUNT",
     "ACCOUNT_ID_COST",
     "EXPENSE_ID",
     "JOB_ID", "JOB_NAME",
@@ -1684,6 +1684,12 @@ def _build_purchase_where(request_args):
         except Exception:
             clauses.append("CONVERT(VARCHAR(10), P.VAT_TRAN_DATE, 103) LIKE ?")
             params.append(f"%{vd}%")
+
+    # Ô Loại thuế: PURCHASE_VIEW.VAT_TAX_ID — cột gốc, "bắt đầu bằng"
+    vat_id = request_args.get("s_vat_id", "").strip()
+    if vat_id:
+        clauses.append("LTRIM(P.VAT_TAX_ID) LIKE ?")
+        params.append(f"{_like_literal(vat_id)}%")
 
     _comments_where(request_args, "PURCHASE_VIEW", "P", clauses, params)   # v1.11.10: cột Ghi chú
 
@@ -3397,7 +3403,7 @@ PURCHASE_CSV_COLS = [
     ("UNIT_ID","Đơn vị tính"), ("QUANTITY","Số lượng"),
     ("UNIT_ID_WH","ĐVT kho"), ("QUANTITY_WH","SL kho"),
     ("UNIT_PRICE","Đơn giá"), ("DISCOUNT_AMOUNT","Giảm giá"), ("PURCHASE_COST","Chi phí"),
-    ("VAT_TAX_RATE","Thuế suất"), ("VAT_TAX_AMOUNT","Tiền thuế VAT"), ("TOTAL_AMOUNT","Tổng tiền"),
+    ("VAT_TAX_RATE","Thuế suất"), ("VAT_TAX_ID","Loại thuế"), ("VAT_TAX_AMOUNT","Tiền thuế VAT"), ("TOTAL_AMOUNT","Tổng tiền"),
     ("ACCOUNT_ID_COST","TK kho"),
     ("PR_DETAIL_ID","Mã đối tượng"), ("PR_DETAIL_NAME","Tên đối tượng"),
     ("EXPENSE_ID","Mã MCP"), ("EXPENSE_NAME","Tên MCP"),
@@ -4036,7 +4042,7 @@ SALE_BASE_COLUMNS = [
     "WAREHOUSE_ID", "EMPLOYEE_ID",
     "ITEM_ID", "ITEM_NAME", "DESCRIPTION", "UNIT_ID",
     "QUANTITY", "UNIT_PRICE", "AMOUNT",
-    "DISCOUNT_AMOUNT", "VAT_TAX_RATE", "VAT_TAX_AMOUNT",
+    "DISCOUNT_AMOUNT", "VAT_TAX_RATE", "VAT_TAX_ID", "VAT_TAX_AMOUNT",
     "TOTAL_AMOUNT", "COG_AMOUNT",
     "ACCOUNT_ID", "ACCOUNT_ID_PR", "ACCOUNT_ID_INCOME", "ACCOUNT_ID_VAT", "ACCOUNT_ID_COST",
     "EXPENSE_ID", "JOB_ID", "JOB_NAME", "IS_RETURN", "STATUS",
@@ -4134,6 +4140,12 @@ def _build_sale_where(request_args):
     if tax:
         clauses.append("LTRIM(S.TAX_FILE_NUMBER) LIKE ?")
         params.append(f"{_like_literal(tax)}%")
+
+    # Ô Loại thuế: SALE_VIEW.VAT_TAX_ID — cột gốc, "bắt đầu bằng"
+    vat_id = request_args.get("s_vat_id", "").strip()
+    if vat_id:
+        clauses.append("LTRIM(S.VAT_TAX_ID) LIKE ?")
+        params.append(f"{_like_literal(vat_id)}%")
 
     # Ô lọc cột v1.10.1 — HTTT, nguồn đơn, ghi chú: cột phụ của SALE_VIEW, chỉ lọc khi DB có cột đó (Bẫy 5). DB không có →
     # màn hình để trống cả cột → không dòng nào khớp → 1=0. Tên HTTT/nguồn không nằm trong SALE_VIEW (map ở Python từ
@@ -4437,7 +4449,7 @@ SALE_CSV_COLS = [
     ("ITEM_ID","Mã hàng hóa"), ("ITEM_NAME","Tên hàng hóa"),
     ("DESCRIPTION","Diễn giải"), ("UNIT_ID","ĐVT"), ("UNIT_NAME","Tên đơn vị tính"),
     ("QUANTITY","Số lượng"), ("UNIT_PRICE","Đơn giá"), ("AMOUNT","Thành tiền"),
-    ("DISCOUNT_AMOUNT","Giảm giá"), ("VAT_TAX_RATE","Thuế suất"), ("VAT_TAX_AMOUNT","Tiền thuế VAT"),
+    ("DISCOUNT_AMOUNT","Giảm giá"), ("VAT_TAX_RATE","Thuế suất"), ("VAT_TAX_ID","Loại thuế"), ("VAT_TAX_AMOUNT","Tiền thuế VAT"),
     ("TOTAL_AMOUNT","Tổng thanh toán"), ("COG_AMOUNT","Giá vốn"),
     ("ACCOUNT_ID","Tài khoản"), ("ACCOUNT_ID_PR","Tài khoản công nợ"), ("ACCOUNT_ID_COST","TK kho"), ("ACCOUNT_ID_INCOME","TK doanh thu"), ("ACCOUNT_ID_VAT","TK thuế"),
     ("EXPENSE_ID","Mã MCP"), ("EXPENSE_NAME","Tên MCP"),

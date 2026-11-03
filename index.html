@@ -1811,6 +1811,8 @@ window.showConnectionLost = function() {
                 { id: 'AMOUNT',              label: 'Thành tiền',    sort: 'AMOUNT',            th: 'border-r w-32 px-2', align: 'right', search: 2, td: 'border-r text-right font-mono px-2', v: r => fmtInt(r.AMOUNT), q: 'num' },
                 { id: 'DISCOUNT_AMOUNT',     label: 'Giảm giá',      sort: 'DISCOUNT_AMOUNT',   th: 'border-r w-24 px-2', align: 'right', search: 2, td: 'border-r text-right font-mono px-2 text-orange-600', v: r => fmtInt(r.DISCOUNT_AMOUNT), q: 'num' },
                 { id: 'VAT_TAX_RATE',        label: 'Thuế %',        sort: 'VAT_TAX_RATE',      th: 'border-r w-16',                      search: 2, td: 'border-r text-center', v: fmtRate, q: 'num' },
+                // Loại thuế = SALE_VIEW.VAT_TAX_ID (mã DM_VAT_TAX: 00 = 0%, 99 = không chịu thuế)
+                { id: 'VAT_TAX_ID',          label: 'Loại thuế',     sort: 'VAT_TAX_ID',        th: 'border-r w-20 px-2',                 search: 2, td: 'border-r text-center px-2 font-mono', q: 'pre' },
                 { id: 'VAT_TAX_AMOUNT',      label: 'Tiền thuế',     sort: 'VAT_TAX_AMOUNT',    th: 'border-r w-28 px-2', align: 'right', search: 2, td: 'border-r text-right font-mono px-2 text-violet-600', v: r => fmtInt(r.VAT_TAX_AMOUNT), q: 'num' },
                 { id: 'TOTAL_AMOUNT',        label: 'Tổng TT',       sort: 'TOTAL_AMOUNT',      th: 'border-r w-32 px-2', align: 'right', search: 2, td: 'border-r text-right font-mono font-black px-2 text-emerald-600', v: r => fmtInt(r.TOTAL_AMOUNT), q: 'num' },
                 { id: 'COG_AMOUNT',          label: 'Giá vốn',       sort: 'COG_AMOUNT',        th: 'border-r w-32 px-2', align: 'right', search: 2, td: 'border-r text-right font-mono px-2 text-rose-600', v: r => fmtInt(r.COG_AMOUNT), q: 'num' },
@@ -2023,6 +2025,8 @@ window.showConnectionLost = function() {
                 { id: 'DISCOUNT_AMOUNT',   label: 'Giảm giá',      sort: 'DISCOUNT_AMOUNT',   th: 'border-r w-24 px-2', align: 'right', search: 2, td: 'border-r text-right font-mono px-2 text-orange-600', v: r => fmtInt(r.DISCOUNT_AMOUNT), q: 'num' },
                 { id: 'PURCHASE_COST',     label: 'Chi phí',       sort: 'PURCHASE_COST',     th: 'border-r w-28 px-2', align: 'right', search: 2, td: 'border-r text-right font-mono px-2', v: r => fmtNum(r.PURCHASE_COST), q: 'num' },
                 { id: 'VAT_TAX_RATE',      label: 'Thuế %',        sort: 'VAT_TAX_RATE',      th: 'border-r w-16',                      search: 2, td: 'border-r text-center', v: fmtRate, q: 'num' },
+                // Loại thuế = PURCHASE_VIEW.VAT_TAX_ID (mã DM_VAT_TAX: 00 = 0%, 99 = không chịu thuế)
+                { id: 'VAT_TAX_ID',        label: 'Loại thuế',     sort: 'VAT_TAX_ID',        th: 'border-r w-20 px-2',                 search: 2, td: 'border-r text-center px-2 font-mono', q: 'pre' },
                 { id: 'VAT_TAX_AMOUNT',    label: 'Tiền thuế',     sort: 'VAT_TAX_AMOUNT',    th: 'border-r w-28 px-2', align: 'right', search: 2, td: 'border-r text-right font-mono px-2 text-violet-600', v: r => fmtInt(r.VAT_TAX_AMOUNT), q: 'num' },
                 { id: 'TOTAL_AMOUNT',      label: 'Tổng tiền',     sort: 'TOTAL_AMOUNT',      th: 'border-r w-32 px-2', align: 'right', search: 2, td: 'border-r text-right font-mono font-black px-2 text-emerald-600', v: r => fmtInt(r.TOTAL_AMOUNT), q: 'num' },
                 { id: 'ACCOUNT_ID_COST',   label: 'TK kho',        sort: 'ACCOUNT_ID_COST',   th: 'border-r w-20',                      search: 2, td: 'border-r text-center italic', q: 'pre' },
@@ -6119,6 +6123,7 @@ window.showConnectionLost = function() {
                     s_contact:   take('s_contact',   cs.CONTACT_PERSON),
                     s_address:   take('s_address',   cs.ADDRESS),
                     s_tax:       take('s_tax',       cs.TAX_FILE_NUMBER),
+                    s_vat_id:    take('s_vat_id',    cs.VAT_TAX_ID),
                     s_acc_id:    take('s_acc_id',    cs.ACCOUNT_ID),
                     s_unit_id:   take('s_unit_id',   cs.UNIT_ID),
                     // v1.10.1: HTTT, nguồn đơn, ghi chú, hàng trả (server dò tên HTTT/nguồn ra mã rồi lọc)
@@ -6502,6 +6507,7 @@ window.showConnectionLost = function() {
                     s_pr_id:       take('s_pr_id',       cs.PR_DETAIL_ID),
                     s_pr_name:     take('s_pr_name',     cs.PR_DETAIL_NAME),
                     s_acc_cost:    take('s_acc_cost',    cs.ACCOUNT_ID_COST),
+                    s_vat_id:      take('s_vat_id',      cs.VAT_TAX_ID),
                     s_unit_id:     take('s_unit_id',     cs.UNIT_ID),
                     s_unit_id_wh:  take('s_unit_id_wh',  cs.UNIT_ID_WH),
                 };
@@ -6574,6 +6580,7 @@ window.showConnectionLost = function() {
                     s_pr_id:       take('s_pr_id',       cs.PR_DETAIL_ID),
                     s_pr_name:     take('s_pr_name',     cs.PR_DETAIL_NAME),
                     s_acc_cost:    take('s_acc_cost',    cs.ACCOUNT_ID_COST),
+                    s_vat_id:      take('s_vat_id',      cs.VAT_TAX_ID),
                     s_unit_id:     take('s_unit_id',     cs.UNIT_ID),
                     s_unit_id_wh:  take('s_unit_id_wh',  cs.UNIT_ID_WH),
                 };
@@ -7191,7 +7198,7 @@ window.showConnectionLost = function() {
                 ['UNIT_ID','Đơn vị tính'],['QUANTITY','Số lượng'],
                 ['UNIT_ID_WH','ĐVT kho'],['QUANTITY_WH','SL kho'],
                 ['UNIT_PRICE','Đơn giá'],['DISCOUNT_AMOUNT','Giảm giá'],['PURCHASE_COST','Chi phí'],
-                ['VAT_TAX_RATE','Thuế suất'],['VAT_TAX_AMOUNT','Tiền thuế VAT'],['TOTAL_AMOUNT','Tổng tiền'],
+                ['VAT_TAX_RATE','Thuế suất'],['VAT_TAX_ID','Loại thuế'],['VAT_TAX_AMOUNT','Tiền thuế VAT'],['TOTAL_AMOUNT','Tổng tiền'],
                 ['ACCOUNT_ID_COST','TK kho'],
                 ['PR_DETAIL_ID','Mã đối tượng'],['PR_DETAIL_NAME','Tên đối tượng'],
                 ['EXPENSE_ID','Mã MCP'],['EXPENSE_NAME','Tên MCP'],
@@ -7208,7 +7215,7 @@ window.showConnectionLost = function() {
                 ['WAREHOUSE_ID','Mã kho'],['WAREHOUSE_NAME','Tên kho'],
                 ['ITEM_ID','Mã hàng hóa'],['ITEM_NAME','Tên hàng hóa'],['DESCRIPTION','Diễn giải'],
                 ['UNIT_ID','ĐVT'],['UNIT_NAME','Tên đơn vị tính'],['QUANTITY','Số lượng'],['UNIT_PRICE','Đơn giá'],['AMOUNT','Thành tiền'],
-                ['DISCOUNT_AMOUNT','Giảm giá'],['VAT_TAX_RATE','Thuế suất'],['VAT_TAX_AMOUNT','Tiền thuế VAT'],
+                ['DISCOUNT_AMOUNT','Giảm giá'],['VAT_TAX_RATE','Thuế suất'],['VAT_TAX_ID','Loại thuế'],['VAT_TAX_AMOUNT','Tiền thuế VAT'],
                 ['TOTAL_AMOUNT','Tổng thanh toán'],['COG_AMOUNT','Giá vốn'],
                 ['ACCOUNT_ID','Tài khoản'],['ACCOUNT_ID_PR','Tài khoản công nợ'],['ACCOUNT_ID_COST','TK kho'],['ACCOUNT_ID_INCOME','TK doanh thu'],['ACCOUNT_ID_VAT','TK thuế'],
                 ['EXPENSE_ID','Mã MCP'],['EXPENSE_NAME','Tên MCP'],
