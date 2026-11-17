@@ -467,6 +467,9 @@ _meta_cache = {}
 # Cache đơn vị "ngoài cây 00" theo database (dùng cho LCTT BC009/BC010)
 _external_orgs_cache = {}
 
+# Cache bản đồ cha → con của DM_ORGANIZATION theo database (dùng cho _expand_org_tree)
+_org_tree_cache = {}
+
 # Connection pool: key = hash(db_config) → pyodbc connection
 # Tránh mở-đóng connection mỗi request (tiết kiệm 200-500ms / request)
 _conn_pool = {}
@@ -879,6 +882,8 @@ def login():
 
         session['db_config'] = data
         _meta_cache.pop(data.get('database'), None)
+        _external_orgs_cache.pop(data.get('database'), None)
+        _org_tree_cache.pop(data.get('database'), None)
         _saved_put(data, remember)
         return jsonify({"status": "ok", "message": "Kết nối SQL Server thành công!",
                         "server": data['server'], "database": data['database']})
@@ -896,6 +901,8 @@ def logout():
     session.pop('db_config', None)
     if db_name:
         _meta_cache.pop(db_name, None)
+        _external_orgs_cache.pop(db_name, None)
+        _org_tree_cache.pop(db_name, None)
     return jsonify({"status": "ok"})
 
 @app.route("/api/metadata")
@@ -1006,6 +1013,8 @@ def refresh_metadata():
     db_name = session.get('db_config', {}).get('database')
     if db_name:
         _meta_cache.pop(db_name, None)
+        _external_orgs_cache.pop(db_name, None)
+        _org_tree_cache.pop(db_name, None)
     return jsonify({"status": "ok"})
 
 # Whitelist cột được phép sort cho từng endpoint — tránh SQL injection
@@ -1181,6 +1190,8 @@ def _build_where(request_args):
     ]:
         raw = request_args.get(arg, "")
         vals = [v for v in raw.split(",") if v]
+        if arg == "org_ids":
+            vals = _expand_org_tree(vals)
         if vals:
             clauses.append(f"{field} IN ({','.join(['?']*len(vals))})")
             params.extend(vals)
@@ -1629,6 +1640,8 @@ def _build_purchase_where(request_args):
     ]:
         raw = request_args.get(arg, "")
         vals = [v for v in raw.split(",") if v]
+        if arg == "org_ids":
+            vals = _expand_org_tree(vals)
         if vals:
             clauses.append(f"{field} IN ({','.join(['?']*len(vals))})")
             params.extend(vals)
@@ -1970,6 +1983,8 @@ def _build_warehouse_where(request_args):
     ]:
         raw = request_args.get(arg, "")
         vals = [v for v in raw.split(",") if v]
+        if arg == "org_ids":
+            vals = _expand_org_tree(vals)
         if vals:
             clauses.append(f"{field} IN ({','.join(['?']*len(vals))})")
             params.extend(vals)
@@ -3611,6 +3626,8 @@ def _build_warehouse_balance_where(request_args):
     ]:
         raw = request_args.get(arg, "")
         vals = [v for v in raw.split(",") if v]
+        if arg == "org_ids":
+            vals = _expand_org_tree(vals)
         if vals:
             clauses.append(f"{field} IN ({','.join(['?']*len(vals))})")
             params.extend(vals)
@@ -4084,6 +4101,8 @@ def _build_sale_where(request_args):
     ]:
         raw = request_args.get(arg, "")
         vals = [v for v in raw.split(",") if v]
+        if arg == "org_ids":
+            vals = _expand_org_tree(vals)
         if vals:
             clauses.append(f"{field} IN ({','.join(['?']*len(vals))})")
             params.extend(vals)
@@ -4563,6 +4582,8 @@ def _build_voucher_where(request_args):
     for field, arg in [("H.TRAN_ID", "tran_ids"), ("H.ORGANIZATION_ID", "org_ids")]:
         raw = request_args.get(arg, "")
         vals = [v for v in raw.split(",") if v]
+        if arg == "org_ids":
+            vals = _expand_org_tree(vals)
         if vals:
             clauses.append(f"{field} IN ({','.join(['?']*len(vals))})")
             params.extend(vals)
@@ -4829,6 +4850,8 @@ def _build_income_alloc_where(args):
     ]:
         raw = args.get(arg, "")
         vals = [v for v in raw.split(",") if v]
+        if arg == "org_ids":
+            vals = _expand_org_tree(vals)
         if vals:
             clauses.append(f"{field} IN ({','.join(['?']*len(vals))})")
             params.extend(vals)
@@ -7182,6 +7205,61 @@ def _get_external_org_ids():
     return ext
 
 
+def _expand_org_tree(org_ids):
+    """Mở rộng danh sách đơn vị: giữ các mã đã chọn + lấy thêm mọi đơn vị con cháu trong DM_ORGANIZATION."""
+    if not org_ids:
+        return []
+    if isinstance(org_ids, str):
+        init_ids = [v.strip() for v in org_ids.split(",") if v.strip()]
+    else:
+        init_ids = [str(v).strip() for v in org_ids if str(v).strip()]
+    if not init_ids:
+        return []
+
+    try:
+        db_config = session.get('db_config') or {}
+    except Exception:
+        db_config = {}
+    db_name = db_config.get('database', '')
+
+    children_map = None
+    if db_name and db_name in _org_tree_cache:
+        children_map = _org_tree_cache[db_name]
+    else:
+        try:
+            cur = get_connection().cursor()
+            cur.execute("SELECT ORGANIZATION_ID, ISNULL(PARENT_ORGANIZATION_ID,'') FROM dbo.DM_ORGANIZATION WITH (NOLOCK)")
+            children_map = {}
+            for r in cur.fetchall():
+                oid = (r[0] or '').strip()
+                pid = (r[1] or '').strip()
+                if pid and oid:
+                    children_map.setdefault(pid, []).append(oid)
+            if db_name:
+                _org_tree_cache[db_name] = children_map
+        except Exception:
+            return list(init_ids)
+
+    if children_map is None:
+        return list(init_ids)
+
+    result = []
+    seen = set()
+    for root in init_ids:
+        if root not in seen:
+            seen.add(root)
+            result.append(root)
+        queue = [root]
+        while queue:
+            curr = queue.pop(0)
+            for child in children_map.get(curr, []):
+                if child not in seen:
+                    seen.add(child)
+                    result.append(child)
+                    queue.append(child)
+    return result
+
+
 def _acc_like_sql(account_id, col="ACCOUNT_ID"):
     """Bộ lọc tài khoản cha→con cho BC008. `account_id` có thể chứa NHIỀU mã ngăn bởi dấu phẩy ('111,112').
     Trả (clause, params) = "(col LIKE ? OR col LIKE ?)", ['111%','112%'].
@@ -7204,7 +7282,8 @@ def _org_filter_sql(org_ids, col="ORGANIZATION_ID"):
     - Không chọn      -> mặc định loại đơn vị ngoài cây 00 (col NOT IN externals)
     """
     if org_ids:
-        return f"{col} IN ({','.join(['?'] * len(org_ids))})", list(org_ids)
+        expanded = _expand_org_tree(org_ids) or list(org_ids)
+        return f"{col} IN ({','.join(['?'] * len(expanded))})", list(expanded)
     ext = _get_external_org_ids()
     if ext:
         return f"{col} NOT IN ({','.join(['?'] * len(ext))})", list(ext)
