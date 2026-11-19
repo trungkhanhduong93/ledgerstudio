@@ -6036,6 +6036,278 @@ def _calc_cdkt_balances(rows, bt=None):
     return result
 
 
+def _get_prev_period(from_dt, to_dt):
+    """Tính khoảng thời gian kỳ trước cùng độ dài liền trước from_dt (trọn tháng lùi theo tháng, khác lùi theo ngày)."""
+    import calendar
+    from datetime import timedelta
+    _, last_day = calendar.monthrange(to_dt.year, to_dt.month)
+    if from_dt.day == 1 and to_dt.day == last_day:
+        num_m = (to_dt.year - from_dt.year) * 12 + to_dt.month - from_dt.month + 1
+        p_to = from_dt - timedelta(days=1)
+        tot_m = from_dt.year * 12 + (from_dt.month - 1) - num_m
+        p_yr = tot_m // 12
+        p_mo = tot_m % 12 + 1
+        p_from = date(p_yr, p_mo, 1)
+        return p_from, p_to
+    else:
+        dur = (to_dt - from_dt).days + 1
+        p_to = from_dt - timedelta(days=1)
+        p_from = p_to - timedelta(days=dur - 1)
+        return p_from, p_to
+
+
+def _load_report_formulas(cur, report_id):
+    """Nạp công thức báo cáo từ SYS_REPORT_FORMULA & SYS_REPORT_FORMULA_DETAIL nếu bảng tồn tại."""
+    try:
+        cur.execute("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'SYS_REPORT_FORMULA'")
+        if not cur.fetchone():
+            return None
+        cur.execute("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'SYS_REPORT_FORMULA_DETAIL'")
+        if not cur.fetchone():
+            return None
+        cur.execute("""
+            SELECT F.PR_KEY, F.ID_FIELD, F.ROW_FORMULA, F.VISIBLE, F.POSITIVE_RESULT,
+                   D.COLUMN_NO, D.DATASOURCE_ID, D.OPERATOR, D.ACCOUNT_ID,
+                   D.PR_DETAIL_ID, D.ORGANIZATION_ID, D.ACCOUNT_ID_CONTRA
+            FROM SYS_REPORT_FORMULA F WITH (NOLOCK)
+            LEFT JOIN SYS_REPORT_FORMULA_DETAIL D WITH (NOLOCK) ON D.FR_KEY = F.PR_KEY
+            WHERE F.REPORT_ID = ?
+            ORDER BY F.LIST_ORDER, F.PR_KEY, D.LIST_ORDER, D.PR_KEY
+        """, [report_id])
+        rows = cur.fetchall()
+        if not rows:
+            return None
+
+        formulas = {}
+        warned_filters = set()
+        for r in rows:
+            id_field = (r[1] or '').strip()
+            if not id_field:
+                continue
+            if id_field not in formulas:
+                formulas[id_field] = {
+                    'row_formula': (r[2] or '').strip(),
+                    'visible': int(r[3] or 0),
+                    'positive_result': int(r[4] or 0),
+                    'details': {1: [], 2: []}
+                }
+            col_no = r[5]
+            if col_no in (1, 2):
+                ds_id = (r[6] or '').strip()
+                op = (r[7] or '+').strip()
+                acc_str = (r[8] or '').strip()
+                p_id = (r[9] or '').strip()
+                o_id = (r[10] or '').strip()
+                c_id = (r[11] or '').strip()
+                if p_id not in ('', '0') or o_id not in ('', '0') or c_id not in ('', '0'):
+                    filt_key = (id_field, col_no)
+                    if filt_key not in warned_filters:
+                        logger.warning("Bo qua dong chi tiet co bo loc rieng cho chi tieu %s cot %s", id_field, col_no)
+                        warned_filters.add(filt_key)
+                    continue
+                acc_list = tuple(p.strip() for p in acc_str.split(',') if p.strip())
+                formulas[id_field]['details'][col_no].append({
+                    'ds': ds_id,
+                    'op': 1 if op == '+' else -1,
+                    'accounts': acc_list
+                })
+        return formulas if formulas else None
+    except Exception as e:
+        logger.warning("Khong nap duoc cong thuc bao cao %s: %s", report_id, str(e))
+        return None
+
+
+def _calc_cdkt_by_formula(cur, formulas, from_dt, to_dt, org_ids):
+    """Tính Bảng Cân đối Kế toán theo công thức iPOS từ DB (closing, opening)."""
+    y0 = date(from_dt.year, 1, 1).strftime("%Y%m%d")
+    from_str = from_dt.strftime("%Y%m%d")
+    to_str = to_dt.strftime("%Y%m%d")
+
+    prev_from_dt, prev_to_dt = _get_prev_period(from_dt, to_dt)
+    prev_from_str = prev_from_dt.strftime("%Y%m%d")
+    prev_to_str = prev_to_dt.strftime("%Y%m%d")
+
+    min_date = min(y0, prev_from_str)
+    max_date = max(to_str, prev_to_str)
+
+    _oc, org_params = _org_filter_sql(org_ids, "ORGANIZATION_ID")
+    org_where = (" AND " + _oc) if _oc else ""
+
+    try:
+        cur.execute("SELECT TOP 1 ORGANIZATION_ID FROM dbo.BALANCE_VIEW WITH (NOLOCK)")
+        has_org_in_balance = True
+    except Exception:
+        has_org_in_balance = False
+
+    if has_org_in_balance:
+        q_open = f"""
+            SELECT ACCOUNT_ID, ISNULL(PR_DETAIL_ID, ''),
+                   SUM(CASE WHEN DEBIT_CREDIT='DEB' THEN AMOUNT ELSE 0 END) AS deb,
+                   SUM(CASE WHEN DEBIT_CREDIT='CRD' THEN AMOUNT ELSE 0 END) AS crd
+            FROM dbo.BALANCE_VIEW WITH (NOLOCK)
+            WHERE TRAN_DATE = ? {org_where}
+            GROUP BY ACCOUNT_ID, ISNULL(PR_DETAIL_ID, '')
+        """
+        p_open = [y0] + list(org_params)
+    else:
+        q_open = f"""
+            SELECT ACCOUNT_ID, ISNULL(PR_DETAIL_ID, ''),
+                   SUM(CASE WHEN DEBIT_CREDIT='DEB' THEN AMOUNT ELSE 0 END) AS deb,
+                   SUM(CASE WHEN DEBIT_CREDIT='CRD' THEN AMOUNT ELSE 0 END) AS crd
+            FROM dbo.BALANCE_VIEW WITH (NOLOCK)
+            WHERE TRAN_DATE = ?
+            GROUP BY ACCOUNT_ID, ISNULL(PR_DETAIL_ID, '')
+        """
+        p_open = [y0]
+
+    cur.execute(q_open, p_open)
+    bal_rows = cur.fetchall()
+
+    _lc, _lp = _org_filter_sql(org_ids, "L.ORGANIZATION_ID")
+    ledger_where = ["L.TRAN_DATE >= ?", "L.TRAN_DATE <= ?"]
+    ledger_params = [y0, from_str, y0, from_str,
+                     from_str, to_str, from_str, to_str,
+                     prev_from_str, prev_to_str, prev_from_str, prev_to_str,
+                     min_date, max_date]
+    if _lc:
+        ledger_where.append(_lc)
+        ledger_params.extend(_lp)
+
+    q_ledger = f"""
+        SELECT L.ACCOUNT_ID, ISNULL(L.PR_DETAIL_ID, ''),
+               SUM(CASE WHEN L.TRAN_DATE >= ? AND L.TRAN_DATE < ? AND L.DEBIT_CREDIT='DEB' THEN L.AMOUNT ELSE 0 END) AS deb_bef,
+               SUM(CASE WHEN L.TRAN_DATE >= ? AND L.TRAN_DATE < ? AND L.DEBIT_CREDIT='CRD' THEN L.AMOUNT ELSE 0 END) AS crd_bef,
+               SUM(CASE WHEN L.TRAN_DATE >= ? AND L.TRAN_DATE <= ? AND L.DEBIT_CREDIT='DEB' THEN L.AMOUNT ELSE 0 END) AS deb_cur,
+               SUM(CASE WHEN L.TRAN_DATE >= ? AND L.TRAN_DATE <= ? AND L.DEBIT_CREDIT='CRD' THEN L.AMOUNT ELSE 0 END) AS crd_cur,
+               SUM(CASE WHEN L.TRAN_DATE >= ? AND L.TRAN_DATE <= ? AND L.DEBIT_CREDIT='DEB' THEN L.AMOUNT ELSE 0 END) AS deb_prv,
+               SUM(CASE WHEN L.TRAN_DATE >= ? AND L.TRAN_DATE <= ? AND L.DEBIT_CREDIT='CRD' THEN L.AMOUNT ELSE 0 END) AS crd_prv
+        FROM dbo.LEDGER L WITH (NOLOCK)
+        WHERE {' AND '.join(ledger_where)}
+        GROUP BY L.ACCOUNT_ID, ISNULL(L.PR_DETAIL_ID, '')
+    """
+    cur.execute(q_ledger, ledger_params)
+    led_rows = cur.fetchall()
+
+    data = {}
+    for r in bal_rows:
+        k = ((r[0] or '').strip(), (r[1] or '').strip())
+        data[k] = [float(r[2] or 0), float(r[3] or 0), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+    for r in led_rows:
+        k = ((r[0] or '').strip(), (r[1] or '').strip())
+        if k not in data:
+            data[k] = [0.0, 0.0, float(r[2] or 0), float(r[3] or 0), float(r[4] or 0), float(r[5] or 0), float(r[6] or 0), float(r[7] or 0)]
+        else:
+            entry = data[k]
+            entry[2] = float(r[2] or 0)
+            entry[3] = float(r[3] or 0)
+            entry[4] = float(r[4] or 0)
+            entry[5] = float(r[5] or 0)
+            entry[6] = float(r[6] or 0)
+            entry[7] = float(r[7] or 0)
+
+    acc_totals = {}
+    for (acc, pr), (d_y0, c_y0, d_bef, c_bef, d_cur, c_cur, d_prv, c_prv) in data.items():
+        if acc not in acc_totals:
+            acc_totals[acc] = [0.0] * 16
+        t = acc_totals[acc]
+        t[0] += d_y0
+        t[1] += c_y0
+        t[2] += d_bef
+        t[3] += c_bef
+        t[4] += (d_bef + d_cur)
+        t[5] += (c_bef + c_cur)
+        t[6] += d_cur
+        t[7] += c_cur
+        t[8] += d_prv
+        t[9] += c_prv
+
+        net_close = (d_y0 - c_y0) + (d_bef + d_cur) - (c_bef + c_cur)
+        if net_close > 0:
+            t[10] += net_close
+        elif net_close < 0:
+            t[11] += -net_close
+
+        net_y0 = d_y0 - c_y0
+        if net_y0 > 0:
+            t[12] += net_y0
+        elif net_y0 < 0:
+            t[13] += -net_y0
+
+        net_open = (d_y0 - c_y0) + d_bef - c_bef
+        if net_open > 0:
+            t[14] += net_open
+        elif net_open < 0:
+            t[15] += -net_open
+
+    DS_INDEX = {
+        'KT0001': 0, 'KT0002': 1, 'KT0003': 2, 'KT0004': 3,
+        'KT0005': 4, 'KT0006': 5, 'KT0101': 6, 'KT0102': 7,
+        'KT0103': 8, 'KT0104': 9, 'KT0901': 10, 'KT0902': 11,
+        'KT0903': 12, 'KT0904': 13, 'KT0905': 14, 'KT0906': 15,
+    }
+
+    warned_ds = set()
+    def eval_detail(ds, accounts):
+        idx = DS_INDEX.get(ds)
+        if idx is None:
+            if ds not in warned_ds:
+                logger.warning("Bo qua DATASOURCE_ID khong ro: %s", ds)
+                warned_ds.add(ds)
+            return 0.0
+        val = 0.0
+        for acc, vals in acc_totals.items():
+            if any(acc.startswith(p) for p in accounts):
+                val += vals[idx]
+        return val
+
+    closing = {}
+    opening = {}
+
+    for id_field, f in formulas.items():
+        if not f['row_formula']:
+            s1 = 0.0
+            for d in f['details'][1]:
+                s1 += d['op'] * eval_detail(d['ds'], d['accounts'])
+            if f['positive_result']:
+                s1 = max(0.0, s1)
+            closing[id_field] = s1
+
+            s2 = 0.0
+            for d in f['details'][2]:
+                s2 += d['op'] * eval_detail(d['ds'], d['accounts'])
+            if f['positive_result']:
+                s2 = max(0.0, s2)
+            opening[id_field] = s2
+
+    def eval_rf(id_field, col_dict, visited):
+        if id_field in col_dict:
+            return col_dict[id_field]
+        if id_field in visited:
+            return 0.0
+        visited.add(id_field)
+        f = formulas.get(id_field)
+        if not f or not f['row_formula']:
+            return 0.0
+        tokens = re.findall(r'([+-]?)\s*([A-Za-z0-9_.]+)', f['row_formula'])
+        tot = 0.0
+        for sign, term in tokens:
+            s = -1.0 if sign == '-' else 1.0
+            tot += s * eval_rf(term.strip(), col_dict, visited)
+        if f['positive_result']:
+            tot = max(0.0, tot)
+        col_dict[id_field] = tot
+        visited.remove(id_field)
+        return tot
+
+    for id_field, f in formulas.items():
+        if f['row_formula']:
+            eval_rf(id_field, closing, set())
+            eval_rf(id_field, opening, set())
+
+    return closing, opening
+
+
 @app.route("/api/balance_sheet")
 @with_db_lock
 def get_balance_sheet():
@@ -6055,143 +6327,150 @@ def get_balance_sheet():
         from_dt = datetime.strptime(f_date, "%d/%m/%Y").date()
         to_dt   = datetime.strptime(t_date, "%d/%m/%Y").date()
 
-        # Không chọn đơn vị ⇒ LOẠI đơn vị ngoài cây '00' — thống nhất với BC009/BC010/BC012/BC013.
-        # Trước đây để rỗng ⇒ báo cáo GỘP CẢ đơn vị ngoài cây → không tie được với nhau
-        # và làm Bảng cân đối kế toán không cân (đã trả giá ở LedgerReport 15/08/2026).
-        _oc, org_params = _org_filter_sql(org_ids, "ORGANIZATION_ID")
-        org_where = (" AND " + _oc) if _oc else ""
-
         cur = get_connection().cursor()
 
-        # Thêm biến ngày đầu năm để tránh bị cộng dồn cả phát sinh các năm cũ
-        first_day_of_year = date(from_dt.year, 1, 1).strftime("%Y%m%d")
-
-        # 1) Số dư đầu năm từ BALANCE_VIEW (toàn bộ dòng đều là số dư đầu kỳ)
-        # 1) Số dư đầu năm từ BALANCE_VIEW (toàn bộ dòng đều là số dư đầu kỳ)
-        try:
-            cur.execute("SELECT TOP 1 ORGANIZATION_ID FROM dbo.BALANCE_VIEW WITH (NOLOCK)")
-            has_org_in_balance = True
-        except Exception:
-            has_org_in_balance = False
-
-        if has_org_in_balance:
-            q_open = f"""
-                SELECT ACCOUNT_ID, ISNULL(PR_DETAIL_ID, ''), ISNULL(ORGANIZATION_ID, ''),
-                       SUM(CASE WHEN DEBIT_CREDIT='DEB' THEN AMOUNT WHEN DEBIT_CREDIT='CRD' THEN -AMOUNT ELSE 0 END) AS BAL
-                FROM dbo.BALANCE_VIEW WITH (NOLOCK)
-                WHERE TRAN_DATE = ? {org_where}
-                GROUP BY ACCOUNT_ID, ISNULL(PR_DETAIL_ID, ''), ISNULL(ORGANIZATION_ID, '')
-            """
-            # PHẢI là org_params (khớp số dấu ? trong org_where), KHÔNG phải org_ids —
-            # khi không chọn đơn vị thì org_ids rỗng nhưng org_where vẫn có NOT IN (?).
-            org_params_open = [first_day_of_year] + list(org_params)
+        # Thử nạp công thức iPOS từ DB (SYS_REPORT_FORMULA)
+        formula_data = _load_report_formulas(cur, "RPT_BCDKT_TT200")
+        if formula_data:
+            closing, opening = _calc_cdkt_by_formula(cur, formula_data, from_dt, to_dt, org_ids)
+            source = "formula"
+            # calc_sub_131 (1311/1312) chỉ chạy ở đường builtin vì giao diện và xlsx không dùng 2 khoá này
         else:
-            q_open = f"""
-                SELECT ACCOUNT_ID, ISNULL(PR_DETAIL_ID, ''), '' AS ORGANIZATION_ID,
-                       SUM(CASE WHEN DEBIT_CREDIT='DEB' THEN AMOUNT WHEN DEBIT_CREDIT='CRD' THEN -AMOUNT ELSE 0 END) AS BAL
-                FROM dbo.BALANCE_VIEW WITH (NOLOCK)
-                WHERE TRAN_DATE = ?
-                GROUP BY ACCOUNT_ID, ISNULL(PR_DETAIL_ID, '')
-            """
-            org_params_open = [first_day_of_year]
+            source = "builtin"
+            # Không chọn đơn vị ⇒ LOẠI đơn vị ngoài cây '00' — thống nhất với BC009/BC010/BC012/BC013.
+            # Trước đây để rỗng ⇒ báo cáo GỘP CẢ đơn vị ngoài cây → không tie được với nhau
+            # và làm Bảng cân đối kế toán không cân (đã trả giá ở LedgerReport 15/08/2026).
+            _oc, org_params = _org_filter_sql(org_ids, "ORGANIZATION_ID")
+            org_where = (" AND " + _oc) if _oc else ""
 
-        cur.execute(q_open, org_params_open)
-        opening_year = { ((r[0] or '').strip(), (r[1] or '').strip(), (r[2] or '').strip()): float(r[3] or 0) for r in cur.fetchall() }
+            # Thêm biến ngày đầu năm để tránh bị cộng dồn cả phát sinh các năm cũ
+            first_day_of_year = date(from_dt.year, 1, 1).strftime("%Y%m%d")
 
-        # 2) Phát sinh lũy kế đến từng mốc (cuối kỳ này / trước đầu kỳ này) từ LEDGER_VIEW
-        def run_ledger(end_date_inclusive=None, end_date_exclusive=None):
-            where = ["L.TRAN_DATE >= ?"]
-            params = [first_day_of_year]
-            if end_date_inclusive is not None:
-                where.append("L.TRAN_DATE <= ?")
-                params.append(end_date_inclusive.strftime("%Y%m%d"))
-            if end_date_exclusive is not None:
-                where.append("L.TRAN_DATE < ?")
-                params.append(end_date_exclusive.strftime("%Y%m%d"))
-            # Truy van sinh ra so du that cua BC005 — phai loai don vi ngoai cay y nhu org_where.
-            _lc, _lp = _org_filter_sql(org_ids, "L.ORGANIZATION_ID")
-            if _lc:
-                where.append(_lc)
-                params.extend(_lp)
-            q = f"""
-                SELECT L.ACCOUNT_ID, ISNULL(L.PR_DETAIL_ID, ''), ISNULL(L.ORGANIZATION_ID, ''),
-                       SUM(CASE WHEN L.DEBIT_CREDIT='DEB' THEN L.AMOUNT WHEN L.DEBIT_CREDIT='CRD' THEN -L.AMOUNT ELSE 0 END) AS BAL
-                FROM dbo.LEDGER L WITH (NOLOCK)
-                WHERE {' AND '.join(where)}
-                GROUP BY L.ACCOUNT_ID, ISNULL(L.PR_DETAIL_ID, ''), ISNULL(L.ORGANIZATION_ID, '')
-            """
-            cur.execute(q, params)
-            return { ((r[0] or '').strip(), (r[1] or '').strip(), (r[2] or '').strip()): float(r[3] or 0) for r in cur.fetchall() }
+            # 1) Số dư đầu năm từ BALANCE_VIEW (toàn bộ dòng đều là số dư đầu kỳ)
+            try:
+                cur.execute("SELECT TOP 1 ORGANIZATION_ID FROM dbo.BALANCE_VIEW WITH (NOLOCK)")
+                has_org_in_balance = True
+            except Exception:
+                has_org_in_balance = False
 
-        ledger_to_end   = run_ledger(end_date_inclusive=to_dt)
-        ledger_to_start = run_ledger(end_date_exclusive=from_dt)
+            if has_org_in_balance:
+                q_open = f"""
+                    SELECT ACCOUNT_ID, ISNULL(PR_DETAIL_ID, ''), ISNULL(ORGANIZATION_ID, ''),
+                           SUM(CASE WHEN DEBIT_CREDIT='DEB' THEN AMOUNT WHEN DEBIT_CREDIT='CRD' THEN -AMOUNT ELSE 0 END) AS BAL
+                    FROM dbo.BALANCE_VIEW WITH (NOLOCK)
+                    WHERE TRAN_DATE = ? {org_where}
+                    GROUP BY ACCOUNT_ID, ISNULL(PR_DETAIL_ID, ''), ISNULL(ORGANIZATION_ID, '')
+                """
+                # PHẢI là org_params (khớp số dấu ? trong org_where), KHÔNG phải org_ids —
+                # khi không chọn đơn vị thì org_ids rỗng nhưng org_where vẫn có NOT IN (?).
+                org_params_open = [first_day_of_year] + list(org_params)
+            else:
+                q_open = f"""
+                    SELECT ACCOUNT_ID, ISNULL(PR_DETAIL_ID, ''), '' AS ORGANIZATION_ID,
+                           SUM(CASE WHEN DEBIT_CREDIT='DEB' THEN AMOUNT WHEN DEBIT_CREDIT='CRD' THEN -AMOUNT ELSE 0 END) AS BAL
+                    FROM dbo.BALANCE_VIEW WITH (NOLOCK)
+                    WHERE TRAN_DATE = ?
+                    GROUP BY ACCOUNT_ID, ISNULL(PR_DETAIL_ID, '')
+                """
+                org_params_open = [first_day_of_year]
 
-        # 3) Cộng dồn: số dư = đầu năm + phát sinh lũy kế
-        all_keys = set(opening_year) | set(ledger_to_end) | set(ledger_to_start)
-        this_rows_full = [(k[0], k[1], k[2], opening_year.get(k, 0.0) + ledger_to_end.get(k, 0.0)) for k in all_keys]
-        prev_rows_full = [(k[0], k[1], k[2], opening_year.get(k, 0.0) + ledger_to_start.get(k, 0.0)) for k in all_keys]
+            cur.execute(q_open, org_params_open)
+            opening_year = { ((r[0] or '').strip(), (r[1] or '').strip(), (r[2] or '').strip()): float(r[3] or 0) for r in cur.fetchall() }
 
-        # Roll up to (ACCOUNT_ID, PR_DETAIL_ID) for standard CDKT
-        this_acc_pr = {}
-        for acc, pr, org, bal in this_rows_full:
-            this_acc_pr[(acc, pr)] = this_acc_pr.get((acc, pr), 0.0) + bal
-        prev_acc_pr = {}
-        for acc, pr, org, bal in prev_rows_full:
-            prev_acc_pr[(acc, pr)] = prev_acc_pr.get((acc, pr), 0.0) + bal
+            # 2) Phát sinh lũy kế đến từng mốc (cuối kỳ này / trước đầu kỳ này) từ LEDGER_VIEW
+            def run_ledger(end_date_inclusive=None, end_date_exclusive=None):
+                where = ["L.TRAN_DATE >= ?"]
+                params = [first_day_of_year]
+                if end_date_inclusive is not None:
+                    where.append("L.TRAN_DATE <= ?")
+                    params.append(end_date_inclusive.strftime("%Y%m%d"))
+                if end_date_exclusive is not None:
+                    where.append("L.TRAN_DATE < ?")
+                    params.append(end_date_exclusive.strftime("%Y%m%d"))
+                # Truy van sinh ra so du that cua BC005 — phai loai don vi ngoai cay y nhu org_where.
+                _lc, _lp = _org_filter_sql(org_ids, "L.ORGANIZATION_ID")
+                if _lc:
+                    where.append(_lc)
+                    params.extend(_lp)
+                q = f"""
+                    SELECT L.ACCOUNT_ID, ISNULL(L.PR_DETAIL_ID, ''), ISNULL(L.ORGANIZATION_ID, ''),
+                           SUM(CASE WHEN L.DEBIT_CREDIT='DEB' THEN L.AMOUNT WHEN L.DEBIT_CREDIT='CRD' THEN -L.AMOUNT ELSE 0 END) AS BAL
+                    FROM dbo.LEDGER L WITH (NOLOCK)
+                    WHERE {' AND '.join(where)}
+                    GROUP BY L.ACCOUNT_ID, ISNULL(L.PR_DETAIL_ID, ''), ISNULL(L.ORGANIZATION_ID, '')
+                """
+                cur.execute(q, params)
+                return { ((r[0] or '').strip(), (r[1] or '').strip(), (r[2] or '').strip()): float(r[3] or 0) for r in cur.fetchall() }
 
-        this_rows = [(acc, bal) for (acc, pr), bal in this_acc_pr.items()]
-        prev_rows = [(acc, bal) for (acc, pr), bal in prev_acc_pr.items()]
+            ledger_to_end   = run_ledger(end_date_inclusive=to_dt)
+            ledger_to_start = run_ledger(end_date_exclusive=from_dt)
 
-        # Nạp loại số dư DM_ACCOUNT để xử lý TK lưỡng tính (debcrd)
-        bt = _load_balance_types(cur)
-        closing = _calc_cdkt_balances(this_rows, bt=bt)   # Kỳ này
-        opening = _calc_cdkt_balances(prev_rows, bt=bt)   # Kỳ trước
+            # 3) Cộng dồn: số dư = đầu năm + phát sinh lũy kế
+            all_keys = set(opening_year) | set(ledger_to_end) | set(ledger_to_start)
+            this_rows_full = [(k[0], k[1], k[2], opening_year.get(k, 0.0) + ledger_to_end.get(k, 0.0)) for k in all_keys]
+            prev_rows_full = [(k[0], k[1], k[2], opening_year.get(k, 0.0) + ledger_to_start.get(k, 0.0)) for k in all_keys]
 
-        # Tính toán 1311 và 1312
-        target_orgs = {'42', '51', '36', '65', '18', '31'}
-        def calc_sub_131(rows_full, acc_pr_bals):
-            # Precompute (acc,pr) -> tổng bal của các đơn vị target → O(N) thay vì O(N^2)
-            # (vòng lặp cũ quét toàn bộ rows_full cho MỖI nhóm 1311 → 200s+ trên DB lớn)
-            org_bal_idx = {}
-            for a, p, o, bal in rows_full:
-                if o in target_orgs:
-                    k = (a, p)
-                    org_bal_idx[k] = org_bal_idx.get(k, 0.0) + bal
-            val_1311 = 0.0
-            for (acc, pr), total_bal in acc_pr_bals.items():
-                if acc.startswith('1311') and total_bal >= 0:
-                    val_1311 += org_bal_idx.get((acc, pr), 0.0)
-            return val_1311
+            # Roll up to (ACCOUNT_ID, PR_DETAIL_ID) for standard CDKT
+            this_acc_pr = {}
+            for acc, pr, org, bal in this_rows_full:
+                this_acc_pr[(acc, pr)] = this_acc_pr.get((acc, pr), 0.0) + bal
+            prev_acc_pr = {}
+            for acc, pr, org, bal in prev_rows_full:
+                prev_acc_pr[(acc, pr)] = prev_acc_pr.get((acc, pr), 0.0) + bal
 
-        closing['1311'] = calc_sub_131(this_rows_full, this_acc_pr)
-        closing['1312'] = closing.get('131', 0.0) - closing['1311']
-        
-        opening['1311'] = calc_sub_131(prev_rows_full, prev_acc_pr)
-        opening['1312'] = opening.get('131', 0.0) - opening['1311']
+            this_rows = [(acc, bal) for (acc, pr), bal in this_acc_pr.items()]
+            prev_rows = [(acc, bal) for (acc, pr), bal in prev_acc_pr.items()]
 
-        # --- XỬ LÝ ĐẶC BIỆT DÒNG 421A, 421B ---
-        from datetime import timedelta
-        closing['421A'] = opening.get('421A', 0.0)
+            # Nạp loại số dư DM_ACCOUNT để xử lý TK lưỡng tính (debcrd)
+            bt = _load_balance_types(cur)
+            closing = _calc_cdkt_balances(this_rows, bt=bt)   # Kỳ này
+            opening = _calc_cdkt_balances(prev_rows, bt=bt)   # Kỳ trước
 
-        def get_movement_421(d_end, d_start):
-            end_val = sum(v for (a, pr, org), v in d_end.items() if a.startswith('421'))
-            start_val = sum(v for (a, pr, org), v in d_start.items() if a.startswith('421'))
-            return -(end_val - start_val)
+            # Tính toán 1311 và 1312
+            target_orgs = {'42', '51', '36', '65', '18', '31'}
+            def calc_sub_131(rows_full, acc_pr_bals):
+                # Precompute (acc,pr) -> tổng bal của các đơn vị target → O(N) thay vì O(N^2)
+                # (vòng lặp cũ quét toàn bộ rows_full cho MỖI nhóm 1311 → 200s+ trên DB lớn)
+                org_bal_idx = {}
+                for a, p, o, bal in rows_full:
+                    if o in target_orgs:
+                        k = (a, p)
+                        org_bal_idx[k] = org_bal_idx.get(k, 0.0) + bal
+                val_1311 = 0.0
+                for (acc, pr), total_bal in acc_pr_bals.items():
+                    if acc.startswith('1311') and total_bal >= 0:
+                        val_1311 += org_bal_idx.get((acc, pr), 0.0)
+                return val_1311
 
-        closing['421B'] = get_movement_421(ledger_to_end, ledger_to_start)
+            closing['1311'] = calc_sub_131(this_rows_full, this_acc_pr)
+            closing['1312'] = closing.get('131', 0.0) - closing['1311']
+            
+            opening['1311'] = calc_sub_131(prev_rows_full, prev_acc_pr)
+            opening['1312'] = opening.get('131', 0.0) - opening['1311']
 
-        try:
-            prev_m_end = from_dt.replace(day=1) - timedelta(days=1)
-            prev_m_start = prev_m_end.replace(day=1)
-            l_prev_m_end = run_ledger(end_date_inclusive=prev_m_end)
-            l_prev_m_start = run_ledger(end_date_exclusive=prev_m_start)
-            opening['421B'] = get_movement_421(l_prev_m_end, l_prev_m_start)
-        except Exception:
-            opening['421B'] = 0.0
+            # --- XỬ LÝ ĐẶC BIỆT DÒNG 421A, 421B ---
+            from datetime import timedelta
+            closing['421A'] = opening.get('421A', 0.0)
+
+            def get_movement_421(d_end, d_start):
+                end_val = sum(v for (a, pr, org), v in d_end.items() if a.startswith('421'))
+                start_val = sum(v for (a, pr, org), v in d_start.items() if a.startswith('421'))
+                return -(end_val - start_val)
+
+            closing['421B'] = get_movement_421(ledger_to_end, ledger_to_start)
+
+            try:
+                prev_m_end = from_dt.replace(day=1) - timedelta(days=1)
+                prev_m_start = prev_m_end.replace(day=1)
+                l_prev_m_end = run_ledger(end_date_inclusive=prev_m_end)
+                l_prev_m_start = run_ledger(end_date_exclusive=prev_m_start)
+                opening['421B'] = get_movement_421(l_prev_m_end, l_prev_m_start)
+            except Exception:
+                opening['421B'] = 0.0
 
         return jsonify({
             "status": "ok",
-            "data": {"opening": opening, "closing": closing}
+            "data": {"opening": opening, "closing": closing, "source": source}
         })
     except Exception as e:
         msg = str(e)
